@@ -214,3 +214,15 @@ Object.assign(ja, { settings: { ...ja.settings, notifications: {
     saveReminder: { title: '設定の保存を忘れずに', hint: 'チャンネル切り替えと Discord webhook を保持するには、フッターのボタンで保存してください。' },
     templates: { title: '通知テンプレート', hint: 'イベントごとに文面をカスタマイズできます。組み込み文面を使うには、フィールドを既定値のままにするか空にしてください。', variablesLabel: '変数:', resetEvent: 'イベントを既定値に戻す', customBadge: 'カスタム', events: { available: 'リクエスト利用可能', approved: 'リクエスト承認済み', declined: 'リクエスト却下済み', season: 'シーズン利用可能', episode: '新しいエピソード', admin_pending: '管理者 - 新しい承認待ちリクエスト', not_released: 'まだ公開前', collexions_failed: '管理者 - ColleXions 失敗', scanner_failed: '管理者 - Scanner 失敗', status_down: '管理者 - 状態チェック停止', status_up: '管理者 - 状態チェック復旧', media_job_failed: '管理者 - Media Automation ジョブ失敗', media_job_completed: '管理者 - Media Automation ジョブ完了' }, fields: { emailSubject: 'メール件名', emailHeadline: 'メール見出し', emailBody: 'メール本文', pushTitle: 'Push / in-app タイトル', pushBody: 'Push / in-app 本文', discordContent: 'Discord メッセージ', discordEmbedTitle: 'Discord 埋め込みタイトル', discordEmbedDescription: 'Discord 埋め込み説明', gotifyTitle: 'Gotify タイトル', gotifyBody: 'Gotify 本文', ntfyTitle: 'ntfy タイトル', ntfyBody: 'ntfy 本文', webhookBody: 'Webhook JSON 本文 (任意テンプレート)' } },
 } } });
+Object.assign(ja, { settings: { ...ja.settings, arrIntegrations: {
+    actions: { addInstance: 'インスタンスを追加', defaultInstance: 'デフォルトインスタンス', setAsDefault: 'デフォルトに設定', removeInstance: 'インスタンスを削除', testConnection: '接続をテスト' },
+    status: { default: 'デフォルト' },
+    empty: { noInstances: '{appName} インスタンスは設定されていません。' },
+    labels: { instance: 'インスタンス {index}', displayName: '表示名', ultraHdInstance: '4K / UHD インスタンス', url: 'URL', externalUrl: '外部 URL', apiKey: 'API キー', plexLibraries: 'Plex ライブラリ' },
+    hints: { ultraHdRouting: 'リクエストモーダルは Ultra HD リクエストをこのインスタンスへルーティングします (HD + UHD を同時に選択できます)。', externalUrlOptional: '任意、UI リンク用', libraryMapping: 'メンテナンスのルーティング用にライブラリをこのインスタンスへ割り当てます。未割り当てのライブラリはデフォルトインスタンスを使用します。' },
+    placeholders: { apiKey: 'API キー' },
+    library: { assignedToAnotherInstance: '別のインスタンスに割り当て済み' },
+    test: { connectionSuccessful: '接続に成功しました', connectionFailed: '接続に失敗しました' },
+    titles: { sonarrInstances: 'Sonarr インスタンス', radarrInstances: 'Radarr インスタンス', lidarrInstances: 'Lidarr インスタンス', bazarrInstances: 'Bazarr インスタンス' },
+    subtitles: { sonarr: 'TV シリーズの自動化', radarr: '映画の自動化', lidarr: '音楽の自動化', bazarr: '字幕の自動化' },
+} } });

@@ -63,6 +63,54 @@ type PlexLibrary = {
     type: string;
 };
 
+export type ArrInstancesPanelCopy = {
+    addInstance: string;
+    noInstances: (appName: string) => string;
+    instanceLabel: (index: number) => string;
+    defaultLabel: string;
+    defaultInstanceTitle: string;
+    setAsDefaultTitle: string;
+    removeInstanceTitle: string;
+    displayName: string;
+    ultraHdInstance: string;
+    ultraHdRoutingHint: string;
+    url: string;
+    externalUrl: string;
+    externalUrlOptional: string;
+    apiKey: string;
+    apiKeyPlaceholder: string;
+    plexLibraries: string;
+    libraryMappingHint: string;
+    assignedElsewhere: string;
+    testConnection: string;
+    connectionSuccessful: string;
+    connectionFailed: string;
+};
+
+const DEFAULT_COPY: ArrInstancesPanelCopy = {
+    addInstance: 'Add Instance',
+    noInstances: (appName) => `No ${appName} instances configured.`,
+    instanceLabel: (index) => `Instance ${index}`,
+    defaultLabel: 'Default',
+    defaultInstanceTitle: 'Default instance',
+    setAsDefaultTitle: 'Set as default',
+    removeInstanceTitle: 'Remove instance',
+    displayName: 'Display Name',
+    ultraHdInstance: '4K / UHD instance',
+    ultraHdRoutingHint: 'Request modal routes Ultra HD requests here (can select HD + UHD together).',
+    url: 'URL',
+    externalUrl: 'External URL',
+    externalUrlOptional: 'Optional, for UI links',
+    apiKey: 'API Key',
+    apiKeyPlaceholder: 'API key',
+    plexLibraries: 'Plex Libraries',
+    libraryMappingHint: 'Map libraries to this instance for maintenance routing. Unmapped libraries use the default instance.',
+    assignedElsewhere: 'Assigned to another instance',
+    testConnection: 'Test Connection',
+    connectionSuccessful: 'Connection successful',
+    connectionFailed: 'Connection failed',
+};
+
 type Props = {
     type: ArrAppType;
     title: string;
@@ -74,6 +122,7 @@ type Props = {
     onChange: (instances: ArrInstance[]) => void;
     onMessage: (message: string, success: boolean) => void;
     className?: string;
+    copy?: Partial<ArrInstancesPanelCopy>;
 };
 
 export const ArrInstancesPanel: React.FC<Props> = ({
@@ -87,7 +136,9 @@ export const ArrInstancesPanel: React.FC<Props> = ({
     onChange,
     onMessage,
     className = '',
+    copy: copyOverrides = {},
 }) => {
+    const copy = { ...DEFAULT_COPY, ...copyOverrides } as ArrInstancesPanelCopy;
     const libraryType = type === 'radarr' ? 'movie' : 'show';
     const supportsLibraryMapping = type === 'sonarr' || type === 'radarr';
     const availableLibraries = supportsLibraryMapping
@@ -159,13 +210,13 @@ export const ArrInstancesPanel: React.FC<Props> = ({
                     className="px-3 py-2 rounded-lg border border-border text-sm font-medium text-text hover:bg-white/5 transition-colors flex items-center gap-2 shrink-0"
                 >
                     <Plus className="w-4 h-4" />
-                    Add Instance
+                    {copy.addInstance}
                 </button>
             </div>
 
             {instances.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-border p-6 text-sm text-muted text-center">
-                    No {appName} instances configured.
+                    {copy.noInstances(appName)}
                 </div>
             ) : (
                 <div className="space-y-4">
@@ -188,11 +239,11 @@ export const ArrInstancesPanel: React.FC<Props> = ({
                                             onError={(e) => { e.currentTarget.style.display = 'none'; }}
                                         />
                                         <span className="text-xs uppercase tracking-wider font-bold text-muted">
-                                            Instance {index + 1}
+                                            {copy.instanceLabel(index + 1)}
                                         </span>
                                         {instance.isDefault && (
                                             <span className="text-[10px] uppercase tracking-wider font-bold text-plex bg-plex/10 px-2 py-0.5 rounded-full">
-                                                Default
+                                                {copy.defaultLabel}
                                             </span>
                                         )}
                                     </div>
@@ -204,7 +255,7 @@ export const ArrInstancesPanel: React.FC<Props> = ({
                                         />
                                         <button
                                             type="button"
-                                            title={instance.isDefault ? 'Default instance' : 'Set as default'}
+                                            title={instance.isDefault ? copy.defaultInstanceTitle : copy.setAsDefaultTitle}
                                             onClick={() => setDefault(instance.id)}
                                             className={`p-2 rounded-lg transition-colors ${instance.isDefault ? 'text-plex bg-plex/10' : 'text-muted hover:text-text hover:bg-white/5'}`}
                                         >
@@ -212,7 +263,7 @@ export const ArrInstancesPanel: React.FC<Props> = ({
                                         </button>
                                         <button
                                             type="button"
-                                            title="Remove instance"
+                                            title={copy.removeInstanceTitle}
                                             onClick={() => removeInstance(instance.id)}
                                             className="p-2 rounded-lg text-muted hover:text-red-400 hover:bg-red-500/10 transition-colors"
                                         >
@@ -222,7 +273,7 @@ export const ArrInstancesPanel: React.FC<Props> = ({
                                 </div>
 
                                 <div>
-                                    <label className="text-xs text-muted uppercase tracking-wider font-bold mb-1 block">Display Name</label>
+                                    <label className="text-xs text-muted uppercase tracking-wider font-bold mb-1 block">{copy.displayName}</label>
                                     <input
                                         className="w-full p-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-sm"
                                         type="text"
@@ -235,9 +286,9 @@ export const ArrInstancesPanel: React.FC<Props> = ({
                                 {supportsLibraryMapping && (
                                     <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/40 px-3 py-2">
                                         <div className="min-w-0">
-                                            <p className="text-sm font-semibold text-text">4K / UHD instance</p>
+                                            <p className="text-sm font-semibold text-text">{copy.ultraHdInstance}</p>
                                             <p className="text-[11px] text-muted">
-                                                Request modal routes Ultra HD requests here (can select HD + UHD together).
+                                                {copy.ultraHdRoutingHint}
                                             </p>
                                         </div>
                                         <SettingsSwitch
@@ -249,7 +300,7 @@ export const ArrInstancesPanel: React.FC<Props> = ({
                                 )}
 
                                 <div>
-                                    <label className="text-xs text-muted uppercase tracking-wider font-bold mb-1 block">URL</label>
+                                    <label className="text-xs text-muted uppercase tracking-wider font-bold mb-1 block">{copy.url}</label>
                                     <input
                                         className="w-full p-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-sm"
                                         type="text"
@@ -261,7 +312,7 @@ export const ArrInstancesPanel: React.FC<Props> = ({
 
                                 <div>
                                     <label className="text-xs text-muted uppercase tracking-wider font-bold mb-1 flex items-center gap-2">
-                                        External URL <span className="text-[10px] font-normal normal-case text-muted/70">(Optional, for UI links)</span>
+                                        {copy.externalUrl} <span className="text-[10px] font-normal normal-case text-muted/70">({copy.externalUrlOptional})</span>
                                     </label>
                                     <input
                                         className="w-full p-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-sm"
@@ -273,21 +324,21 @@ export const ArrInstancesPanel: React.FC<Props> = ({
                                 </div>
 
                                 <div>
-                                    <label className="text-xs text-muted uppercase tracking-wider font-bold mb-1 block">API Key</label>
+                                    <label className="text-xs text-muted uppercase tracking-wider font-bold mb-1 block">{copy.apiKey}</label>
                                     <input
                                         className="w-full p-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-sm"
                                         type="password"
                                         value={instance.apiKey}
                                         onChange={(e) => updateInstance(instance.id, { apiKey: e.target.value })}
-                                        placeholder="API key"
+                                        placeholder={copy.apiKeyPlaceholder}
                                     />
                                 </div>
 
                                 {availableLibraries.length > 0 && (
                                     <div>
-                                        <label className="text-xs text-muted uppercase tracking-wider font-bold mb-1 block">Plex Libraries</label>
+                                        <label className="text-xs text-muted uppercase tracking-wider font-bold mb-1 block">{copy.plexLibraries}</label>
                                         <p className="text-[11px] text-muted mb-2">
-                                            Map libraries to this instance for maintenance routing. Unmapped libraries use the default instance.
+                                            {copy.libraryMappingHint}
                                         </p>
                                         <div className="flex flex-wrap gap-2">
                                             {availableLibraries.map((library) => {
@@ -299,7 +350,7 @@ export const ArrInstancesPanel: React.FC<Props> = ({
                                                         key={`${instance.id}-${libraryId}`}
                                                         type="button"
                                                         disabled={takenElsewhere && !selected}
-                                                        title={takenElsewhere && !selected ? 'Assigned to another instance' : library.title}
+                                                        title={takenElsewhere && !selected ? copy.assignedElsewhere : library.title}
                                                         onClick={() => toggleLibrary(instance.id, libraryId)}
                                                         className={`px-2.5 py-1 rounded-md text-xs border transition-colors ${
                                                             selected
@@ -321,6 +372,9 @@ export const ArrInstancesPanel: React.FC<Props> = ({
                                     type={type}
                                     payload={testPayload}
                                     disabled={!hasCredentials(instance, saved)}
+                                    label={copy.testConnection}
+                                    successFallback={copy.connectionSuccessful}
+                                    failureFallback={copy.connectionFailed}
                                     onMessage={onMessage}
                                 />
                             </div>

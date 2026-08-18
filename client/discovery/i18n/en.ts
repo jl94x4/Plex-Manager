@@ -2390,3 +2390,16 @@ Object.assign(en, { homeDashboard: { ...en.homeDashboard, nowPlayingCompanion: {
     },
     telemetry: { state: 'State', progress: 'Progress', mediaType: 'Media type', episode: 'Episode', playing: 'Playing' },
 } } });
+
+Object.assign(en, { settings: { ...en.settings, arrIntegrations: {
+    actions: { addInstance: 'Add Instance', defaultInstance: 'Default instance', setAsDefault: 'Set as default', removeInstance: 'Remove instance', testConnection: 'Test Connection' },
+    status: { default: 'Default' },
+    empty: { noInstances: 'No {appName} instances configured.' },
+    labels: { instance: 'Instance {index}', displayName: 'Display Name', ultraHdInstance: '4K / UHD instance', url: 'URL', externalUrl: 'External URL', apiKey: 'API Key', plexLibraries: 'Plex Libraries' },
+    hints: { ultraHdRouting: 'Request modal routes Ultra HD requests here (can select HD + UHD together).', externalUrlOptional: 'Optional, for UI links', libraryMapping: 'Map libraries to this instance for maintenance routing. Unmapped libraries use the default instance.' },
+    placeholders: { apiKey: 'API key' },
+    library: { assignedToAnotherInstance: 'Assigned to another instance' },
+    test: { connectionSuccessful: 'Connection successful', connectionFailed: 'Connection failed' },
+    titles: { sonarrInstances: 'Sonarr Instances', radarrInstances: 'Radarr Instances', lidarrInstances: 'Lidarr Instances', bazarrInstances: 'Bazarr Instances' },
+    subtitles: { sonarr: 'TV series automation', radarr: 'Movie automation', lidarr: 'Music automation', bazarr: 'Subtitle automation' },
+} } });

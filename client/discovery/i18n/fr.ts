@@ -2186,3 +2186,15 @@ Object.assign(fr, { about: {
     },
     links: { title: 'Liens du projet', documentation: 'Documentation', githubRepository: 'Dépôt GitHub', featureOverview: 'Aperçu des fonctionnalités', gettingStarted: 'Bien démarrer' },
 } });
+Object.assign(fr, { settings: { ...fr.settings, arrIntegrations: {
+    actions: { addInstance: 'Ajouter une instance', defaultInstance: 'Instance par défaut', setAsDefault: 'Définir par défaut', removeInstance: 'Supprimer l’instance', testConnection: 'Tester la connexion' },
+    status: { default: 'Par défaut' },
+    empty: { noInstances: 'Aucune instance {appName} configurée.' },
+    labels: { instance: 'Instance {index}', displayName: 'Nom affiché', ultraHdInstance: 'Instance 4K / UHD', url: 'URL', externalUrl: 'URL externe', apiKey: 'Clé API', plexLibraries: 'Bibliothèques Plex' },
+    hints: { ultraHdRouting: 'La fenêtre de demande envoie les demandes Ultra HD vers cette instance (HD + UHD peuvent être sélectionnés ensemble).', externalUrlOptional: 'Facultatif, pour les liens de l’interface', libraryMapping: 'Associez des bibliothèques à cette instance pour le routage de maintenance. Les bibliothèques non associées utilisent l’instance par défaut.' },
+    placeholders: { apiKey: 'Clé API' },
+    library: { assignedToAnotherInstance: 'Attribuée à une autre instance' },
+    test: { connectionSuccessful: 'Connexion réussie', connectionFailed: 'Échec de la connexion' },
+    titles: { sonarrInstances: 'Instances Sonarr', radarrInstances: 'Instances Radarr', lidarrInstances: 'Instances Lidarr', bazarrInstances: 'Instances Bazarr' },
+    subtitles: { sonarr: 'Automatisation des séries TV', radarr: 'Automatisation des films', lidarr: 'Automatisation de la musique', bazarr: 'Automatisation des sous-titres' },
+} } });

@@ -215,3 +215,15 @@ Object.assign(it, { settings: { ...it.settings, notifications: {
     saveReminder: { title: 'Ricorda di salvare le impostazioni', hint: 'Salva con il pulsante nel piè di pagina per mantenere i canali e il webhook Discord.' },
     templates: { title: 'Template notifiche', hint: 'Personalizza il testo per evento. Lascia un campo sul valore predefinito (o svuotalo) per usare il testo integrato.', variablesLabel: 'Variabili:', resetEvent: 'Ripristina evento ai valori predefiniti', customBadge: 'personalizzato', events: { available: 'Richiesta disponibile', approved: 'Richiesta approvata', declined: 'Richiesta rifiutata', season: 'Stagione disponibile', episode: 'Nuovo episodio', admin_pending: 'Admin - nuova richiesta in sospeso', not_released: 'Non ancora uscito', collexions_failed: 'Admin - ColleXions non riuscito', scanner_failed: 'Admin - Scanner non riuscito', status_down: 'Admin - controllo stato non raggiungibile', status_up: 'Admin - controllo stato ripristinato', media_job_failed: 'Admin - job Media Automation non riuscito', media_job_completed: 'Admin - job Media Automation completato' }, fields: { emailSubject: 'Oggetto email', emailHeadline: 'Titolo email', emailBody: 'Corpo email', pushTitle: 'Titolo push / in-app', pushBody: 'Corpo push / in-app', discordContent: 'Messaggio Discord', discordEmbedTitle: 'Titolo embed Discord', discordEmbedDescription: 'Descrizione embed Discord', gotifyTitle: 'Titolo Gotify', gotifyBody: 'Corpo Gotify', ntfyTitle: 'Titolo ntfy', ntfyBody: 'Corpo ntfy', webhookBody: 'Corpo JSON Webhook (template opzionale)' } },
 } } });
+Object.assign(it, { settings: { ...it.settings, arrIntegrations: {
+    actions: { addInstance: 'Aggiungi istanza', defaultInstance: 'Istanza predefinita', setAsDefault: 'Imposta come predefinita', removeInstance: 'Rimuovi istanza', testConnection: 'Testa connessione' },
+    status: { default: 'Predefinita' },
+    empty: { noInstances: 'Nessuna istanza {appName} configurata.' },
+    labels: { instance: 'Istanza {index}', displayName: 'Nome visualizzato', ultraHdInstance: 'Istanza 4K / UHD', url: 'URL', externalUrl: 'URL esterno', apiKey: 'Chiave API', plexLibraries: 'Librerie Plex' },
+    hints: { ultraHdRouting: 'Il modale di richiesta indirizza qui le richieste Ultra HD (HD + UHD possono essere selezionati insieme).', externalUrlOptional: 'Facoltativo, per i link dell’interfaccia', libraryMapping: 'Associa le librerie a questa istanza per l’instradamento della manutenzione. Le librerie non associate usano l’istanza predefinita.' },
+    placeholders: { apiKey: 'Chiave API' },
+    library: { assignedToAnotherInstance: 'Assegnata a un’altra istanza' },
+    test: { connectionSuccessful: 'Connessione riuscita', connectionFailed: 'Connessione non riuscita' },
+    titles: { sonarrInstances: 'Istanze Sonarr', radarrInstances: 'Istanze Radarr', lidarrInstances: 'Istanze Lidarr', bazarrInstances: 'Istanze Bazarr' },
+    subtitles: { sonarr: 'Automazione serie TV', radarr: 'Automazione film', lidarr: 'Automazione musica', bazarr: 'Automazione sottotitoli' },
+} } });

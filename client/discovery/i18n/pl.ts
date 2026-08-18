@@ -214,3 +214,15 @@ Object.assign(pl, { settings: { ...pl.settings, notifications: {
     saveReminder: { title: 'Pamiętaj o zapisaniu ustawień', hint: 'Zapisz przyciskiem w stopce, aby utrwalić przełączniki kanałów i webhook Discord.' },
     templates: { title: 'Szablony powiadomień', hint: 'Dostosuj treść dla każdego zdarzenia. Pozostaw pole z wartością domyślną (albo je wyczyść), aby użyć tekstu wbudowanego.', variablesLabel: 'Zmienne:', resetEvent: 'Przywróć domyślne wartości zdarzenia', customBadge: 'niestandardowe', events: { available: 'Prośba dostępna', approved: 'Prośba zatwierdzona', declined: 'Prośba odrzucona', season: 'Sezon dostępny', episode: 'Nowy odcinek', admin_pending: 'Admin - nowa prośba oczekująca', not_released: 'Jeszcze niewydane', collexions_failed: 'Admin - ColleXions nie powiodło się', scanner_failed: 'Admin - Scanner nie powiódł się', status_down: 'Admin - kontrola statusu niedostępna', status_up: 'Admin - kontrola statusu przywrócona', media_job_failed: 'Admin - zadanie Media Automation nie powiodło się', media_job_completed: 'Admin - zadanie Media Automation zakończone' }, fields: { emailSubject: 'Temat e-maila', emailHeadline: 'Nagłówek e-maila', emailBody: 'Treść e-maila', pushTitle: 'Tytuł push / in-app', pushBody: 'Treść push / in-app', discordContent: 'Wiadomość Discord', discordEmbedTitle: 'Tytuł osadzenia Discord', discordEmbedDescription: 'Opis osadzenia Discord', gotifyTitle: 'Tytuł Gotify', gotifyBody: 'Treść Gotify', ntfyTitle: 'Tytuł ntfy', ntfyBody: 'Treść ntfy', webhookBody: 'Treść JSON Webhooka (opcjonalny szablon)' } },
 } } });
+Object.assign(pl, { settings: { ...pl.settings, arrIntegrations: {
+    actions: { addInstance: 'Dodaj instancję', defaultInstance: 'Instancja domyślna', setAsDefault: 'Ustaw jako domyślną', removeInstance: 'Usuń instancję', testConnection: 'Testuj połączenie' },
+    status: { default: 'Domyślna' },
+    empty: { noInstances: 'Nie skonfigurowano instancji {appName}.' },
+    labels: { instance: 'Instancja {index}', displayName: 'Nazwa wyświetlana', ultraHdInstance: 'Instancja 4K / UHD', url: 'URL', externalUrl: 'Zewnętrzny URL', apiKey: 'Klucz API', plexLibraries: 'Biblioteki Plex' },
+    hints: { ultraHdRouting: 'Okno żądania kieruje żądania Ultra HD do tej instancji (HD + UHD można wybrać razem).', externalUrlOptional: 'Opcjonalnie, dla linków w UI', libraryMapping: 'Przypisz biblioteki do tej instancji na potrzeby routingu konserwacji. Nieprzypisane biblioteki używają instancji domyślnej.' },
+    placeholders: { apiKey: 'Klucz API' },
+    library: { assignedToAnotherInstance: 'Przypisana do innej instancji' },
+    test: { connectionSuccessful: 'Połączenie udane', connectionFailed: 'Połączenie nieudane' },
+    titles: { sonarrInstances: 'Instancje Sonarr', radarrInstances: 'Instancje Radarr', lidarrInstances: 'Instancje Lidarr', bazarrInstances: 'Instancje Bazarr' },
+    subtitles: { sonarr: 'Automatyzacja seriali TV', radarr: 'Automatyzacja filmów', lidarr: 'Automatyzacja muzyki', bazarr: 'Automatyzacja napisów' },
+} } });

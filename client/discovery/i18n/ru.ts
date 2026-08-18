@@ -214,3 +214,15 @@ Object.assign(ru, { settings: { ...ru.settings, notifications: {
     saveReminder: { title: 'Не забудьте сохранить настройки', hint: 'Сохраните через кнопку внизу страницы, чтобы применить переключатели каналов и webhook Discord.' },
     templates: { title: 'Шаблоны уведомлений', hint: 'Настройте текст для каждого события. Оставьте поле со значением по умолчанию (или очистите его), чтобы использовать встроенный текст.', variablesLabel: 'Переменные:', resetEvent: 'Сбросить событие к значениям по умолчанию', customBadge: 'изменено', events: { available: 'Запрос доступен', approved: 'Запрос одобрен', declined: 'Запрос отклонен', season: 'Сезон доступен', episode: 'Новый эпизод', admin_pending: 'Админ - новый ожидающий запрос', not_released: 'Еще не выпущено', collexions_failed: 'Админ - сбой ColleXions', scanner_failed: 'Админ - сбой Scanner', status_down: 'Админ - проверка статуса недоступна', status_up: 'Админ - проверка статуса восстановлена', media_job_failed: 'Админ - задание Media Automation завершилось ошибкой', media_job_completed: 'Админ - задание Media Automation завершено' }, fields: { emailSubject: 'Тема e-mail', emailHeadline: 'Заголовок e-mail', emailBody: 'Текст e-mail', pushTitle: 'Заголовок push / in-app', pushBody: 'Текст push / in-app', discordContent: 'Сообщение Discord', discordEmbedTitle: 'Заголовок embed Discord', discordEmbedDescription: 'Описание embed Discord', gotifyTitle: 'Заголовок Gotify', gotifyBody: 'Текст Gotify', ntfyTitle: 'Заголовок ntfy', ntfyBody: 'Текст ntfy', webhookBody: 'JSON-тело Webhook (необязательный шаблон)' } },
 } } });
+Object.assign(ru, { settings: { ...ru.settings, arrIntegrations: {
+    actions: { addInstance: 'Добавить инстанс', defaultInstance: 'Инстанс по умолчанию', setAsDefault: 'Сделать по умолчанию', removeInstance: 'Удалить инстанс', testConnection: 'Проверить соединение' },
+    status: { default: 'По умолчанию' },
+    empty: { noInstances: 'Инстансы {appName} не настроены.' },
+    labels: { instance: 'Инстанс {index}', displayName: 'Отображаемое имя', ultraHdInstance: 'Инстанс 4K / UHD', url: 'URL', externalUrl: 'Внешний URL', apiKey: 'API-ключ', plexLibraries: 'Библиотеки Plex' },
+    hints: { ultraHdRouting: 'Окно запроса направляет запросы Ultra HD в этот инстанс (HD + UHD можно выбрать вместе).', externalUrlOptional: 'Необязательно, для ссылок UI', libraryMapping: 'Сопоставьте библиотеки с этим инстансом для маршрутизации обслуживания. Несопоставленные библиотеки используют инстанс по умолчанию.' },
+    placeholders: { apiKey: 'API-ключ' },
+    library: { assignedToAnotherInstance: 'Назначено другому инстансу' },
+    test: { connectionSuccessful: 'Соединение успешно', connectionFailed: 'Сбой соединения' },
+    titles: { sonarrInstances: 'Инстансы Sonarr', radarrInstances: 'Инстансы Radarr', lidarrInstances: 'Инстансы Lidarr', bazarrInstances: 'Инстансы Bazarr' },
+    subtitles: { sonarr: 'Автоматизация сериалов', radarr: 'Автоматизация фильмов', lidarr: 'Автоматизация музыки', bazarr: 'Автоматизация субтитров' },
+} } });

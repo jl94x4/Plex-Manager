@@ -614,3 +614,15 @@ Object.assign(de, { settings: { ...de.settings, notifications: {
     saveReminder: { title: 'Einstellungen speichern nicht vergessen', hint: 'Speichere über die Schaltfläche unten, damit Kanal-Umschalter und Discord-Webhook erhalten bleiben.' },
     templates: { title: 'Benachrichtigungsvorlagen', hint: 'Passe den Text pro Ereignis an. Lasse ein Feld auf dem Standardwert (oder leere es), um den integrierten Text zu verwenden.', variablesLabel: 'Variablen:', resetEvent: 'Ereignis auf Standardwerte zurücksetzen', customBadge: 'angepasst', events: { available: 'Anfrage verfügbar', approved: 'Anfrage genehmigt', declined: 'Anfrage abgelehnt', season: 'Staffel verfügbar', episode: 'Neue Folge', admin_pending: 'Admin - neue ausstehende Anfrage', not_released: 'Noch nicht veröffentlicht', collexions_failed: 'Admin - ColleXions fehlgeschlagen', scanner_failed: 'Admin - Scanner fehlgeschlagen', status_down: 'Admin - Statusprüfung ausgefallen', status_up: 'Admin - Statusprüfung wiederhergestellt', media_job_failed: 'Admin - Media Automation-Auftrag fehlgeschlagen', media_job_completed: 'Admin - Media Automation-Auftrag abgeschlossen' }, fields: { emailSubject: 'E-Mail-Betreff', emailHeadline: 'E-Mail-Überschrift', emailBody: 'E-Mail-Text', pushTitle: 'Push-/In-App-Titel', pushBody: 'Push-/In-App-Text', discordContent: 'Discord-Nachricht', discordEmbedTitle: 'Discord-Embed-Titel', discordEmbedDescription: 'Discord-Embed-Beschreibung', gotifyTitle: 'Gotify-Titel', gotifyBody: 'Gotify-Text', ntfyTitle: 'ntfy-Titel', ntfyBody: 'ntfy-Text', webhookBody: 'Webhook-JSON-Body (optionales Template)' } },
 } } });
+Object.assign(de, { settings: { ...de.settings, arrIntegrations: {
+    actions: { addInstance: 'Instanz hinzufügen', defaultInstance: 'Standardinstanz', setAsDefault: 'Als Standard festlegen', removeInstance: 'Instanz entfernen', testConnection: 'Verbindung testen' },
+    status: { default: 'Standard' },
+    empty: { noInstances: 'Keine {appName}-Instanzen konfiguriert.' },
+    labels: { instance: 'Instanz {index}', displayName: 'Anzeigename', ultraHdInstance: '4K-/UHD-Instanz', url: 'URL', externalUrl: 'Externe URL', apiKey: 'API-Schlüssel', plexLibraries: 'Plex-Bibliotheken' },
+    hints: { ultraHdRouting: 'Der Anfragedialog leitet Ultra-HD-Anfragen an diese Instanz weiter (HD + UHD können zusammen ausgewählt werden).', externalUrlOptional: 'Optional, für UI-Links', libraryMapping: 'Ordne Bibliotheken dieser Instanz für Wartungsrouting zu. Nicht zugeordnete Bibliotheken verwenden die Standardinstanz.' },
+    placeholders: { apiKey: 'API-Schlüssel' },
+    library: { assignedToAnotherInstance: 'Einer anderen Instanz zugewiesen' },
+    test: { connectionSuccessful: 'Verbindung erfolgreich', connectionFailed: 'Verbindung fehlgeschlagen' },
+    titles: { sonarrInstances: 'Sonarr-Instanzen', radarrInstances: 'Radarr-Instanzen', lidarrInstances: 'Lidarr-Instanzen', bazarrInstances: 'Bazarr-Instanzen' },
+    subtitles: { sonarr: 'Automatisierung für TV-Serien', radarr: 'Film-Automatisierung', lidarr: 'Musik-Automatisierung', bazarr: 'Untertitel-Automatisierung' },
+} } });

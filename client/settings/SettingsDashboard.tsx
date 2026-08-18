@@ -52,7 +52,7 @@ import { HomeLayoutSettings } from './HomeLayoutSettings';
 import { AchievementsSettings } from './AchievementsSettings';
 import { AnalyticsSettings } from './AnalyticsSettings';
 import { NavigationOrderSettings } from './NavigationOrderSettings';
-import { ArrInstancesPanel } from './ArrInstancesPanel';
+import { ArrInstancesPanel, type ArrInstancesPanelCopy } from './ArrInstancesPanel';
 import { DISCOVER_LANGUAGE_OPTIONS, DISCOVER_REGION_OPTIONS } from './discoverySettingsOptions';
 import { DEFAULT_DASHBOARD_LAYOUT, normalizeSectionLayout, type DashboardLayoutConfig } from '../shared/dashboardLayout';
 import { DEFAULT_NAV_ORDER, deriveMemberNavOrderFromAdmin, ensureCompleteMemberNavOrder, ensureCompleteNavOrder, normalizeMemberNavHiddenKeys, normalizeNavHiddenKeys, resolveMemberNavOrder } from '../shared/nav';
@@ -334,6 +334,29 @@ const writeAuditFilterPresets = (presets: AuditFilterPreset[]) => {
 
 export const SettingsDashboard: React.FC = () => {
     const { t } = useDiscoverI18n();
+    const arrIntegrationsCopy = useMemo<ArrInstancesPanelCopy>(() => ({
+        addInstance: t('settings.arrIntegrations.actions.addInstance'),
+        noInstances: (appName) => t('settings.arrIntegrations.empty.noInstances', { appName }),
+        instanceLabel: (index) => t('settings.arrIntegrations.labels.instance', { index }),
+        defaultLabel: t('settings.arrIntegrations.status.default'),
+        defaultInstanceTitle: t('settings.arrIntegrations.actions.defaultInstance'),
+        setAsDefaultTitle: t('settings.arrIntegrations.actions.setAsDefault'),
+        removeInstanceTitle: t('settings.arrIntegrations.actions.removeInstance'),
+        displayName: t('settings.arrIntegrations.labels.displayName'),
+        ultraHdInstance: t('settings.arrIntegrations.labels.ultraHdInstance'),
+        ultraHdRoutingHint: t('settings.arrIntegrations.hints.ultraHdRouting'),
+        url: t('settings.arrIntegrations.labels.url'),
+        externalUrl: t('settings.arrIntegrations.labels.externalUrl'),
+        externalUrlOptional: t('settings.arrIntegrations.hints.externalUrlOptional'),
+        apiKey: t('settings.arrIntegrations.labels.apiKey'),
+        apiKeyPlaceholder: t('settings.arrIntegrations.placeholders.apiKey'),
+        plexLibraries: t('settings.arrIntegrations.labels.plexLibraries'),
+        libraryMappingHint: t('settings.arrIntegrations.hints.libraryMapping'),
+        assignedElsewhere: t('settings.arrIntegrations.library.assignedToAnotherInstance'),
+        testConnection: t('settings.arrIntegrations.actions.testConnection'),
+        connectionSuccessful: t('settings.arrIntegrations.test.connectionSuccessful'),
+        connectionFailed: t('settings.arrIntegrations.test.connectionFailed'),
+    }), [t]);
     const [statusDraft, setStatusDraft] = useState<any>(null);
     const [isLoading, setLoading] = useState(true);
     const [configLoadError, setConfigLoadError] = useState<string | null>(null);
@@ -2801,12 +2824,13 @@ export const SettingsDashboard: React.FC = () => {
                             <div id={getSettingsSectionElementId('arr')} className="scroll-mt-24">
                             <ArrInstancesPanel
                                 type="sonarr"
-                                title="Sonarr Instances"
-                                subtitle="TV series automation"
+                                title={t('settings.arrIntegrations.titles.sonarrInstances')}
+                                subtitle={t('settings.arrIntegrations.subtitles.sonarr')}
                                 instances={arrInstances.filter((entry) => entry.type === 'sonarr')}
                                 savedInstances={savedArrInstances.filter((entry) => entry.type === 'sonarr')}
                                 libraries={libraries}
                                 allInstances={arrInstances}
+                                copy={arrIntegrationsCopy}
                                 onChange={(nextSonarr) => {
                                     const other = arrInstances.filter((entry) => entry.type !== 'sonarr');
                                     setArrInstances([...other, ...nextSonarr]);
@@ -2816,13 +2840,14 @@ export const SettingsDashboard: React.FC = () => {
 
                             <ArrInstancesPanel
                                 type="radarr"
-                                title="Radarr Instances"
-                                subtitle="Movie automation"
+                                title={t('settings.arrIntegrations.titles.radarrInstances')}
+                                subtitle={t('settings.arrIntegrations.subtitles.radarr')}
                                 className="mt-10"
                                 instances={arrInstances.filter((entry) => entry.type === 'radarr')}
                                 savedInstances={savedArrInstances.filter((entry) => entry.type === 'radarr')}
                                 libraries={libraries}
                                 allInstances={arrInstances}
+                                copy={arrIntegrationsCopy}
                                 onChange={(nextRadarr) => {
                                     const other = arrInstances.filter((entry) => entry.type !== 'radarr');
                                     setArrInstances([...other, ...nextRadarr]);
@@ -2834,13 +2859,14 @@ export const SettingsDashboard: React.FC = () => {
                             <div id={getSettingsSectionElementId('lidarr')} className="scroll-mt-24">
                             <ArrInstancesPanel
                                 type="lidarr"
-                                title="Lidarr Instances"
-                                subtitle="Music automation"
+                                title={t('settings.arrIntegrations.titles.lidarrInstances')}
+                                subtitle={t('settings.arrIntegrations.subtitles.lidarr')}
                                 className="mt-10"
                                 instances={arrInstances.filter((entry) => entry.type === 'lidarr')}
                                 savedInstances={savedArrInstances.filter((entry) => entry.type === 'lidarr')}
                                 libraries={libraries}
                                 allInstances={arrInstances}
+                                copy={arrIntegrationsCopy}
                                 onChange={(nextLidarr) => {
                                     const other = arrInstances.filter((entry) => entry.type !== 'lidarr');
                                     setArrInstances([...other, ...nextLidarr]);
@@ -2852,13 +2878,14 @@ export const SettingsDashboard: React.FC = () => {
                             <div id={getSettingsSectionElementId('bazarr')} className="scroll-mt-24">
                             <ArrInstancesPanel
                                 type="bazarr"
-                                title="Bazarr Instances"
-                                subtitle="Subtitle automation"
+                                title={t('settings.arrIntegrations.titles.bazarrInstances')}
+                                subtitle={t('settings.arrIntegrations.subtitles.bazarr')}
                                 className="mt-10"
                                 instances={arrInstances.filter((entry) => entry.type === 'bazarr')}
                                 savedInstances={savedArrInstances.filter((entry) => entry.type === 'bazarr')}
                                 libraries={libraries}
                                 allInstances={arrInstances}
+                                copy={arrIntegrationsCopy}
                                 onChange={(nextBazarr) => {
                                     const other = arrInstances.filter((entry) => entry.type !== 'bazarr');
                                     setArrInstances([...other, ...nextBazarr]);
