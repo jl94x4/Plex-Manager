@@ -768,7 +768,7 @@ export const PosterSetsSearchView: React.FC = () => {
                                     <button
                                         type="button"
                                         className={buttonClass}
-                                        onClick={() => goToDiscoverView('paste')}
+                                        onClick={() => goToPrimaryTab('paste')}
                                     >
                                         Open Paste / Import
                                     </button>

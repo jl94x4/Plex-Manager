@@ -489,9 +489,7 @@ export function usePosterSetsDashboardState() {
             ? 'browse'
             : view === 'recent'
                 ? 'recent'
-                : view === 'paste'
-                    ? 'paste'
-                    : 'apply';
+                : 'apply';
         goToTab(internal, options);
     }, [goToTab]);
 

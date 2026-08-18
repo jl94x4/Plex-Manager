@@ -1,6 +1,7 @@
 import React from 'react';
 import {
     CheckCircle2,
+    ClipboardPaste,
     Compass,
     Eye,
     Image as ImageIcon,
@@ -170,6 +171,7 @@ export const PosterSetsShell: React.FC = () => {
                             ['queue', 'Queue', ListOrdered],
                             ['watches', 'Watching', Eye],
                             ['logs', 'Logs', ScrollText],
+                            ['paste', 'Paste / Import', ClipboardPaste],
                             ['settings', 'Settings', Settings2],
                         ] as const).map(([id, label, Icon]) => {
                             const active = id === 'discover'
@@ -219,6 +221,7 @@ export const PosterSetsShell: React.FC = () => {
                         ['queue', 'Queue', ListOrdered],
                         ['watches', 'Watching', Eye],
                         ['logs', 'Logs', ScrollText],
+                        ['paste', 'Paste / Import', ClipboardPaste],
                         ['settings', 'Settings', Settings2],
                     ] as const).map(([id, label, Icon]) => {
                         const active = id === 'discover'

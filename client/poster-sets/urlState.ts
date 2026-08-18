@@ -1,9 +1,9 @@
 /** Hash routing for Poster Sets — library-first with Discover sub-views. */
 
-export const POSTER_SETS_PRIMARY_TABS = ['library', 'collections', 'discover', 'queue', 'watches', 'logs', 'settings'] as const;
+export const POSTER_SETS_PRIMARY_TABS = ['library', 'collections', 'discover', 'queue', 'watches', 'logs', 'paste', 'settings'] as const;
 export type PosterSetsPrimaryTab = (typeof POSTER_SETS_PRIMARY_TABS)[number];
 
-export const DISCOVER_VIEWS = ['search', 'browse', 'recent', 'paste'] as const;
+export const DISCOVER_VIEWS = ['search', 'browse', 'recent'] as const;
 export type DiscoverView = (typeof DISCOVER_VIEWS)[number];
 
 /** Internal tabs used by the dashboard render tree (legacy names preserved). */
@@ -82,7 +82,7 @@ const legacyTabToState = (legacy: PosterSetsInternalTab): Pick<PosterSetsUrlStat
         case 'recent':
             return { tab: 'discover', discoverView: 'recent' };
         case 'paste':
-            return { tab: 'discover', discoverView: 'paste' };
+            return { tab: 'paste', discoverView: 'search' };
         case 'apply':
         default:
             return { tab: 'discover', discoverView: 'search' };
@@ -96,9 +96,9 @@ export function internalTabFromUrl(state: PosterSetsUrlState): PosterSetsInterna
     if (state.tab === 'watches') return 'watches';
     if (state.tab === 'logs') return 'history';
     if (state.tab === 'settings') return 'settings';
+    if (state.tab === 'paste') return 'paste';
     if (state.discoverView === 'browse') return 'browse';
     if (state.discoverView === 'recent') return 'recent';
-    if (state.discoverView === 'paste') return 'paste';
     return 'apply';
 }
 
@@ -207,6 +207,26 @@ export function parsePosterSetsUrl(hash = typeof window !== 'undefined' ? window
         };
     }
 
+    // Legacy bookmark: #discover/paste → primary Paste / Import tab
+    if (tabRaw === 'discover' && String(segments[1] || '').trim().toLowerCase() === 'paste') {
+        const setUrlRaw = String(params.get('url') || '').trim();
+        const setUrl = setUrlRaw || null;
+        const assets = String(params.get('assets') || '').trim().toLowerCase();
+        const titleCardsOnly = Boolean(setUrl) && (
+            assets === 'title_cards'
+            || assets === 'title_card'
+            || assets === 'titlecards'
+        );
+        return {
+            tab: 'paste',
+            discoverView: 'search',
+            rail: null,
+            setUrl,
+            creator: null,
+            titleCardsOnly,
+        };
+    }
+
     const tab = tabRaw;
 
     if (tab === 'discover') {
@@ -221,7 +241,8 @@ export function parsePosterSetsUrl(hash = typeof window !== 'undefined' ? window
         }
     }
 
-    const setUrlRaw = tab === 'discover' && (discoverView === 'search' || discoverView === 'paste')
+    const acceptsSetUrl = tab === 'paste' || (tab === 'discover' && discoverView === 'search');
+    const setUrlRaw = acceptsSetUrl
         ? String(params.get('url') || '').trim()
         : '';
     const setUrl = setUrlRaw || null;
@@ -229,8 +250,7 @@ export function parsePosterSetsUrl(hash = typeof window !== 'undefined' ? window
         ? normalizeCreator(params.get('creator') || params.get('user'))
         : null;
     const assets = String(params.get('assets') || '').trim().toLowerCase();
-    const titleCardsOnly = tab === 'discover'
-        && (discoverView === 'search' || discoverView === 'paste')
+    const titleCardsOnly = acceptsSetUrl
         && Boolean(setUrl)
         && (
             assets === 'title_cards'
@@ -251,7 +271,7 @@ export function buildPosterSetsHash(state: PosterSetsUrlState): string {
             hash += `/${encodeURIComponent(state.rail)}`;
         }
     }
-    if (state.tab === 'discover' && (state.discoverView === 'search' || state.discoverView === 'paste') && state.setUrl) {
+    if ((state.tab === 'paste' || (state.tab === 'discover' && state.discoverView === 'search')) && state.setUrl) {
         const params = new URLSearchParams();
         params.set('url', state.setUrl);
         if (state.titleCardsOnly) params.set('assets', 'title_cards');
