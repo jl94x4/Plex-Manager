@@ -11,6 +11,7 @@ import { DiscoverLocaleSelect } from '../discovery/i18n/DiscoverLocaleSelect';
 type Props = {
     sessionInfo: any;
     refreshSession: () => void;
+    publicConfig?: any;
 };
 
 const PrefToggle: React.FC<{
@@ -40,7 +41,7 @@ const PrefToggle: React.FC<{
     </div>
 );
 
-export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession }) => {
+export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, publicConfig }) => {
     const { t } = useDiscoverI18n();
     const user = sessionInfo?.account;
     const isAdmin = !!(sessionInfo?.session?.isAdmin || user?.isAdmin);
@@ -54,6 +55,9 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession }
     ));
 
     const [optOutNewsletter, setOptOutNewsletter] = useState(user?.optOutNewsletter || false);
+    const [privacyShowName, setPrivacyShowName] = useState(user?.privacyShowName !== false);
+    const [privacyShowPlayer, setPrivacyShowPlayer] = useState(user?.privacyShowPlayer !== false);
+    const [privacyShowAchievements, setPrivacyShowAchievements] = useState(user?.privacyShowAchievements !== false);
     const [notifyRequestAvailableEmail, setNotifyRequestAvailableEmail] = useState(user?.notifyRequestAvailableEmail !== false);
     const [notifyRequestAvailableInApp, setNotifyRequestAvailableInApp] = useState(user?.notifyRequestAvailableInApp !== false);
     const [notifyRequestAvailableWebPush, setNotifyRequestAvailableWebPush] = useState(user?.notifyRequestAvailableWebPush !== false);
@@ -128,6 +132,9 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession }
         setNotifyMediaJobCompleted(user?.notifyMediaJobCompleted === true);
         setNotifyWebPush(user?.notifyWebPush !== false);
         setOptOutNewsletter(!!user?.optOutNewsletter);
+        setPrivacyShowName(user?.privacyShowName !== false);
+        setPrivacyShowPlayer(user?.privacyShowPlayer !== false);
+        setPrivacyShowAchievements(user?.privacyShowAchievements !== false);
     }, [
         user?.notifyRequestAvailableEmail,
         user?.notifyRequestAvailableInApp,
@@ -156,6 +163,9 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession }
         user?.notifyMediaJobCompleted,
         user?.notifyWebPush,
         user?.optOutNewsletter,
+        user?.privacyShowName,
+        user?.privacyShowPlayer,
+        user?.privacyShowAchievements,
     ]);
 
     useEffect(() => {
@@ -189,6 +199,9 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession }
         })();
         return () => { cancelled = true; };
     }, [browserPushSupportedFlag]);
+
+    const adminAllowsNames = String(publicConfig?.hideStreamUsers || 'false') === 'false';
+    const achievementsEnabled = !!(sessionInfo?.navFeatures?.achievements || publicConfig?.achievementsEnabled);
 
     const savePref = async (body: Record<string, boolean>, apply: () => void, success: string) => {
         setBusy(true);
@@ -275,6 +288,63 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession }
                             ariaLabel={t('homeDashboard.toggleNewsletterAria')}
                             disabled={busy}
                         />
+                    </DashboardPanel>
+
+                    <DashboardPanel title={t('preferencesPage.privacyTitle')} subtitle={t('preferencesPage.privacySubtitle')}>
+                        <div className="flex flex-col gap-5">
+                            {!adminAllowsNames ? (
+                                <p className="text-amber-200/90 text-xs leading-relaxed">
+                                    {t('preferencesPage.privacyAdminHidden')}
+                                </p>
+                            ) : null}
+                            <PrefToggle
+                                title={t('preferencesPage.privacyShowName')}
+                                hint={t('preferencesPage.privacyShowNameHint')}
+                                on={privacyShowName}
+                                onToggle={() => {
+                                    const next = !privacyShowName;
+                                    void savePref(
+                                        { privacyShowName: next },
+                                        () => setPrivacyShowName(next),
+                                        t('preferencesPage.privacyUpdated'),
+                                    );
+                                }}
+                                ariaLabel={t('preferencesPage.privacyShowName')}
+                                disabled={busy || !adminAllowsNames}
+                            />
+                            <PrefToggle
+                                title={t('preferencesPage.privacyShowPlayer')}
+                                hint={t('preferencesPage.privacyShowPlayerHint')}
+                                on={privacyShowPlayer}
+                                onToggle={() => {
+                                    const next = !privacyShowPlayer;
+                                    void savePref(
+                                        { privacyShowPlayer: next },
+                                        () => setPrivacyShowPlayer(next),
+                                        t('preferencesPage.privacyUpdated'),
+                                    );
+                                }}
+                                ariaLabel={t('preferencesPage.privacyShowPlayer')}
+                                disabled={busy || !adminAllowsNames}
+                            />
+                            {achievementsEnabled ? (
+                                <PrefToggle
+                                    title={t('preferencesPage.privacyShowAchievements')}
+                                    hint={t('preferencesPage.privacyShowAchievementsHint')}
+                                    on={privacyShowAchievements}
+                                    onToggle={() => {
+                                        const next = !privacyShowAchievements;
+                                        void savePref(
+                                            { privacyShowAchievements: next },
+                                            () => setPrivacyShowAchievements(next),
+                                            t('preferencesPage.privacyUpdated'),
+                                        );
+                                    }}
+                                    ariaLabel={t('preferencesPage.privacyShowAchievements')}
+                                    disabled={busy}
+                                />
+                            ) : null}
+                        </div>
                     </DashboardPanel>
 
                     <DashboardPanel title={t('preferencesPage.notificationsTitle')} subtitle={t('preferencesPage.notificationsSubtitle')}>

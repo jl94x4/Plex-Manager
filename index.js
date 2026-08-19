@@ -75,7 +75,14 @@ import { registerSupportTicketRoutes } from './lib/support-tickets/http.js';
 import { createSupportTicketFromMediaIssue, attachTicketIdsToIssues } from './lib/support-tickets/fromIssue.js';
 import { mapTautulliHistoryRowToPlexItem } from './lib/achievements/tautulliHistory.js';
 import { isTautulliWatchHistorySource, buildAchievementsHomeRankContext, summarizeAchievementsBackfill } from './lib/achievements/index.js';
-import { loadAchievementsState } from './lib/achievements/store.js';
+import { loadAchievementsState, setLeaderboardOptOut } from './lib/achievements/store.js';
+import { resolveAchievementsAccountId } from './lib/profile/assemble.js';
+import {
+    applyMemberNamePrivacyToRows,
+    applyStreamPrivacy,
+    findPortalUserForStream,
+    normalizeMemberPrivacy,
+} from './lib/privacy/memberPrivacy.js';
 import {
     backfillJoiningDatesFromHistory,
     getJoiningDateBackfillStatus,
@@ -2401,16 +2408,24 @@ const shouldObfuscateAnalyticsViewers = (sessionUser, config) => {
     return !config?.showUsernamesInAnalytics;
 };
 
-const obfuscateAnalyticsTopUser = (user, index, shouldObfuscate) => {
-    if (!shouldObfuscate) {
-        return user;
+const obfuscateAnalyticsTopUser = (user, index, shouldObfuscate, subjectUser = null) => {
+    if (shouldObfuscate) {
+        return {
+            ...user,
+            id: `viewer-${index + 1}`,
+            username: `Viewer ${index + 1}`,
+            thumb: null,
+        };
     }
-    return {
-        ...user,
-        id: `viewer-${index + 1}`,
-        username: `Viewer ${index + 1}`,
-        thumb: null,
-    };
+    if (subjectUser && !normalizeMemberPrivacy(subjectUser).privacyShowName) {
+        return {
+            ...user,
+            id: `viewer-${index + 1}`,
+            username: 'Anonymous',
+            thumb: null,
+        };
+    }
+    return user;
 };
 
 const obfuscateAnalyticsTopDevice = (device, index, shouldObfuscate) => {
@@ -2425,25 +2440,14 @@ const shouldObfuscateViewerDeviceNames = (sessionUser, config) => (
     shouldObfuscateAnalyticsViewers(sessionUser, config)
 );
 
-const maskStreamIdentity = (sessionUser, config, identity = {}) => {
-    const mode = normalizeHideStreamUsers(config);
-    const hide = !sessionUser?.isAdmin && (mode === 'anonymous' || mode === 'hidden');
-    if (!hide) return identity;
-    if (mode === 'hidden') {
-        return {
-            ...identity,
-            user: null,
-            userThumb: null,
-            playerTitle: null,
-        };
-    }
-    return {
-        ...identity,
-        user: 'Anonymous',
-        userThumb: null,
-        playerTitle: 'Anonymous',
-    };
-};
+const maskStreamIdentity = (sessionUser, config, identity = {}, subjectUser = null) => (
+    applyStreamPrivacy({
+        viewer: sessionUser,
+        config,
+        identity,
+        subjectUser,
+    })
+);
 
 const blockIfImpersonating = (req, res) => {
     if (isImpersonatingSession(req.user)) {
@@ -3949,6 +3953,9 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             notifyWebPush,
             showDiscoverNowPlaying,
             uiLocale,
+            privacyShowName,
+            privacyShowPlayer,
+            privacyShowAchievements,
         } = req.body || {};
         const users = await loadFile(USERS_PATH, []);
         const localUser = findLocalUserForSession(users, req.user);
@@ -4001,9 +4008,25 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             notifyMediaJobCompleted,
             notifyWebPush,
             showDiscoverNowPlaying,
+            privacyShowName,
+            privacyShowPlayer,
+            privacyShowAchievements,
         };
         for (const [key, value] of Object.entries(boolPrefs)) {
             if (value !== undefined) users[userIndex][key] = !!value;
+        }
+        if (privacyShowAchievements !== undefined) {
+            try {
+                const config = await loadFile(CONFIG_PATH, {});
+                const state = await loadAchievementsState();
+                const subjectId = resolveAchievementsAccountId(users[userIndex], users[userIndex].plexAccountId, state, {
+                    username: users[userIndex].username,
+                    adminPlexId: config.adminPlexId,
+                });
+                if (subjectId) await setLeaderboardOptOut(subjectId, !users[userIndex].privacyShowAchievements);
+            } catch (syncError) {
+                log(`[privacy] achievements opt-out sync failed: ${syncError?.message || syncError}`);
+            }
         }
         await saveFile(USERS_PATH, users);
 
@@ -5977,6 +6000,8 @@ app.get('/api/config/public', async (req, res) => {
             achievementsLeaderboardEnabled: config.achievementsLeaderboardEnabled !== false,
             achievementsHomeWidgetEnabled: config.achievementsHomeWidgetEnabled !== false,
             achievementsShowOnProfile: config.achievementsShowOnProfile !== false,
+            hideStreamUsers: config.hideStreamUsers === true ? 'anonymous' : String(config.hideStreamUsers || 'false'),
+            showUsernamesInAnalytics: !!config.showUsernamesInAnalytics,
             watchHistorySource: config.watchHistorySource === 'tautulli' ? 'tautulli' : 'plex',
             publicBaseUrl: resolvePublicBaseUrlFromConfig(config) || '',
             appVersion: appVersion,
@@ -13939,6 +13964,7 @@ app.get('/api/plex/dashboard', requireAuth, requireMember, async (req, res) => {
         if (!uri) return res.status(503).json({ error: 'Cannot connect to Plex' });
 
         const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 250);
+        const portalUsers = await loadFile(USERS_PATH, []);
 
         const cacheKey = `plex_dashboard_data_${limit}`;
         const cachedData = await withCache(cacheKey, 800, async () => {
@@ -13964,7 +13990,10 @@ app.get('/api/plex/dashboard', requireAuth, requireMember, async (req, res) => {
                     user: m.User ? m.User.title : 'Unknown User',
                     userThumb: m.User ? m.User.thumb : null,
                     playerTitle: player.title || 'Unknown Player',
-                });
+                }, findPortalUserForStream(portalUsers, {
+                    user: m.User?.title,
+                    plexUserId: m.User?.id,
+                }));
 
                 return {
                     sessionId: session.id || m.sessionKey,
@@ -14580,7 +14609,7 @@ app.get('/api/jellyfin/dashboard', requireAuth, requireMember, async (req, res) 
 
         const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 250);
         const recentKey = `jf:${String(config.jellyfinUrl || '').trim().toLowerCase()}:${limit}`;
-        const [{ sessions }, { value: recent }] = await Promise.all([
+        const [{ sessions }, { value: recent }, portalUsers] = await Promise.all([
             getJellyfinSessionsSwr(config),
             dashboardRecentSwr.get(
                 recentKey,
@@ -14594,6 +14623,7 @@ app.get('/api/jellyfin/dashboard', requireAuth, requireMember, async (req, res) 
                 },
                 { freshMs: DASHBOARD_RECENT_FRESH_MS, staleMs: DASHBOARD_RECENT_STALE_MS },
             ),
+            loadFile(USERS_PATH, []),
         ]);
         const movies = recent?.movies || [];
         const episodes = recent?.episodes || [];
@@ -14616,7 +14646,11 @@ app.get('/api/jellyfin/dashboard', requireAuth, requireMember, async (req, res) 
                     user: session.UserName || 'Unknown User',
                     userThumb: session.UserId ? withBasePath(`/api/jellyfin/user-image?userId=${encodeURIComponent(session.UserId)}`) : null,
                     playerTitle: session.DeviceName || session.Client || 'Jellyfin Player',
-                });
+                }, findPortalUserForStream(portalUsers, {
+                    user: session.UserName,
+                    jellyfinId: session.UserId,
+                    userId: session.UserId,
+                }));
                 return {
                     sessionId: session.Id,
                     title: item.Name,
@@ -16158,13 +16192,19 @@ app.get('/api/jellystat/analytics', requireAuth, requireMember, async (req, res)
         }
 
         const shouldObfuscateUsernames = shouldObfuscateAnalyticsViewers(req.user, config);
+        const portalUsers = await loadFile(USERS_PATH, []);
         const rawTopUsers = (Array.isArray(mostActiveUsers) ? mostActiveUsers : []).map((user, index) => ({
             id: user.UserId || user.Id || user.Name || `user-${index}`,
             username: user.Name || user.UserName || `User ${index + 1}`,
             thumb: user.UserId ? withBasePath(`/api/jellyfin/user-image?userId=${encodeURIComponent(user.UserId)}`) : null,
             plays: toNumber(user.Plays ?? user.TotalPlays, 0),
         })).sort((a, b) => b.plays - a.plays);
-        const topUsers = rawTopUsers.map((user, index) => obfuscateAnalyticsTopUser(user, index, shouldObfuscateUsernames));
+        const topUsers = rawTopUsers.map((user, index) => obfuscateAnalyticsTopUser(
+            user,
+            index,
+            shouldObfuscateUsernames,
+            findPortalUserForStream(portalUsers, { user: user.username, userId: user.id, jellyfinId: user.id }),
+        ));
         const leaderboardContext = buildJellyfinLeaderboardContext(rawTopUsers, req.user, shouldObfuscateUsernames);
 
         const topLibraries = (Array.isArray(mostViewedLibraries) ? mostViewedLibraries : []).map((library, index) => ({
@@ -16509,11 +16549,17 @@ app.get('/api/plex/analytics', requireAuth, requireMember, async (req, res) => {
         const cachedData = statsData[reqDays] || statsData[30] || { topUsers: [], topLibraries: [], topMovies: [], topShows: [], topMusic: [], topDevices: [], peakHours: new Array(24).fill(0), totalPlaybacks: 0 };
         
         const config = await loadFile(CONFIG_PATH, {});
+        const portalUsers = await loadFile(USERS_PATH, []);
         const shouldObfuscateUsernames = shouldObfuscateAnalyticsViewers(req.user, config);
         const topUsers = (cachedData.topUsers || []).map((user, index) => obfuscateAnalyticsTopUser({
             ...user,
             username: user.username || `User ${index + 1}`,
-        }, index, shouldObfuscateUsernames));
+        }, index, shouldObfuscateUsernames, findPortalUserForStream(portalUsers, {
+            user: user.username,
+            username: user.username,
+            userId: user.id,
+            plexUserId: user.id,
+        })));
         const topDevices = (cachedData.topDevices || []).map((device, index) => (
             obfuscateAnalyticsTopDevice(device, index, shouldObfuscateViewerDeviceNames(req.user, config))
         ));
@@ -17006,6 +17052,11 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
                     username: shouldObfuscateUsernames && !isMe ? `Viewer ${entry.rank}` : realName,
                 };
             });
+            leaderboardNeighbourhood = applyMemberNamePrivacyToRows(
+                leaderboardNeighbourhood,
+                users,
+                { obfuscate: shouldObfuscateUsernames, viewerIsAdmin: !!req.user?.isAdmin },
+            );
         }
 
         let leaderboardSource = 'period_plays';
@@ -17026,7 +17077,11 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
                     totalActiveUsers = xpRank.totalActiveUsers;
                     myPlaysOnLeaderboard = xpRank.myPlaysOnLeaderboard;
                     myXp = xpRank.myXp;
-                    leaderboardNeighbourhood = xpRank.leaderboardNeighbourhood;
+                    leaderboardNeighbourhood = applyMemberNamePrivacyToRows(
+                        xpRank.leaderboardNeighbourhood,
+                        users,
+                        { obfuscate: shouldObfuscateUsernames, viewerIsAdmin: !!req.user?.isAdmin },
+                    );
                     leaderboardSource = xpRank.leaderboardSource;
                     leaderboardMetric = xpRank.leaderboardMetric;
                 }
@@ -17319,6 +17374,7 @@ achievementsHttp = registerAchievementsRoutes(app, {
     requireMember,
     requireAdmin,
     loadFile,
+    saveFile,
     CONFIG_PATH,
     USERS_PATH,
     resolveCurrentAdmin,

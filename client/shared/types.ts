@@ -13,6 +13,12 @@ export interface User {
     exemptFromCleanup?: boolean;
     isTrial?: boolean;
     optOutNewsletter?: boolean;
+    /** Show my name on dashboard / analytics / public profile when the admin allows names. */
+    privacyShowName?: boolean;
+    /** Show my player/device name on live streams when the admin allows names. */
+    privacyShowPlayer?: boolean;
+    /** Show me on the achievements leaderboard and peer trophy cases. */
+    privacyShowAchievements?: boolean;
     /** Email when a portal request becomes available (default on). */
     notifyRequestAvailableEmail?: boolean;
     /** In-app bell when a portal request becomes available (default on). */

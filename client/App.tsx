@@ -687,7 +687,7 @@ export const MainApp: React.FC = () => {
         if (currentRoute === 'preferences') {
             return (
                 <Suspense fallback={<Loader isLoading={true} isCinematic={!!publicConfig?.useCinematicLoading} />}>
-                    <PreferencesPage sessionInfo={sessionInfo} refreshSession={checkSession} />
+                    <PreferencesPage sessionInfo={sessionInfo} refreshSession={checkSession} publicConfig={publicConfig} />
                 </Suspense>
             );
         }

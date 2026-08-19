@@ -1,17 +1,116 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    ArrowDownRight, ArrowUpRight, Calendar, Clock, LogOut, Minus, Palette,
+    ArrowDownRight, ArrowUpRight, Check, Clock, Copy, Crown, LogOut, Mail, Minus, Palette,
     Shield, SlidersHorizontal, Sparkles, Trophy, User,
 } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { logoUrl, portalUrl, resolvePortalAssetUrl, stripBasePath } from '../shared/basePath';
-import { formatDate } from '../shared/format';
+import { daysSinceDate, formatUkDate, getDaysUntilExpiry } from '../shared/format';
 import { CustomSelect } from '../shared/ui';
 import { DashboardPageShell, DashboardPanel } from '../shared/dashboard/DashboardChrome';
+import { discoverRowCardWidthClass } from '../shared/portalLayout';
 import { WrapUpCardGrid } from '../shared/WrapUpCards';
+import { WrapUpModal } from '../screens';
 import { ProfileBadgeRack } from '../achievements/AchievementsDashboard';
+import { BadgeDetailDrawer } from '../achievements/BadgeDetailDrawer';
 import { useDiscoverI18n } from '../discovery/i18n';
 import { resolveTmdbImageUrl } from '../discovery/tmdbImageUrl';
+
+const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+const timeOfDayFromHour = (peakHour: number) => {
+    if (peakHour >= 5 && peakHour < 12) return 'Early Bird';
+    if (peakHour >= 12 && peakHour < 18) return 'Afternoon Watcher';
+    if (peakHour >= 18) return 'Evening Streamer';
+    return 'Night Owl';
+};
+
+const mapJellyfinHomeAnalytics = (data: any) => {
+    const topMovies = Array.isArray(data?.topMovies) ? data.topMovies : [];
+    const topShows = Array.isArray(data?.topShows) ? data.topShows : [];
+    const topMusic = Array.isArray(data?.topMusic) ? data.topMusic : [];
+    const topWatched = [...topShows, ...topMovies, ...topMusic].sort((a: any, b: any) => (b.plays || 0) - (a.plays || 0));
+    const peakHours = Array.isArray(data?.peakHours) ? data.peakHours : [];
+    const peakHour = peakHours.reduce((best: number, value: number, hour: number) => (
+        value > (peakHours[best] || 0) ? hour : best
+    ), 0);
+    const dayOfWeekCounts = data?.dayOfWeekCounts && Object.keys(data.dayOfWeekCounts).length > 0
+        ? data.dayOfWeekCounts
+        : Object.entries(data?.heatmapData || {}).reduce((counts: Record<number, number>, [dateKey, count]) => {
+            const date = new Date(`${dateKey}T00:00:00`);
+            if (!Number.isNaN(date.getTime())) {
+                const day = date.getDay();
+                counts[day] = (counts[day] || 0) + (Number(count) || 0);
+            }
+            return counts;
+        }, { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 });
+    const topDayEntry = Object.entries(dayOfWeekCounts)
+        .map(([day, count]) => ({ day: Number(day), count: Number(count) || 0 }))
+        .sort((a, b) => b.count - a.count)[0];
+    const moviesCount = data?.jellystatInsights?.moviePlays || topMovies.reduce((sum: number, item: any) => sum + (item.plays || 0), 0);
+    const showsCount = data?.jellystatInsights?.tvPlays || topShows.reduce((sum: number, item: any) => sum + (item.plays || 0), 0);
+    const musicCount = data?.jellystatInsights?.musicPlays || topMusic.reduce((sum: number, item: any) => sum + (item.plays || 0), 0);
+    const topMovie = topMovies[0] || null;
+    const topBinge = topShows[0] || null;
+    const topLibraries = Array.isArray(data?.topLibraries) ? data.topLibraries : [];
+
+    return {
+        totalPlays: data?.totalPlaybacks || data?.jellystatInsights?.totalPlays || 0,
+        moviesCount,
+        showsCount,
+        musicCount,
+        topWatched,
+        recentHistory: [],
+        topMovie: topMovie ? { ...topMovie, artUrl: topMovie.thumbUrl } : null,
+        topBinge: topBinge ? { ...topBinge, artUrl: topBinge.thumbUrl } : null,
+        peakHour,
+        avgHour: peakHour,
+        timeOfDay: timeOfDayFromHour(peakHour),
+        popularDay: topDayEntry && topDayEntry.count > 0 ? DAYS_OF_WEEK[topDayEntry.day] : 'Recent Activity',
+        dayOfWeekCounts,
+        favoriteLibrary: topLibraries[0]?.title || 'None',
+        topLibraries,
+        mediaPreference: moviesCount > showsCount ? 'Movie Fan' : 'TV Binger',
+        watchStyle: topWatched.length >= 10 ? 'Explorer' : 'Focused',
+        uniqueTitles: topWatched.length,
+        streamingHabit: 'Jellyfin Viewer',
+        weekdayPlays: data?.totalPlaybacks || 0,
+        weekendPlays: 0,
+        leaderboardRank: data?.leaderboardRank || null,
+        totalActiveUsers: data?.totalActiveUsers || 0,
+        myPlaysOnLeaderboard: data?.myPlaysOnLeaderboard ?? null,
+        myXp: data?.myXp ?? null,
+        leaderboardNeighbourhood: data?.leaderboardNeighbourhood || [],
+        leaderboardSource: data?.leaderboardSource || 'period_plays',
+        leaderboardMetric: data?.leaderboardMetric || 'plays',
+        heatmapData: data?.heatmapData || null,
+    };
+};
+
+const mergeProfileWrapUp = (snapshot: any, personal: any, identityXp?: number) => {
+    if (!snapshot && !personal) return null;
+    if (!personal) return snapshot;
+    const snap = snapshot || {};
+    return {
+        ...snap,
+        ...personal,
+        totalPlays: Math.max(Number(snap.totalPlays) || 0, Number(personal.totalPlays) || 0),
+        hoursWatched: Number(snap.hoursWatched) || Number(personal.hoursWatched) || 0,
+        uniqueTitles: Number(snap.uniqueTitles) || Number(personal.uniqueTitles) || 0,
+        moviesCount: Number(snap.moviesCount) || Number(personal.moviesCount) || 0,
+        showsCount: Number(snap.showsCount) || Number(personal.showsCount) || 0,
+        musicCount: Number(snap.musicCount) || Number(personal.musicCount) || 0,
+        leaderboardRank: snap.leaderboardRank ?? personal.leaderboardRank ?? null,
+        totalActiveUsers: snap.totalActiveUsers || personal.totalActiveUsers || 0,
+        leaderboardSource: snap.leaderboardSource || personal.leaderboardSource || 'achievements',
+        leaderboardMetric: snap.leaderboardMetric || personal.leaderboardMetric || 'xp',
+        myXp: identityXp ?? personal.myXp,
+        currentStreak: Number(snap.currentStreak) || Number(personal.currentStreak) || 0,
+        longestStreak: Number(snap.longestStreak) || Number(personal.longestStreak) || 0,
+        bingeMax: Number(snap.bingeMax) || Number(personal.bingeMax) || 0,
+        activeDays: Number(snap.activeDays) || Number(personal.activeDays) || 0,
+    };
+};
 
 const THEME_OPTIONS = [
     { label: 'Dynamic (Chameleon)', value: 'dynamic' },
@@ -62,7 +161,49 @@ const requestPoster = (item: { posterUrl?: string | null }) => {
     const raw = String(item?.posterUrl || '').trim();
     if (!raw) return '';
     if (raw.startsWith('/api/')) return resolvePortalAssetUrl(raw);
-    return resolveTmdbImageUrl(raw, 'w185');
+    return resolveTmdbImageUrl(raw, 'w500');
+};
+
+const trophyRarityClass = (rarity: string) => {
+    if (rarity === 'legendary') return 'border-amber-400/50 text-amber-100 bg-amber-500/10 hover:border-amber-300/70';
+    if (rarity === 'epic') return 'border-fuchsia-400/45 text-fuchsia-100 bg-fuchsia-500/10 hover:border-fuchsia-300/70';
+    if (rarity === 'rare') return 'border-sky-400/45 text-sky-100 bg-sky-500/10 hover:border-sky-300/70';
+    return 'border-white/10 bg-black/25 hover:border-plex/40';
+};
+
+const relativeFromDays = (days: number | null, t: (key: string, vars?: Record<string, string | number>) => string) => {
+    if (days == null) return null;
+    if (days <= 0) return t('profilePage.today');
+    if (days === 1) return t('profilePage.yesterday');
+    if (days < 14) return t('profilePage.daysAgo', { count: days });
+    if (days < 60) return t('profilePage.weeksAgo', { count: Math.max(1, Math.round(days / 7)) });
+    const months = Math.round(days / 30.44);
+    if (months < 24) return t('profilePage.monthsAgo', { count: Math.max(1, months) });
+    return t('profilePage.yearsAgo', { count: Math.max(1, Math.round(days / 365.25)) });
+};
+
+const accessStatusTone = (status: string) => {
+    const value = String(status || 'unknown').toLowerCase();
+    if (value === 'active') return {
+        pill: 'border-emerald-400/30 bg-emerald-500/15 text-emerald-200',
+        glow: 'from-emerald-400/25 via-emerald-500/5 to-transparent',
+        icon: 'text-emerald-300',
+    };
+    if (value === 'pending') return {
+        pill: 'border-amber-400/30 bg-amber-500/15 text-amber-200',
+        glow: 'from-amber-400/25 via-amber-500/5 to-transparent',
+        icon: 'text-amber-300',
+    };
+    if (value === 'revoked' || value === 'expired') return {
+        pill: 'border-rose-400/30 bg-rose-500/15 text-rose-200',
+        glow: 'from-rose-400/25 via-rose-500/5 to-transparent',
+        icon: 'text-rose-300',
+    };
+    return {
+        pill: 'border-white/15 bg-white/5 text-muted',
+        glow: 'from-white/10 via-transparent to-transparent',
+        icon: 'text-plex',
+    };
 };
 
 type Props = {
@@ -84,7 +225,15 @@ export const ProfilePage: React.FC<Props> = ({
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [copiedEmail, setCopiedEmail] = useState(false);
+    const [personalWrapUp, setPersonalWrapUp] = useState<any>(null);
+    const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
+    const [selectedBadgeId, setSelectedBadgeId] = useState<string | null>(null);
+    const [pinnedIds, setPinnedIds] = useState<string[]>([]);
+    const [pinBusy, setPinBusy] = useState(false);
     const accountId = profileAccountIdFromPath();
+    const mediaServerType = String(sessionInfo?.mediaServerType || 'plex').toLowerCase();
+    const isJellyfinPortal = mediaServerType === 'jellyfin' || mediaServerType === 'emby';
 
     useEffect(() => {
         let cancelled = false;
@@ -109,6 +258,44 @@ export const ProfilePage: React.FC<Props> = ({
         return () => { cancelled = true; };
     }, [accountId, t]);
 
+    useEffect(() => {
+        setPersonalWrapUp(null);
+        setSelectedMetric(null);
+        setSelectedBadgeId(null);
+        if (!data?.viewer?.isSelf) return undefined;
+        let cancelled = false;
+        const wrapUpSubjectId = String(
+            sessionInfo?.impersonation?.targetUserId
+            || sessionInfo?.account?.id
+            || sessionInfo?.session?.id
+            || sessionInfo?.session?.username
+            || 'anon',
+        );
+        if (!isJellyfinPortal) {
+            try {
+                const raw = sessionStorage.getItem(`smp.wrapup.analytics.v2:${wrapUpSubjectId}:all`);
+                const parsed = raw ? JSON.parse(raw) : null;
+                if (parsed?.payload && typeof parsed.at === 'number' && Date.now() - parsed.at < 6 * 60 * 60 * 1000) {
+                    setPersonalWrapUp(parsed.payload);
+                }
+            } catch {
+                /* ignore */
+            }
+        }
+        const load = async () => {
+            try {
+                const payload = isJellyfinPortal
+                    ? mapJellyfinHomeAnalytics(await apiFetch('/api/jellystat/analytics?days=all'))
+                    : await apiFetch('/api/plex/analytics/me?days=all');
+                if (!cancelled) setPersonalWrapUp(payload);
+            } catch {
+                if (!cancelled) setPersonalWrapUp((prev: any) => prev);
+            }
+        };
+        void load();
+        return () => { cancelled = true; };
+    }, [accountId, data?.viewer?.isSelf, isJellyfinPortal, sessionInfo?.account?.id, sessionInfo?.impersonation?.targetUserId, sessionInfo?.session?.id, sessionInfo?.session?.username]);
+
     const identity = data?.identity || {};
     const account = data?.account;
     const achievements = data?.achievements;
@@ -120,11 +307,80 @@ export const ProfilePage: React.FC<Props> = ({
     const into = Number(identity.levelProgress?.xpIntoLevel) || 0;
     const need = Math.max(1, Number(identity.levelProgress?.xpForNextLevel) || 1);
     const xpPct = Math.min(100, Math.round((into / need) * 100));
-    const accessLabel = account?.expiryDate
-        ? formatDate(account.expiryDate)
+    const joinDate = identity.joiningDate || account?.joiningDate || null;
+    const joinUk = formatUkDate(joinDate);
+    const joinRelative = relativeFromDays(daysSinceDate(joinDate), t);
+    const lastSeenUk = formatUkDate(account?.lastLogin);
+    const lastSeenRelative = relativeFromDays(daysSinceDate(account?.lastLogin), t);
+    const daysLeft = getDaysUntilExpiry(account?.expiryDate || null);
+    const accessStatus = String(account?.plexAccessStatus || 'unknown');
+    const accessTone = accessStatusTone(accessStatus);
+    const accessHeadline = account?.expiryDate
+        ? t('profilePage.expiresOn', { date: formatUkDate(account.expiryDate) })
         : t('profilePage.unlimited');
+    const accessSub = account?.expiryDate && daysLeft != null
+        ? t('profilePage.daysLeft', { count: Math.max(0, daysLeft) })
+        : t('profilePage.noExpiry');
 
-    const wrapAnalytics = useMemo(() => data?.watch?.wrapUp || null, [data?.watch?.wrapUp]);
+    const copyEmail = async () => {
+        const email = String(account?.email || '').trim();
+        if (!email) return;
+        try {
+            await navigator.clipboard.writeText(email);
+            setCopiedEmail(true);
+            window.setTimeout(() => setCopiedEmail(false), 1800);
+        } catch {
+            setCopiedEmail(false);
+        }
+    };
+
+    const wrapAnalytics = useMemo(
+        () => mergeProfileWrapUp(data?.watch?.wrapUp || null, personalWrapUp, Number(identity.xp) || undefined),
+        [data?.watch?.wrapUp, personalWrapUp, identity.xp],
+    );
+
+    const selectedTrophy = useMemo(() => {
+        if (!selectedBadgeId) return null;
+        const pool = [
+            ...(Array.isArray(achievements?.trophyCase) ? achievements.trophyCase : []),
+            ...(Array.isArray(achievements?.earned) ? achievements.earned : []),
+        ];
+        const found = pool.find((badge: any) => String(badge?.id) === selectedBadgeId);
+        return found ? { ...found, earned: true } : { id: selectedBadgeId, earned: true };
+    }, [achievements, selectedBadgeId]);
+
+    useEffect(() => {
+        if (!selectedBadgeId) return undefined;
+        let cancelled = false;
+        apiFetch('/api/achievements/me?view=summary')
+            .then((me: any) => {
+                if (!cancelled && Array.isArray(me?.pinnedBadgeIds)) {
+                    setPinnedIds(me.pinnedBadgeIds.map(String));
+                }
+            })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, [selectedBadgeId]);
+
+    const togglePin = async (badgeId: string) => {
+        const id = String(badgeId);
+        const next = pinnedIds.includes(id)
+            ? pinnedIds.filter((value) => value !== id)
+            : [...pinnedIds, id].slice(0, 3);
+        setPinBusy(true);
+        try {
+            const res = await apiFetch('/api/achievements/me/pins', {
+                method: 'POST',
+                body: JSON.stringify({ ids: next }),
+            });
+            const saved = Array.isArray(res?.pinnedBadgeIds) ? res.pinnedBadgeIds.map(String) : next;
+            setPinnedIds(saved);
+        } catch {
+            /* drawer already shows pin control; ignore */
+        } finally {
+            setPinBusy(false);
+        }
+    };
 
     return (
         <DashboardPageShell>
@@ -244,7 +500,12 @@ export const ProfilePage: React.FC<Props> = ({
                 <>
                     {wrapAnalytics && (Number(wrapAnalytics.totalPlays) > 0 || Number(wrapAnalytics.hoursWatched) > 0 || wrapAnalytics.leaderboardRank) ? (
                         <DashboardPanel title={t('profilePage.watchStory')} subtitle={t('profilePage.watchStoryHint')}>
-                            <WrapUpCardGrid analytics={wrapAnalytics} desktopMaxCards={10} />
+                            <WrapUpCardGrid
+                                analytics={wrapAnalytics}
+                                desktopMaxCards={10}
+                                interactive
+                                onCardClick={setSelectedMetric}
+                            />
                         </DashboardPanel>
                     ) : null}
 
@@ -273,14 +534,17 @@ export const ProfilePage: React.FC<Props> = ({
                             {Array.isArray(achievements.trophyCase) && achievements.trophyCase.length > 0 ? (
                                 <div className="mt-4 grid grid-cols-1 sm:grid-cols-5 gap-2">
                                     {achievements.trophyCase.map((badge: any) => (
-                                        <div
+                                        <button
                                             key={badge.id}
-                                            className="rounded-xl border border-white/10 bg-black/25 px-3 py-3 text-center"
+                                            type="button"
+                                            onClick={() => setSelectedBadgeId(String(badge.id))}
+                                            title={badge.name}
+                                            className={`rounded-xl border px-3 py-3 text-center cursor-pointer hover:scale-[1.03] hover:ring-2 hover:ring-plex/40 transition-all ${trophyRarityClass(badge.rarity)}`}
                                         >
                                             <span className="text-3xl leading-none">{badge.icon || '🏅'}</span>
                                             <p className="mt-2 text-xs font-bold text-text truncate">{badge.name}</p>
                                             <p className="text-[10px] uppercase tracking-widest text-muted mt-1">{badge.rarity}</p>
-                                        </div>
+                                        </button>
                                     ))}
                                 </div>
                             ) : null}
@@ -289,48 +553,90 @@ export const ProfilePage: React.FC<Props> = ({
 
                     {account ? (
                         <DashboardPanel title={t('profilePage.account')} subtitle={t('profilePage.accountHint')}>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                                <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-3">
-                                    <p className="text-[10px] uppercase tracking-widest font-bold text-muted flex items-center gap-1.5">
-                                        <Calendar className="w-3.5 h-3.5 text-plex" />
-                                        {t('profilePage.joined')}
-                                    </p>
-                                    <p className="mt-1.5 text-sm font-bold text-text">
-                                        {identity.joiningDate || account.joiningDate
-                                            ? formatDate(identity.joiningDate || account.joiningDate)
-                                            : t('profilePage.unknown')}
-                                    </p>
-                                </div>
-                                <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-3">
-                                    <p className="text-[10px] uppercase tracking-widest font-bold text-muted flex items-center gap-1.5">
-                                        <Shield className="w-3.5 h-3.5 text-plex" />
-                                        {t('profilePage.access')}
-                                    </p>
-                                    <p className="mt-1.5 text-sm font-bold text-text">{accessLabel}</p>
-                                    <p className="text-[11px] text-muted mt-0.5">
-                                        {account.plexAccessStatus || 'unknown'}
-                                        {account.isTrial ? ` · ${t('profilePage.trial')}` : ''}
-                                    </p>
-                                </div>
-                                <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-3">
-                                    <p className="text-[10px] uppercase tracking-widest font-bold text-muted flex items-center gap-1.5">
-                                        <Clock className="w-3.5 h-3.5 text-plex" />
-                                        {t('profilePage.lastLogin')}
-                                    </p>
-                                    <p className="mt-1.5 text-sm font-bold text-text">
-                                        {account.lastLogin ? formatDate(account.lastLogin) : t('profilePage.never')}
-                                    </p>
-                                </div>
-                                {account.email ? (
-                                    <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-3">
-                                        <p className="text-[10px] uppercase tracking-widest font-bold text-muted">
-                                            {t('profilePage.email')}
-                                        </p>
-                                        <p className="mt-1.5 text-sm font-bold text-text truncate" title={account.email}>
-                                            {account.email}
-                                        </p>
+                            <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/25">
+                                <div className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${accessTone.glow}`} />
+                                <div className="pointer-events-none absolute -right-16 -top-20 h-44 w-44 rounded-full bg-plex/15 blur-3xl" />
+                                <div className="pointer-events-none absolute -left-10 bottom-0 h-28 w-28 rounded-full bg-amber-400/10 blur-3xl" />
+                                <div className="relative p-4 sm:p-5">
+                                    <div className="flex flex-wrap items-start justify-between gap-3 mb-5">
+                                        <div>
+                                            <p className="text-[10px] uppercase tracking-[0.28em] font-bold text-plex">
+                                                {t('profilePage.memberSince')}
+                                            </p>
+                                            <p className="mt-1 text-2xl sm:text-3xl font-black text-text tracking-tight">
+                                                {joinUk || t('profilePage.unknown')}
+                                            </p>
+                                            {joinRelative ? (
+                                                <p className="mt-1 text-sm text-muted">
+                                                    {t('profilePage.onThisServer', { relative: joinRelative })}
+                                                </p>
+                                            ) : null}
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-1.5">
+                                            {account.isAdmin ? (
+                                                <span className="inline-flex items-center gap-1 rounded-full border border-plex/40 bg-plex/15 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-plex">
+                                                    <Crown className="w-3 h-3" />
+                                                    {t('profilePage.admin')}
+                                                </span>
+                                            ) : null}
+                                            {account.isTrial ? (
+                                                <span className="inline-flex items-center rounded-full border border-amber-400/30 bg-amber-500/15 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-amber-200">
+                                                    {t('profilePage.trial')}
+                                                </span>
+                                            ) : null}
+                                            <span className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-widest ${accessTone.pill}`}>
+                                                {accessStatus}
+                                            </span>
+                                        </div>
                                     </div>
-                                ) : null}
+
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                        <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3">
+                                            <p className="text-[10px] uppercase tracking-widest font-bold text-muted flex items-center gap-1.5">
+                                                <Shield className={`w-3.5 h-3.5 ${accessTone.icon}`} />
+                                                {t('profilePage.access')}
+                                            </p>
+                                            <p className="mt-2 text-lg font-black text-text">{accessHeadline}</p>
+                                            <p className="text-[11px] text-muted mt-0.5">{accessSub}</p>
+                                        </div>
+                                        <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3">
+                                            <p className="text-[10px] uppercase tracking-widest font-bold text-muted flex items-center gap-1.5">
+                                                <Clock className="w-3.5 h-3.5 text-plex" />
+                                                {t('profilePage.lastLogin')}
+                                            </p>
+                                            <p className="mt-2 text-lg font-black text-text">
+                                                {lastSeenUk || t('profilePage.never')}
+                                            </p>
+                                            {lastSeenRelative ? (
+                                                <p className="text-[11px] text-muted mt-0.5">{lastSeenRelative}</p>
+                                            ) : null}
+                                        </div>
+                                    </div>
+
+                                    {account.email ? (
+                                        <div className="mt-3 flex items-center gap-3 rounded-xl border border-white/10 bg-black/30 px-4 py-3">
+                                            <span className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-plex/15 text-plex shrink-0">
+                                                <Mail className="w-4 h-4" />
+                                            </span>
+                                            <div className="min-w-0 flex-1">
+                                                <p className="text-[10px] uppercase tracking-widest font-bold text-muted">
+                                                    {t('profilePage.email')}
+                                                </p>
+                                                <p className="text-sm font-bold text-text truncate" title={account.email}>
+                                                    {account.email}
+                                                </p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={copyEmail}
+                                                className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-[11px] font-bold text-muted hover:text-text hover:border-plex/40 shrink-0"
+                                            >
+                                                {copiedEmail ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
+                                                {copiedEmail ? t('profilePage.copied') : t('profilePage.copyEmail')}
+                                            </button>
+                                        </div>
+                                    ) : null}
+                                </div>
                             </div>
                         </DashboardPanel>
                     ) : null}
@@ -353,7 +659,7 @@ export const ProfilePage: React.FC<Props> = ({
                             }
                         >
                             {data.requests.recent.length ? (
-                                <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1">
+                                <div className="flex gap-4 overflow-x-auto no-scrollbar pb-1">
                                     {data.requests.recent.map((item: any) => {
                                         const poster = requestPoster(item);
                                         const qualities = Array.isArray(item.qualities) && item.qualities.length
@@ -363,19 +669,19 @@ export const ProfilePage: React.FC<Props> = ({
                                         return (
                                             <div
                                                 key={String(item.id || item.title)}
-                                                className="w-24 shrink-0"
+                                                className={`${discoverRowCardWidthClass('xlarge')} shrink-0`}
                                             >
                                                 <div className="aspect-[2/3] rounded-xl overflow-hidden border border-white/10 bg-black/40">
                                                     {poster ? (
                                                         <img src={poster} alt="" className="w-full h-full object-cover" />
                                                     ) : (
                                                         <div className="w-full h-full flex items-center justify-center text-muted">
-                                                            <Sparkles className="w-6 h-6" />
+                                                            <Sparkles className="w-8 h-8" />
                                                         </div>
                                                     )}
                                                 </div>
-                                                <p className="mt-1.5 text-[11px] font-bold text-text truncate">{item.title}</p>
-                                                <p className="text-[10px] text-muted truncate">
+                                                <p className="mt-2 text-sm font-bold text-text truncate">{item.title}</p>
+                                                <p className="text-xs text-muted truncate">
                                                     {[qualityLabel, item.status || item.mediaType].filter(Boolean).join(' · ')}
                                                 </p>
                                             </div>
@@ -403,6 +709,22 @@ export const ProfilePage: React.FC<Props> = ({
                     ) : null}
                 </>
             )}
+            {selectedMetric && wrapAnalytics ? (
+                <WrapUpModal
+                    metric={selectedMetric}
+                    analytics={wrapAnalytics}
+                    days="all"
+                    onClose={() => setSelectedMetric(null)}
+                />
+            ) : null}
+            <BadgeDetailDrawer
+                badgeId={selectedBadgeId}
+                localBadge={selectedTrophy}
+                pinnedIds={pinnedIds}
+                onClose={() => setSelectedBadgeId(null)}
+                onTogglePin={(id) => { void togglePin(id); }}
+                pinBusy={pinBusy}
+            />
         </DashboardPageShell>
     );
 };

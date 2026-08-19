@@ -3,6 +3,32 @@ export const formatDate = (dateString: string | null): string => {
     return dateString.split('T')[0];
 };
 
+/** Parse ISO / date-only strings as local calendar days so UTC midnight cannot shift the date. */
+export const parseLocalDate = (dateString: string | null | undefined): Date | null => {
+    if (!dateString) return null;
+    const datePart = String(dateString).split('T')[0];
+    const [year, month, day] = datePart.split('-').map(Number);
+    if (year && month && day) return new Date(year, month - 1, day);
+    const parsed = new Date(dateString);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+/** UK display date, e.g. 15 Jul 2023. */
+export const formatUkDate = (dateString: string | null | undefined): string => {
+    const date = parseLocalDate(dateString);
+    if (!date) return '';
+    return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+};
+
+export const daysSinceDate = (dateString: string | null | undefined): number | null => {
+    const date = parseLocalDate(dateString);
+    if (!date) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    date.setHours(0, 0, 0, 0);
+    return Math.round((today.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
+};
+
 export const getDaysUntilExpiry = (expiryDate: string | null): number | null => {
     if (!expiryDate) return null;
     const today = new Date();

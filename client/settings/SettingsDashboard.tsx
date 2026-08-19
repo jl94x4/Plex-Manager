@@ -2504,7 +2504,7 @@ export const SettingsDashboard: React.FC = () => {
                                 <div id={getSettingsSectionElementId('privacy')} className="mb-4 mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 py-4 border-b border-border/40 scroll-mt-24">
                                         <div>
                                             <h4 className="font-bold text-text">Stream User Privacy</h4>
-                                            <p className="text-sm text-muted">Control how usernames and player/device names are shown to non-admins anywhere on the portal (dashboard streams, achievements leaderboard, analytics, and the public status page).</p>
+                                            <p className="text-sm text-muted">Control how usernames and player/device names are shown to non-admins anywhere on the portal (dashboard streams, achievements leaderboard, analytics, and the public status page). When set to Show Names, each member can still opt out of their own name, player, or achievements in Preferences.</p>
                                         </div>
                                         <div className="w-56 ml-4 flex-shrink-0">
                                             <CustomSelect
