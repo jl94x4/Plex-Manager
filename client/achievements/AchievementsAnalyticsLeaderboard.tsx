@@ -37,7 +37,6 @@ const shortName = (name: string, max = 10) => {
 export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
     resolveAvatar,
     resolveThumbForUsername,
-    isAdmin,
     onUserClick,
 }) => {
     const { locale, tAchievements } = useAchievementsI18n();
@@ -164,7 +163,7 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
     };
 
     const openUser = (entry: LeaderboardEntry | null | undefined) => {
-        if (!entry || !isAdmin) return;
+        if (!entry?.accountId) return;
         onUserClick({
             id: entry.accountId,
             username: entry.username,
@@ -185,7 +184,7 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
         return (
             <div
                 onClick={() => openUser(user)}
-                className={`flex flex-col items-center justify-end bg-card/80 border border-border rounded-xl p-4 relative ${isAdmin ? 'cursor-pointer hover:bg-black/30 hover:border-plex/40' : ''} transition-all group w-full ${heightClass} ${ringClass}`}
+                className={`flex flex-col items-center justify-end bg-card/80 border border-border rounded-xl p-4 relative ${user.accountId ? 'cursor-pointer hover:bg-black/30 hover:border-plex/40' : ''} transition-all group w-full ${heightClass} ${ringClass}`}
             >
                 {isFirst && <div className="absolute -top-6 text-4xl animate-[crown-pulse_2s_ease-in-out_infinite]">👑</div>}
                 {!isFirst && <div className="absolute -top-4 text-3xl">{rank === 2 ? '🥈' : '🥉'}</div>}
@@ -311,7 +310,7 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
                             <div
                                 key={`${user.accountId || user.username}-${rank}`}
                                 onClick={() => openUser(user)}
-                                className={`flex items-center gap-3 sm:gap-4 bg-black/20 p-2 sm:p-3 rounded-lg border border-border/50 ${isAdmin ? 'cursor-pointer hover:bg-black/40 hover:border-plex/50' : ''} transition-colors group relative overflow-hidden`}
+                                className={`flex items-center gap-3 sm:gap-4 bg-black/20 p-2 sm:p-3 rounded-lg border border-border/50 ${user.accountId ? 'cursor-pointer hover:bg-black/40 hover:border-plex/50' : ''} transition-colors group relative overflow-hidden`}
                             >
                                 <div className="absolute left-0 top-0 bottom-0 bg-plex/10" style={{ width: `${pct}%` }} />
                                 <div className="w-6 text-center font-bold text-muted group-hover:text-text z-10">#{rank}</div>
@@ -359,9 +358,9 @@ export const AchievementsAnalyticsLeaderboard: React.FC<Props> = ({
                         <button
                             key={h.key}
                             type="button"
-                            disabled={!h.user || !isAdmin}
+                            disabled={!h.user?.accountId}
                             onClick={() => openUser(h.user)}
-                            className={`text-left rounded-xl border p-3.5 transition-colors ${h.accent} ${h.user && isAdmin ? 'hover:brightness-110 cursor-pointer' : 'cursor-default'}`}
+                            className={`text-left rounded-xl border p-3.5 transition-colors ${h.accent} ${h.user?.accountId ? 'hover:brightness-110 cursor-pointer' : 'cursor-default'}`}
                         >
                             <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.2em] font-bold opacity-80 mb-2">
                                 <Icon className="w-3.5 h-3.5" /> {h.label}

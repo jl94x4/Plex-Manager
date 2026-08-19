@@ -189,8 +189,9 @@ export const ProfileBadgeRack: React.FC<{
     level?: number;
     xp?: number;
     onOpenAll?: () => void;
+    onBadgeClick?: (badgeId: string) => void;
     max?: number;
-}> = ({ earned, level, xp, onOpenAll, max = 12 }) => {
+}> = ({ earned, level, xp, onOpenAll, onBadgeClick, max = 12 }) => {
     const { tAchievements } = useAchievementsI18n();
     const shown = (earned || []).slice(0, max);
     if (!shown.length && level == null) return null;
@@ -220,15 +221,29 @@ export const ProfileBadgeRack: React.FC<{
                 </p>
             )}
             <div className="flex flex-wrap gap-1.5">
-                {shown.map((badge) => (
-                    <span
-                        key={badge.id}
-                        title={`${badge.name}${badge.description ? ` — ${badge.description}` : ''}`}
-                        className="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-white/10 bg-black/30 text-lg"
-                    >
-                        {badge.icon || '🏅'}
-                    </span>
-                ))}
+                {shown.map((badge) => {
+                    const inner = badge.icon || '🏅';
+                    const title = `${badge.name}${badge.description ? ` — ${badge.description}` : ''}`;
+                    const className = 'inline-flex items-center justify-center w-9 h-9 rounded-lg border border-white/10 bg-black/30 text-lg hover:border-plex/40 hover:scale-105 transition-transform';
+                    if (onBadgeClick && badge.id) {
+                        return (
+                            <button
+                                key={badge.id}
+                                type="button"
+                                title={title}
+                                onClick={() => onBadgeClick(String(badge.id))}
+                                className={className}
+                            >
+                                {inner}
+                            </button>
+                        );
+                    }
+                    return (
+                        <span key={badge.id} title={title} className={className}>
+                            {inner}
+                        </span>
+                    );
+                })}
                 {!shown.length && (
                     <p className="text-xs text-muted">{tAchievements('profile.empty')}</p>
                 )}

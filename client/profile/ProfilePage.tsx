@@ -1,231 +1,54 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    ArrowDownRight, ArrowUpRight, Check, Clock, Copy, Crown, LogOut, Mail, Minus, Palette,
+    ArrowDownRight, ArrowUpRight, Check, Clock, Copy, Crown, Link2, LogOut, Mail, Minus, Share2,
     Shield, SlidersHorizontal, Sparkles, Trophy, User,
 } from 'lucide-react';
 import { apiFetch } from '../shared/api';
-import { logoUrl, portalUrl, resolvePortalAssetUrl, stripBasePath } from '../shared/basePath';
+import { logoUrl } from '../shared/basePath';
 import { daysSinceDate, formatUkDate, getDaysUntilExpiry } from '../shared/format';
-import { CustomSelect } from '../shared/ui';
 import { DashboardPageShell, DashboardPanel } from '../shared/dashboard/DashboardChrome';
 import { discoverRowCardWidthClass } from '../shared/portalLayout';
+import { ShareWrapUpModal } from '../shared/ShareWrapUp';
+import { pushToast, ToastContainer, type ToastMessage } from '../shared/toast';
 import { WrapUpCardGrid } from '../shared/WrapUpCards';
 import { WrapUpModal } from '../screens';
 import { ProfileBadgeRack } from '../achievements/AchievementsDashboard';
 import { BadgeDetailDrawer } from '../achievements/BadgeDetailDrawer';
 import { useDiscoverI18n } from '../discovery/i18n';
-import { resolveTmdbImageUrl } from '../discovery/tmdbImageUrl';
-
-const DAYS_OF_WEEK = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-
-const timeOfDayFromHour = (peakHour: number) => {
-    if (peakHour >= 5 && peakHour < 12) return 'Early Bird';
-    if (peakHour >= 12 && peakHour < 18) return 'Afternoon Watcher';
-    if (peakHour >= 18) return 'Evening Streamer';
-    return 'Night Owl';
-};
-
-const mapJellyfinHomeAnalytics = (data: any) => {
-    const topMovies = Array.isArray(data?.topMovies) ? data.topMovies : [];
-    const topShows = Array.isArray(data?.topShows) ? data.topShows : [];
-    const topMusic = Array.isArray(data?.topMusic) ? data.topMusic : [];
-    const topWatched = [...topShows, ...topMovies, ...topMusic].sort((a: any, b: any) => (b.plays || 0) - (a.plays || 0));
-    const peakHours = Array.isArray(data?.peakHours) ? data.peakHours : [];
-    const peakHour = peakHours.reduce((best: number, value: number, hour: number) => (
-        value > (peakHours[best] || 0) ? hour : best
-    ), 0);
-    const dayOfWeekCounts = data?.dayOfWeekCounts && Object.keys(data.dayOfWeekCounts).length > 0
-        ? data.dayOfWeekCounts
-        : Object.entries(data?.heatmapData || {}).reduce((counts: Record<number, number>, [dateKey, count]) => {
-            const date = new Date(`${dateKey}T00:00:00`);
-            if (!Number.isNaN(date.getTime())) {
-                const day = date.getDay();
-                counts[day] = (counts[day] || 0) + (Number(count) || 0);
-            }
-            return counts;
-        }, { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 });
-    const topDayEntry = Object.entries(dayOfWeekCounts)
-        .map(([day, count]) => ({ day: Number(day), count: Number(count) || 0 }))
-        .sort((a, b) => b.count - a.count)[0];
-    const moviesCount = data?.jellystatInsights?.moviePlays || topMovies.reduce((sum: number, item: any) => sum + (item.plays || 0), 0);
-    const showsCount = data?.jellystatInsights?.tvPlays || topShows.reduce((sum: number, item: any) => sum + (item.plays || 0), 0);
-    const musicCount = data?.jellystatInsights?.musicPlays || topMusic.reduce((sum: number, item: any) => sum + (item.plays || 0), 0);
-    const topMovie = topMovies[0] || null;
-    const topBinge = topShows[0] || null;
-    const topLibraries = Array.isArray(data?.topLibraries) ? data.topLibraries : [];
-
-    return {
-        totalPlays: data?.totalPlaybacks || data?.jellystatInsights?.totalPlays || 0,
-        moviesCount,
-        showsCount,
-        musicCount,
-        topWatched,
-        recentHistory: [],
-        topMovie: topMovie ? { ...topMovie, artUrl: topMovie.thumbUrl } : null,
-        topBinge: topBinge ? { ...topBinge, artUrl: topBinge.thumbUrl } : null,
-        peakHour,
-        avgHour: peakHour,
-        timeOfDay: timeOfDayFromHour(peakHour),
-        popularDay: topDayEntry && topDayEntry.count > 0 ? DAYS_OF_WEEK[topDayEntry.day] : 'Recent Activity',
-        dayOfWeekCounts,
-        favoriteLibrary: topLibraries[0]?.title || 'None',
-        topLibraries,
-        mediaPreference: moviesCount > showsCount ? 'Movie Fan' : 'TV Binger',
-        watchStyle: topWatched.length >= 10 ? 'Explorer' : 'Focused',
-        uniqueTitles: topWatched.length,
-        streamingHabit: 'Jellyfin Viewer',
-        weekdayPlays: data?.totalPlaybacks || 0,
-        weekendPlays: 0,
-        leaderboardRank: data?.leaderboardRank || null,
-        totalActiveUsers: data?.totalActiveUsers || 0,
-        myPlaysOnLeaderboard: data?.myPlaysOnLeaderboard ?? null,
-        myXp: data?.myXp ?? null,
-        leaderboardNeighbourhood: data?.leaderboardNeighbourhood || [],
-        leaderboardSource: data?.leaderboardSource || 'period_plays',
-        leaderboardMetric: data?.leaderboardMetric || 'plays',
-        heatmapData: data?.heatmapData || null,
-    };
-};
-
-const mergeProfileWrapUp = (snapshot: any, personal: any, identityXp?: number) => {
-    if (!snapshot && !personal) return null;
-    if (!personal) return snapshot;
-    const snap = snapshot || {};
-    return {
-        ...snap,
-        ...personal,
-        totalPlays: Math.max(Number(snap.totalPlays) || 0, Number(personal.totalPlays) || 0),
-        hoursWatched: Number(snap.hoursWatched) || Number(personal.hoursWatched) || 0,
-        uniqueTitles: Number(snap.uniqueTitles) || Number(personal.uniqueTitles) || 0,
-        moviesCount: Number(snap.moviesCount) || Number(personal.moviesCount) || 0,
-        showsCount: Number(snap.showsCount) || Number(personal.showsCount) || 0,
-        musicCount: Number(snap.musicCount) || Number(personal.musicCount) || 0,
-        leaderboardRank: snap.leaderboardRank ?? personal.leaderboardRank ?? null,
-        totalActiveUsers: snap.totalActiveUsers || personal.totalActiveUsers || 0,
-        leaderboardSource: snap.leaderboardSource || personal.leaderboardSource || 'achievements',
-        leaderboardMetric: snap.leaderboardMetric || personal.leaderboardMetric || 'xp',
-        myXp: identityXp ?? personal.myXp,
-        currentStreak: Number(snap.currentStreak) || Number(personal.currentStreak) || 0,
-        longestStreak: Number(snap.longestStreak) || Number(personal.longestStreak) || 0,
-        bingeMax: Number(snap.bingeMax) || Number(personal.bingeMax) || 0,
-        activeDays: Number(snap.activeDays) || Number(personal.activeDays) || 0,
-    };
-};
-
-const THEME_OPTIONS = [
-    { label: 'Dynamic (Chameleon)', value: 'dynamic' },
-    { label: 'Plex Dark', value: 'plex' },
-    { label: 'Sleek Slate', value: 'slate' },
-    { label: 'Nordic Frost', value: 'nordic' },
-    { label: 'Jellyfin Purple', value: 'jellyfin' },
-    { label: 'Emerald Green', value: 'emerald' },
-    { label: 'Neon Midnight', value: 'midnight' },
-    { label: 'Crimson Red', value: 'crimson' },
-    { label: 'Deep Amethyst', value: 'amethyst' },
-    { label: 'Sunset Orange', value: 'sunset' },
-    { label: 'Ocean Teal', value: 'ocean' },
-    { label: 'Rose Pink', value: 'rose' },
-    { label: 'Royal Blue', value: 'royal' },
-    { label: 'Graphite', value: 'graphite' },
-    { label: 'Cyber Lime', value: 'cyberlime' },
-    { label: 'Aurora', value: 'aurora' },
-];
-
-const rarityGlow: Record<string, string> = {
-    legendary: 'from-amber-400/35 via-amber-500/10 to-[rgb(var(--color-card))]',
-    epic: 'from-fuchsia-400/30 via-fuchsia-500/10 to-[rgb(var(--color-card))]',
-    rare: 'from-sky-400/28 via-sky-500/10 to-[rgb(var(--color-card))]',
-    common: 'from-white/10 via-white/5 to-[rgb(var(--color-card))]',
-};
-
-const resolveAvatar = (thumb: string | null | undefined, size = 220) => {
-    if (!thumb) return logoUrl();
-    if (thumb.startsWith('http://') || thumb.startsWith('https://') || thumb.startsWith('/api/')) {
-        return resolvePortalAssetUrl(thumb);
-    }
-    return portalUrl(`/api/plex/image?path=${encodeURIComponent(thumb)}&width=${size}&height=${size}`);
-};
-
-const profileAccountIdFromPath = () => {
-    const path = stripBasePath(window.location.pathname);
-    const match = path.match(/^\/profile\/([^/]+)/i);
-    if (!match) return '';
-    try {
-        return decodeURIComponent(match[1]);
-    } catch {
-        return match[1];
-    }
-};
-
-const requestPoster = (item: { posterUrl?: string | null }) => {
-    const raw = String(item?.posterUrl || '').trim();
-    if (!raw) return '';
-    if (raw.startsWith('/api/')) return resolvePortalAssetUrl(raw);
-    return resolveTmdbImageUrl(raw, 'w500');
-};
-
-const trophyRarityClass = (rarity: string) => {
-    if (rarity === 'legendary') return 'border-amber-400/50 text-amber-100 bg-amber-500/10 hover:border-amber-300/70';
-    if (rarity === 'epic') return 'border-fuchsia-400/45 text-fuchsia-100 bg-fuchsia-500/10 hover:border-fuchsia-300/70';
-    if (rarity === 'rare') return 'border-sky-400/45 text-sky-100 bg-sky-500/10 hover:border-sky-300/70';
-    return 'border-white/10 bg-black/25 hover:border-plex/40';
-};
-
-const relativeFromDays = (days: number | null, t: (key: string, vars?: Record<string, string | number>) => string) => {
-    if (days == null) return null;
-    if (days <= 0) return t('profilePage.today');
-    if (days === 1) return t('profilePage.yesterday');
-    if (days < 14) return t('profilePage.daysAgo', { count: days });
-    if (days < 60) return t('profilePage.weeksAgo', { count: Math.max(1, Math.round(days / 7)) });
-    const months = Math.round(days / 30.44);
-    if (months < 24) return t('profilePage.monthsAgo', { count: Math.max(1, months) });
-    return t('profilePage.yearsAgo', { count: Math.max(1, Math.round(days / 365.25)) });
-};
-
-const accessStatusTone = (status: string) => {
-    const value = String(status || 'unknown').toLowerCase();
-    if (value === 'active') return {
-        pill: 'border-emerald-400/30 bg-emerald-500/15 text-emerald-200',
-        glow: 'from-emerald-400/25 via-emerald-500/5 to-transparent',
-        icon: 'text-emerald-300',
-    };
-    if (value === 'pending') return {
-        pill: 'border-amber-400/30 bg-amber-500/15 text-amber-200',
-        glow: 'from-amber-400/25 via-amber-500/5 to-transparent',
-        icon: 'text-amber-300',
-    };
-    if (value === 'revoked' || value === 'expired') return {
-        pill: 'border-rose-400/30 bg-rose-500/15 text-rose-200',
-        glow: 'from-rose-400/25 via-rose-500/5 to-transparent',
-        icon: 'text-rose-300',
-    };
-    return {
-        pill: 'border-white/15 bg-white/5 text-muted',
-        glow: 'from-white/10 via-transparent to-transparent',
-        icon: 'text-plex',
-    };
-};
+import {
+    accessStatusTone,
+    goToProfile,
+    profileAccountIdFromPath,
+    profileShareUrl,
+    rarityGlow,
+    relativeFromDays,
+    requestDiscoveryPath,
+    requestPoster,
+    resolveAvatar,
+    trophyRarityClass,
+} from './helpers';
+import { mapJellyfinHomeAnalytics, mergeProfileWrapUp } from './wrapUp';
+import { DossierArena } from './DossierArena';
 
 type Props = {
     sessionInfo?: any;
     onNavigate: (route: string, options?: { path?: string }) => void;
     onLogout: () => void;
-    activeTheme: string;
-    setActiveTheme: (theme: string) => void;
 };
 
 export const ProfilePage: React.FC<Props> = ({
     sessionInfo,
     onNavigate,
     onLogout,
-    activeTheme,
-    setActiveTheme,
 }) => {
     const { t } = useDiscoverI18n();
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [copiedEmail, setCopiedEmail] = useState(false);
+    const [copiedLink, setCopiedLink] = useState(false);
+    const [shareWrapUpOpen, setShareWrapUpOpen] = useState(false);
+    const [toasts, setToasts] = useState<ToastMessage[]>([]);
     const [personalWrapUp, setPersonalWrapUp] = useState<any>(null);
     const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
     const [selectedBadgeId, setSelectedBadgeId] = useState<string | null>(null);
@@ -262,6 +85,8 @@ export const ProfilePage: React.FC<Props> = ({
         setPersonalWrapUp(null);
         setSelectedMetric(null);
         setSelectedBadgeId(null);
+        setCopiedLink(false);
+        setShareWrapUpOpen(false);
         if (!data?.viewer?.isSelf) return undefined;
         let cancelled = false;
         const wrapUpSubjectId = String(
@@ -334,10 +159,27 @@ export const ProfilePage: React.FC<Props> = ({
         }
     };
 
+    const copyProfileLink = async () => {
+        const url = profileShareUrl(identity.accountId, isSelf);
+        try {
+            await navigator.clipboard.writeText(url);
+            setCopiedLink(true);
+            window.setTimeout(() => setCopiedLink(false), 1800);
+        } catch {
+            setCopiedLink(false);
+        }
+    };
+
     const wrapAnalytics = useMemo(
         () => mergeProfileWrapUp(data?.watch?.wrapUp || null, personalWrapUp, Number(identity.xp) || undefined),
         [data?.watch?.wrapUp, personalWrapUp, identity.xp],
     );
+
+    useEffect(() => {
+        if (Array.isArray(data?.achievements?.pinnedBadgeIds)) {
+            setPinnedIds(data.achievements.pinnedBadgeIds.map(String));
+        }
+    }, [data?.achievements?.pinnedBadgeIds]);
 
     const selectedTrophy = useMemo(() => {
         if (!selectedBadgeId) return null;
@@ -350,7 +192,7 @@ export const ProfilePage: React.FC<Props> = ({
     }, [achievements, selectedBadgeId]);
 
     useEffect(() => {
-        if (!selectedBadgeId) return undefined;
+        if (!selectedBadgeId || !isSelf) return undefined;
         let cancelled = false;
         apiFetch('/api/achievements/me?view=summary')
             .then((me: any) => {
@@ -360,7 +202,14 @@ export const ProfilePage: React.FC<Props> = ({
             })
             .catch(() => {});
         return () => { cancelled = true; };
-    }, [selectedBadgeId]);
+    }, [selectedBadgeId, isSelf]);
+
+    const reloadProfile = () => {
+        const path = accountId
+            ? `/api/profile/${encodeURIComponent(accountId)}`
+            : '/api/profile/me';
+        apiFetch(path).then(setData).catch(() => {});
+    };
 
     const togglePin = async (badgeId: string) => {
         const id = String(badgeId);
@@ -375,6 +224,7 @@ export const ProfilePage: React.FC<Props> = ({
             });
             const saved = Array.isArray(res?.pinnedBadgeIds) ? res.pinnedBadgeIds.map(String) : next;
             setPinnedIds(saved);
+            reloadProfile();
         } catch {
             /* drawer already shows pin control; ignore */
         } finally {
@@ -471,24 +321,36 @@ export const ProfilePage: React.FC<Props> = ({
                                     ) : null}
                                 </div>
                             </div>
-                            {isSelf ? (
+                            {data ? (
                                 <div className="flex flex-wrap items-center gap-2 shrink-0">
                                     <button
                                         type="button"
-                                        onClick={() => onNavigate('preferences')}
+                                        onClick={() => { void copyProfileLink(); }}
                                         className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-sm font-bold text-text hover:border-plex/40"
                                     >
-                                        <SlidersHorizontal className="w-4 h-4 text-plex" />
-                                        {t('navigation.preferences')}
+                                        {copiedLink ? <Check className="w-4 h-4 text-emerald-300" /> : <Link2 className="w-4 h-4 text-plex" />}
+                                        {copiedLink ? t('profilePage.linkCopied') : t('profilePage.copyLink')}
                                     </button>
-                                    <button
-                                        type="button"
-                                        onClick={onLogout}
-                                        className="inline-flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm font-bold text-red-200 hover:bg-red-500/20"
-                                    >
-                                        <LogOut className="w-4 h-4" />
-                                        {t('navigation.logout')}
-                                    </button>
+                                    {isSelf ? (
+                                        <>
+                                            <button
+                                                type="button"
+                                                onClick={() => onNavigate('preferences')}
+                                                className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-sm font-bold text-text hover:border-plex/40"
+                                            >
+                                                <SlidersHorizontal className="w-4 h-4 text-plex" />
+                                                {t('navigation.preferences')}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={onLogout}
+                                                className="inline-flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm font-bold text-red-200 hover:bg-red-500/20"
+                                            >
+                                                <LogOut className="w-4 h-4" />
+                                                {t('navigation.logout')}
+                                            </button>
+                                        </>
+                                    ) : null}
                                 </div>
                             ) : null}
                         </div>
@@ -499,7 +361,20 @@ export const ProfilePage: React.FC<Props> = ({
             {!loading && !error && data && (
                 <>
                     {wrapAnalytics && (Number(wrapAnalytics.totalPlays) > 0 || Number(wrapAnalytics.hoursWatched) > 0 || wrapAnalytics.leaderboardRank) ? (
-                        <DashboardPanel title={t('profilePage.watchStory')} subtitle={t('profilePage.watchStoryHint')}>
+                        <DashboardPanel
+                            title={t('profilePage.watchStory')}
+                            subtitle={t('profilePage.watchStoryHint')}
+                            controls={
+                                <button
+                                    type="button"
+                                    onClick={() => setShareWrapUpOpen(true)}
+                                    className="text-sm font-semibold text-plex hover:underline inline-flex items-center gap-1"
+                                >
+                                    <Share2 className="w-4 h-4" />
+                                    {t('profilePage.shareWrapUp')}
+                                </button>
+                            }
+                        >
                             <WrapUpCardGrid
                                 analytics={wrapAnalytics}
                                 desktopMaxCards={10}
@@ -530,6 +405,7 @@ export const ProfilePage: React.FC<Props> = ({
                                 xp={identity.xp}
                                 max={16}
                                 onOpenAll={() => onNavigate('achievements')}
+                                onBadgeClick={(id) => setSelectedBadgeId(id)}
                             />
                             {Array.isArray(achievements.trophyCase) && achievements.trophyCase.length > 0 ? (
                                 <div className="mt-4 grid grid-cols-1 sm:grid-cols-5 gap-2">
@@ -543,12 +419,22 @@ export const ProfilePage: React.FC<Props> = ({
                                         >
                                             <span className="text-3xl leading-none">{badge.icon || '🏅'}</span>
                                             <p className="mt-2 text-xs font-bold text-text truncate">{badge.name}</p>
-                                            <p className="text-[10px] uppercase tracking-widest text-muted mt-1">{badge.rarity}</p>
+                                            <p className="text-[10px] uppercase tracking-widest text-muted mt-1">
+                                                {badge.pinned ? t('profilePage.pinned') : badge.rarity}
+                                            </p>
                                         </button>
                                     ))}
                                 </div>
                             ) : null}
                         </DashboardPanel>
+                    ) : null}
+
+                    {achievements?.showOnProfile ? (
+                        <DossierArena
+                            achievements={achievements}
+                            onNavigate={onNavigate}
+                            onOpenBadge={(id) => setSelectedBadgeId(id)}
+                        />
                     ) : null}
 
                     {account ? (
@@ -641,7 +527,7 @@ export const ProfilePage: React.FC<Props> = ({
                         </DashboardPanel>
                     ) : null}
 
-                    {isSelf && Array.isArray(data.requests?.recent) ? (
+                    {Array.isArray(data.requests?.recent) ? (
                         <DashboardPanel
                             title={t('profilePage.requests')}
                             subtitle={t('profilePage.requestsHint', {
@@ -649,13 +535,15 @@ export const ProfilePage: React.FC<Props> = ({
                                 pending: data.requests.pending || 0,
                             })}
                             controls={
-                                <button
-                                    type="button"
-                                    onClick={() => onNavigate('discovery', { path: '/discovery/requests' })}
-                                    className="text-sm font-semibold text-plex hover:underline"
-                                >
-                                    {t('profilePage.openRequests')}
-                                </button>
+                                isSelf ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => onNavigate('discovery', { path: '/discovery/requests' })}
+                                        className="text-sm font-semibold text-plex hover:underline"
+                                    >
+                                        {t('profilePage.openRequests')}
+                                    </button>
+                                ) : null
                             }
                         >
                             {data.requests.recent.length ? (
@@ -666,11 +554,9 @@ export const ProfilePage: React.FC<Props> = ({
                                             ? item.qualities
                                             : (item.is4k ? ['4K'] : []);
                                         const qualityLabel = qualities.includes('4K') ? qualities.join(' · ') : null;
-                                        return (
-                                            <div
-                                                key={String(item.id || item.title)}
-                                                className={`${discoverRowCardWidthClass('xlarge')} shrink-0`}
-                                            >
+                                        const discoveryPath = requestDiscoveryPath(item);
+                                        const card = (
+                                            <>
                                                 <div className="aspect-[2/3] rounded-xl overflow-hidden border border-white/10 bg-black/40">
                                                     {poster ? (
                                                         <img src={poster} alt="" className="w-full h-full object-cover" />
@@ -684,6 +570,23 @@ export const ProfilePage: React.FC<Props> = ({
                                                 <p className="text-xs text-muted truncate">
                                                     {[qualityLabel, item.status || item.mediaType].filter(Boolean).join(' · ')}
                                                 </p>
+                                            </>
+                                        );
+                                        return discoveryPath ? (
+                                            <button
+                                                key={String(item.id || item.title)}
+                                                type="button"
+                                                onClick={() => onNavigate('discovery', { path: discoveryPath })}
+                                                className={`${discoverRowCardWidthClass('xlarge')} shrink-0 text-left hover:opacity-90`}
+                                            >
+                                                {card}
+                                            </button>
+                                        ) : (
+                                            <div
+                                                key={String(item.id || item.title)}
+                                                className={`${discoverRowCardWidthClass('xlarge')} shrink-0`}
+                                            >
+                                                {card}
                                             </div>
                                         );
                                     })}
@@ -691,20 +594,6 @@ export const ProfilePage: React.FC<Props> = ({
                             ) : (
                                 <p className="text-sm text-muted">{t('profilePage.noRequests')}</p>
                             )}
-                        </DashboardPanel>
-                    ) : null}
-
-                    {isSelf ? (
-                        <DashboardPanel title={t('profilePage.theme')} subtitle={t('profilePage.themeHint')}>
-                            <div className="max-w-md flex items-center gap-3">
-                                <Palette className="w-4 h-4 text-plex shrink-0" />
-                                <CustomSelect
-                                    value={activeTheme}
-                                    onChange={setActiveTheme}
-                                    options={THEME_OPTIONS}
-                                    className="w-full"
-                                />
-                            </div>
                         </DashboardPanel>
                     ) : null}
                 </>
@@ -715,16 +604,31 @@ export const ProfilePage: React.FC<Props> = ({
                     analytics={wrapAnalytics}
                     days="all"
                     onClose={() => setSelectedMetric(null)}
+                    onOpenProfile={(id) => {
+                        setSelectedMetric(null);
+                        goToProfile(onNavigate, id);
+                    }}
+                />
+            ) : null}
+            {shareWrapUpOpen && wrapAnalytics ? (
+                <ShareWrapUpModal
+                    analytics={wrapAnalytics}
+                    days="all"
+                    serverName={sessionInfo?.serverName || 'Server Portal'}
+                    username={identity.username || sessionInfo?.session?.username}
+                    onClose={() => setShareWrapUpOpen(false)}
+                    onToast={(message, type) => setToasts((prev) => pushToast(prev, message, type))}
                 />
             ) : null}
             <BadgeDetailDrawer
                 badgeId={selectedBadgeId}
                 localBadge={selectedTrophy}
-                pinnedIds={pinnedIds}
+                pinnedIds={isSelf ? pinnedIds : []}
                 onClose={() => setSelectedBadgeId(null)}
-                onTogglePin={(id) => { void togglePin(id); }}
+                onTogglePin={isSelf ? (id) => { void togglePin(id); } : undefined}
                 pinBusy={pinBusy}
             />
+            <ToastContainer toasts={toasts} setToasts={setToasts} />
         </DashboardPageShell>
     );
 };

@@ -603,7 +603,7 @@ export const MainApp: React.FC = () => {
             return <PublicInviteClaim code={code} />;
         }
         if (currentRoute === 'status') return <StatusDashboard onBack={() => isPublicStatus ? setRoute('login') : setRoute('user')} isAdmin={isAdmin} isPublic={isPublicStatus} />;
-        if (currentRoute === 'dashboard') return <LibraryDashboard onBack={() => setRoute('user')} isAdmin={isAdmin} publicConfig={publicConfig} mediaServerType={sessionInfo?.mediaServerType} onViewAnalytics={(hash) => setRoute('analytics', { hash })} />;
+        if (currentRoute === 'dashboard') return <LibraryDashboard onBack={() => setRoute('user')} isAdmin={isAdmin} publicConfig={publicConfig} mediaServerType={sessionInfo?.mediaServerType} onViewAnalytics={(hash) => setRoute('analytics', { hash })} onNavigate={setRoute as any} />;
         if (currentRoute === 'settings' && isAdmin) return <SettingsDashboard />;
         if (currentRoute === 'maintenance' && isAdmin) return <MaintenanceDashboard />;
         if (currentRoute === 'upgrader' && isAdmin) return <UpgraderDashboard />;
@@ -672,7 +672,7 @@ export const MainApp: React.FC = () => {
         if (currentRoute === 'logs' && isAdmin) return <LogsDashboard onLogout={handleLogout} />;
         if (currentRoute === 'mediastack') return <MediaStackDashboard isAdmin={isAdmin} />;
         if (currentRoute === 'downloads') return <DownloadStatusPage isAdmin={isAdmin} />;
-        if (currentRoute === 'analytics') return <AnalyticsDashboard isAdmin={isAdmin} sessionInfo={sessionInfo} />;
+        if (currentRoute === 'analytics') return <AnalyticsDashboard isAdmin={isAdmin} sessionInfo={sessionInfo} onNavigate={setRoute as any} />;
         if (currentRoute === 'achievements' && sessionInfo?.navFeatures?.achievements) {
             return <AchievementsDashboard sessionInfo={sessionInfo} onNavigate={setRoute as any} />;
         }
@@ -698,8 +698,6 @@ export const MainApp: React.FC = () => {
                         sessionInfo={sessionInfo}
                         onNavigate={setRoute as any}
                         onLogout={handleLogout}
-                        activeTheme={activeTheme}
-                        setActiveTheme={setActiveTheme}
                     />
                 </Suspense>
             );

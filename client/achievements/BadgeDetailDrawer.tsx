@@ -44,7 +44,7 @@ type Props = {
     localBadge?: any;
     pinnedIds: string[];
     onClose: () => void;
-    onTogglePin: (badgeId: string) => void;
+    onTogglePin?: (badgeId: string) => void;
     pinBusy?: boolean;
 };
 
@@ -237,6 +237,7 @@ export const BadgeDetailDrawer: React.FC<Props> = ({
                         </div>
                     </div>
 
+                    {onTogglePin ? (
                     <div className="shrink-0 border-t border-white/8 px-5 py-3 flex items-center gap-2">
                         <button
                             type="button"
@@ -249,6 +250,7 @@ export const BadgeDetailDrawer: React.FC<Props> = ({
                                 : <><Pin className="w-4 h-4 text-plex" /> {tAchievements('drawer.pin')}</>}
                         </button>
                     </div>
+                    ) : null}
                     </div>
                 </div>
             </div>

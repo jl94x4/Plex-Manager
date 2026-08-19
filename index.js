@@ -13990,6 +13990,7 @@ app.get('/api/plex/dashboard', requireAuth, requireMember, async (req, res) => {
                     user: m.User ? m.User.title : 'Unknown User',
                     userThumb: m.User ? m.User.thumb : null,
                     playerTitle: player.title || 'Unknown Player',
+                    accountId: m.User?.id != null ? String(m.User.id) : null,
                 }, findPortalUserForStream(portalUsers, {
                     user: m.User?.title,
                     plexUserId: m.User?.id,
@@ -14004,6 +14005,7 @@ app.get('/api/plex/dashboard', requireAuth, requireMember, async (req, res) => {
                     thumb: m.grandparentThumb || m.parentThumb || m.thumb,
                     user: identity.user,
                     userThumb: identity.userThumb,
+                    accountId: identity.accountId || null,
                     playerProduct: player.product || 'Unknown Device',
                     playerTitle: identity.playerTitle,
                     playerAddress: req.user.isAdmin ? (player.address || 'Unknown IP') : null,
@@ -14646,6 +14648,7 @@ app.get('/api/jellyfin/dashboard', requireAuth, requireMember, async (req, res) 
                     user: session.UserName || 'Unknown User',
                     userThumb: session.UserId ? withBasePath(`/api/jellyfin/user-image?userId=${encodeURIComponent(session.UserId)}`) : null,
                     playerTitle: session.DeviceName || session.Client || 'Jellyfin Player',
+                    accountId: session.UserId || null,
                 }, findPortalUserForStream(portalUsers, {
                     user: session.UserName,
                     jellyfinId: session.UserId,
@@ -14664,6 +14667,7 @@ app.get('/api/jellyfin/dashboard', requireAuth, requireMember, async (req, res) 
                     posterFallbackUrl: item.Type === 'Episode' && hasJellyfinPrimaryImage(item) && item.Id ? jellyfinImageUrlForItem(item.Id, 300, 450) : '',
                     user: identity.user,
                     userThumb: identity.userThumb,
+                    accountId: identity.accountId || null,
                     playerProduct: session.Client || 'Jellyfin',
                     playerTitle: identity.playerTitle,
                     playerAddress: req.user.isAdmin ? (session.RemoteEndPoint || 'Unknown IP') : null,
@@ -16094,6 +16098,7 @@ const buildJellyfinLeaderboardContext = (topUsers = [], sessionUser = {}, should
                 plays: toNumber(user.plays, 0),
                 isMe,
                 username: shouldObfuscate && !isMe ? `Viewer ${rank}` : (isMe ? 'You' : (user.username || `User ${rank}`)),
+                accountId: shouldObfuscate && !isMe ? undefined : (user.id || user.accountId || null),
             };
         })
         : [];
@@ -17050,6 +17055,7 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
                     plays: entry.plays,
                     isMe,
                     username: shouldObfuscateUsernames && !isMe ? `Viewer ${entry.rank}` : realName,
+                    accountId: shouldObfuscateUsernames && !isMe ? undefined : entry.accountId,
                 };
             });
             leaderboardNeighbourhood = applyMemberNamePrivacyToRows(
@@ -17494,7 +17500,8 @@ registerProfileRoutes(app, {
         const users = await loadFile(USERS_PATH, []);
         return findLocalUserForSession(users, sessionUser);
     },
-    loadRequestSummary: async (req, config) => {
+    loadRequestSummary: async (req, config, subjectUser) => {
+        const member = subjectUser || req.user;
         const slim = (item) => ({
             id: item.id ?? null,
             title: item.title || item.mediaTitle || '',
@@ -17509,7 +17516,7 @@ registerProfileRoutes(app, {
         try {
             if (getRequestEngine(config) === 'portal') {
                 const portalRequests = getPortalRequestService(config);
-                const payload = await portalRequests.listMemberRequests(req.user, { filter: 'all', take: 24, skip: 0 });
+                const payload = await portalRequests.listMemberRequests(member, { filter: 'all', take: 24, skip: 0 });
                 const results = Array.isArray(payload?.results) ? payload.results : [];
                 return {
                     total: Number(payload?.counts?.total) || results.length,
@@ -17519,7 +17526,7 @@ registerProfileRoutes(app, {
             }
             const gate = getRequestAppGate(config);
             if (!gate?.ready) return null;
-            const payload = await requestAppService.listMemberRequests(config, req.user, { filter: 'all', take: 24, skip: 0 });
+            const payload = await requestAppService.listMemberRequests(config, member, { filter: 'all', take: 24, skip: 0 });
             const results = Array.isArray(payload?.results) ? payload.results : [];
             return {
                 total: Number(payload?.total ?? payload?.counts?.total) || results.length,

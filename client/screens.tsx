@@ -3501,7 +3501,7 @@ const formatCatalogScanAge = (generatedAt?: number | string | null) => {
     if (!Number.isFinite(n) || n <= 0) return null;
     return new Date(n).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
 };
-const AnimatedLeaderboard: React.FC<{ users: any[], resolveAvatar: (thumb: string | null | undefined, w?: number, h?: number) => string, isAdmin: boolean, onUserClick: (u: any) => void }> = ({ users, resolveAvatar, isAdmin, onUserClick }) => {
+const AnimatedLeaderboard: React.FC<{ users: any[], resolveAvatar: (thumb: string | null | undefined, w?: number, h?: number) => string, isAdmin: boolean, onUserClick: (u: any) => void }> = ({ users, resolveAvatar, onUserClick }) => {
     const prevUsersRef = useRef<any[]>([]);
     
     useEffect(() => {
@@ -3534,7 +3534,7 @@ const AnimatedLeaderboard: React.FC<{ users: any[], resolveAvatar: (thumb: strin
         const ringClass = isFirst ? 'ring-2 ring-yellow-500 shadow-[0_0_15px_rgba(234,179,8,0.3)]' : rank === 2 ? 'ring-1 ring-slate-300' : 'ring-1 ring-amber-700';
         
         return (
-            <div onClick={() => isAdmin && onUserClick(user)} className={`flex flex-col items-center justify-end bg-card/80 border border-border rounded-xl p-4 relative cursor-pointer hover:bg-white/5 transition-all group w-full ${heightClass} ${ringClass}`}>
+            <div onClick={() => onUserClick(user)} className={`flex flex-col items-center justify-end bg-card/80 border border-border rounded-xl p-4 relative cursor-pointer hover:bg-white/5 transition-all group w-full ${heightClass} ${ringClass}`}>
                 {isFirst && <div className="absolute -top-6 text-4xl animate-[crown-pulse_2s_ease-in-out_infinite]">👑</div>}
                 {!isFirst && <div className="absolute -top-4 text-3xl">{rank === 2 ? '🥈' : '🥉'}</div>}
                 
@@ -3580,7 +3580,7 @@ const AnimatedLeaderboard: React.FC<{ users: any[], resolveAvatar: (thumb: strin
                         const hasFire = user.plays >= (maxPlays * 0.4) && user.plays > 0;
 
                         return (
-                            <div key={user.id} onClick={() => isAdmin && onUserClick(user)} className="flex items-center gap-3 sm:gap-4 bg-black/20 p-2 sm:p-3 rounded-lg border border-border/50 cursor-pointer hover:bg-black/40 hover:border-plex/50 transition-colors group relative overflow-hidden">
+                            <div key={user.id} onClick={() => onUserClick(user)} className="flex items-center gap-3 sm:gap-4 bg-black/20 p-2 sm:p-3 rounded-lg border border-border/50 cursor-pointer hover:bg-black/40 hover:border-plex/50 transition-colors group relative overflow-hidden">
                                 <div className="absolute left-0 top-0 bottom-0 bg-plex/10 animate-[bar-grow_1s_ease-out]" style={{ width: `${pct}%` }}></div>
                                 
                                 <div className="w-6 text-center font-bold text-muted group-hover:text-text z-10">#{rank}</div>
@@ -3784,7 +3784,7 @@ const ItemViewersModal: React.FC<{ item: { title: string, viewers: Record<string
     );
 };
 
-export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any }> = ({ isAdmin, sessionInfo }) => {
+export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any, onNavigate?: (route: string, options?: { path?: string }) => void }> = ({ isAdmin, sessionInfo, onNavigate }) => {
     const { t } = useDiscoverI18n();
     const [analyticsData, setAnalyticsData] = useState<{
         topUsers: any[],
@@ -3976,6 +3976,15 @@ export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any }
         setUserSearchQuery('');
         setUserSearchOpen(false);
     }, [allUsers, analyticsData?.topUsers]);
+
+    const openUserProfile = useCallback((user: { id?: string | null; username?: string | null; thumb?: string | null; plexAccountId?: string | null; accountId?: string | null }) => {
+        const id = String(user?.plexAccountId || user?.accountId || user?.id || '').trim();
+        if (id && onNavigate) {
+            onNavigate('profile', { path: `/profile/${encodeURIComponent(id)}` });
+            return;
+        }
+        if (isAdmin) openUserAnalytics(user);
+    }, [isAdmin, onNavigate, openUserAnalytics]);
 
     const userSearchMatches = useMemo(() => {
         const q = userSearchQuery.trim().toLowerCase();
@@ -4763,10 +4772,10 @@ return (
                                     return fromTop?.thumb || null;
                                 }}
                                 isAdmin={isAdmin}
-                                onUserClick={(u) => openUserAnalytics(u)}
+                                onUserClick={(u) => openUserProfile(u)}
                             />
                         ) : (
-                            <AnimatedLeaderboard users={topUsers} resolveAvatar={resolveUserAvatar} isAdmin={isAdmin} onUserClick={(u: any) => openUserAnalytics(u)} />
+                            <AnimatedLeaderboard users={topUsers} resolveAvatar={resolveUserAvatar} isAdmin={isAdmin} onUserClick={(u: any) => openUserProfile(u)} />
                         )}
                     </div>
 
@@ -6674,7 +6683,13 @@ const RebuildLibraryCacheButton: React.FC = () => {
     );
 };
 
-export const WrapUpModal: React.FC<{ metric: string; analytics: any; days: number | string; onClose: () => void }> = ({ metric, analytics, days, onClose }) => {
+export const WrapUpModal: React.FC<{
+    metric: string;
+    analytics: any;
+    days: number | string;
+    onClose: () => void;
+    onOpenProfile?: (accountId: string) => void;
+}> = ({ metric, analytics, days, onClose, onOpenProfile }) => {
     useEffect(() => {
         const handleEsc = (e: KeyboardEvent) => {
             if (e.key === 'Escape') onClose();
@@ -6792,11 +6807,14 @@ export const WrapUpModal: React.FC<{ metric: string; analytics: any; days: numbe
                                     {isXpRank ? 'Overall Leaderboard Position' : 'Your Leaderboard Position'}
                                 </p>
                                 <div className="flex flex-col gap-1.5">
-                                    {neighbourhood.map((u: any, i: number) => (
-                                        <div key={i} className={`flex items-center justify-between rounded-lg px-3 py-2.5 border transition-all ${u.isMe
+                                    {neighbourhood.map((u: any, i: number) => {
+                                        const canOpen = typeof onOpenProfile === 'function' && u.accountId;
+                                        const className = `flex items-center justify-between rounded-lg px-3 py-2.5 border transition-all w-full text-left ${u.isMe
                                             ? 'bg-plex/15 border-plex/50 shadow-[0_0_12px_rgba(229,160,13,0.2)]'
                                             : 'bg-white/5 border-white/5'
-                                            }`}>
+                                            }${canOpen ? ' hover:border-plex/40 cursor-pointer' : ''}`;
+                                        const body = (
+                                            <>
                                             <div className="flex items-center gap-3">
                                                 <span className={`font-black text-sm w-8 text-right ${u.isMe ? 'text-plex' : 'text-gray-500'}`}>#{u.rank}</span>
                                                 <span className={`font-bold text-sm ${u.isMe ? 'text-white' : 'text-gray-300'}`}>
@@ -6808,8 +6826,21 @@ export const WrapUpModal: React.FC<{ metric: string; analytics: any; days: numbe
                                                     ? `${Number(u.xp ?? u.plays ?? 0).toLocaleString()} XP`
                                                     : `${u.plays} plays`}
                                             </span>
-                                        </div>
-                                    ))}
+                                            </>
+                                        );
+                                        if (canOpen) {
+                                            return (
+                                                <button key={i} type="button" className={className} onClick={() => onOpenProfile(String(u.accountId))}>
+                                                    {body}
+                                                </button>
+                                            );
+                                        }
+                                        return (
+                                            <div key={i} className={className}>
+                                                {body}
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         )}
@@ -8821,7 +8852,16 @@ export const UserDashboard: React.FC<{
             ) : null}
 
             {selectedMetric && analytics && (
-                <WrapUpModal metric={selectedMetric} analytics={analytics} days={analyticsDays} onClose={() => setSelectedMetric(null)} />
+                <WrapUpModal
+                    metric={selectedMetric}
+                    analytics={analytics}
+                    days={analyticsDays}
+                    onClose={() => setSelectedMetric(null)}
+                    onOpenProfile={(id) => {
+                        setSelectedMetric(null);
+                        onNavigate?.('profile', { path: `/profile/${encodeURIComponent(id)}` });
+                    }}
+                />
             )}
             {shareWrapUpOpen && analytics && (
                 <ShareWrapUpModal
@@ -9722,7 +9762,7 @@ const StreamSpecCard: React.FC<{ label: string; children: React.ReactNode }> = (
     </div>
 );
 
-const StreamDetailsModal: React.FC<{ session: any, onClose: () => void, isAdmin?: boolean, onKilled?: () => void, providerLabel?: string }> = ({ session, onClose, isAdmin, onKilled, providerLabel = 'Plex' }) => {
+const StreamDetailsModal: React.FC<{ session: any, onClose: () => void, isAdmin?: boolean, onKilled?: () => void, providerLabel?: string, onOpenProfile?: (accountId: string) => void }> = ({ session, onClose, isAdmin, onKilled, providerLabel = 'Plex', onOpenProfile }) => {
     const [killReason, setKillReason] = useState('');
     const [isKilling, setIsKilling] = useState(false);
     const [showKillConfirm, setShowKillConfirm] = useState(false);
@@ -9862,6 +9902,21 @@ const StreamDetailsModal: React.FC<{ session: any, onClose: () => void, isAdmin?
 
                     <div className="min-w-0 flex-1 pt-0.5">
                         {session.user && (
+                            session.accountId && onOpenProfile ? (
+                            <button
+                                type="button"
+                                onClick={() => onOpenProfile(String(session.accountId))}
+                                className="inline-flex items-center gap-2 mb-2 rounded-full border border-white/10 bg-white/5 pl-1 pr-2.5 py-1 hover:border-plex/40"
+                            >
+                                <img
+                                    src={sessionUserThumbSrc}
+                                    alt=""
+                                    className="w-5 h-5 rounded-full object-cover"
+                                    onError={(e) => { e.currentTarget.src = 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y'; }}
+                                />
+                                <span className="text-[11px] font-bold text-white/80 truncate max-w-[10rem]">{session.user}</span>
+                            </button>
+                            ) : (
                             <div className="inline-flex items-center gap-2 mb-2 rounded-full border border-white/10 bg-white/5 pl-1 pr-2.5 py-1">
                                 <img
                                     src={sessionUserThumbSrc}
@@ -9871,6 +9926,7 @@ const StreamDetailsModal: React.FC<{ session: any, onClose: () => void, isAdmin?
                                 />
                                 <span className="text-[11px] font-bold text-white/80 truncate max-w-[10rem]">{session.user}</span>
                             </div>
+                            )
                         )}
                         <h2 id="stream-details-title" className="text-xl sm:text-2xl font-black text-text leading-tight tracking-tight">
                             {showTitle}
@@ -10096,7 +10152,7 @@ type AdminOpsSnapshot = {
     runningJobs: number;
 };
 
-export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean, publicConfig?: any, mediaServerType?: string, onViewAnalytics?: (hash?: string) => void }> = ({ onBack, isAdmin, publicConfig, mediaServerType, onViewAnalytics }) => {
+export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean, publicConfig?: any, mediaServerType?: string, onViewAnalytics?: (hash?: string) => void, onNavigate?: (route: string, options?: { path?: string }) => void }> = ({ onBack, isAdmin, publicConfig, mediaServerType, onViewAnalytics, onNavigate }) => {
     const { t } = useDiscoverI18n();
     const [dashboardData, setDashboardData] = useState<{ activeSessions: any[], recentMovies: any[], recentShows: any[], recentMusic: any[] } | null>(null);
     const [trendingStats, setTrendingStats] = useState<{ trending7Days: any[], movies30Days: any[], shows30Days: any[], top365Days: any[], allTime: any[], weekendWarriors: any[], nightOwls: any[], retroHits: any[], cultClassics: any[] } | null>(null);
@@ -10682,10 +10738,24 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
 
                                                     <div className="flex flex-wrap items-center gap-1 mb-2">
                                                         {session.user && (
+                                                            session.accountId && onNavigate ? (
+                                                            <button
+                                                                type="button"
+                                                                onClick={(event) => {
+                                                                    event.stopPropagation();
+                                                                    onNavigate('profile', { path: `/profile/${encodeURIComponent(String(session.accountId))}` });
+                                                                }}
+                                                                className="inline-flex items-center min-w-0 max-w-full gap-1.5 bg-black/45 backdrop-blur-md rounded-full pr-2 p-0.5 shadow-md border border-white/5 hover:border-plex/40"
+                                                            >
+                                                                <img src={sessionUserThumbSrc} alt={session.user} className="w-5 h-5 rounded-full object-cover shrink-0" onError={(e) => { e.currentTarget.src = 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y'; }} />
+                                                                <span className="text-[10px] font-bold text-white/90 truncate">{session.user}</span>
+                                                            </button>
+                                                            ) : (
                                                             <span className="inline-flex items-center min-w-0 max-w-full gap-1.5 bg-black/45 backdrop-blur-md rounded-full pr-2 p-0.5 shadow-md border border-white/5">
                                                                 <img src={sessionUserThumbSrc} alt={session.user} className="w-5 h-5 rounded-full object-cover shrink-0" onError={(e) => { e.currentTarget.src = 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y'; }} />
                                                                 <span className="text-[10px] font-bold text-white/90 truncate">{session.user}</span>
                                                             </span>
+                                                            )
                                                         )}
                                                         {session.resolution && (
                                                             <span className="shrink-0 bg-white/10 text-white/90 text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide border border-white/10">{session.resolution.includes('p') || session.resolution.includes('k') ? session.resolution : `${session.resolution}p`}</span>
@@ -10839,7 +10909,19 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
             </main>
 
             {/* Stream Details Modal */}
-            {selectedSession && <StreamDetailsModal session={selectedSession} onClose={() => setSelectedSession(null)} isAdmin={isAdmin} onKilled={fetchData} providerLabel={libraryProviderLabel} />}
+            {selectedSession && (
+                <StreamDetailsModal
+                    session={selectedSession}
+                    onClose={() => setSelectedSession(null)}
+                    isAdmin={isAdmin}
+                    onKilled={fetchData}
+                    providerLabel={libraryProviderLabel}
+                    onOpenProfile={(id) => {
+                        setSelectedSession(null);
+                        onNavigate?.('profile', { path: `/profile/${encodeURIComponent(id)}` });
+                    }}
+                />
+            )}
         </div>
     );
 };
