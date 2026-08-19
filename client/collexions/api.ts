@@ -388,6 +388,14 @@ class CollexionsApiService {
         );
     }
 
+    async updateJob(payload: { id?: string; ids?: string[]; all?: boolean; sort_order?: string; auto_sync?: boolean }): Promise<any> {
+        return withTimeout(
+            cx('/jobs/update', { method: 'POST', body: JSON.stringify(payload) }),
+            COLLEXIONS_LONG_MS,
+            'Updating job',
+        );
+    }
+
     async deleteJob(id: string): Promise<any> {
         return apiFetch(base('/jobs/delete'), { method: 'POST', body: JSON.stringify({ id }) });
     }

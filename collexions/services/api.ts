@@ -263,6 +263,10 @@ class ApiService {
     return this.post('/jobs/run', { id });
   }
 
+  async updateJob(payload: { id?: string; ids?: string[]; all?: boolean; sort_order?: string; auto_sync?: boolean }): Promise<any> {
+    return this.post('/jobs/update', payload);
+  }
+
   async deleteJob(id: string): Promise<any> {
     return this.post('/jobs/delete', { id });
   }

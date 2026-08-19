@@ -1739,7 +1739,7 @@ def _register_managed_job(library_name, title, source_type, source_id, sort_orde
         "library": library_name,
         "source_type": source_type,
         "source_id": source_id or '',
-        "sort_order": sort_order,
+        "sort_order": _normalize_sort_order(sort_order),
         "auto_sync": bool(auto_sync),
         "created_at": existing.get('created_at') or now,
         "last_run": existing.get('last_run') or "Never",
@@ -2008,7 +2008,73 @@ def _copy_collection_poster(src, dest):
     return False
 
 
-def _convert_smart_collection_to_regular(library, coll, matched_items=None, label='Collexions'):
+def _normalize_sort_order(sort_order):
+    order = str(sort_order or 'custom').strip().lower()
+    return order if order in ('custom', 'random', 'release') else 'custom'
+
+
+def _shuffle_collection_custom_order(coll, matched_items=None):
+    """Reorder a regular collection via Plex custom sort (safe — not a smart filter)."""
+    if coll is None or getattr(coll, 'smart', False):
+        return False
+    items = [item for item in list(matched_items or []) if getattr(item, 'ratingKey', None)]
+    if len(items) < 2:
+        try:
+            items = [item for item in list(coll.items() or []) if getattr(item, 'ratingKey', None)]
+        except Exception:
+            items = []
+    if len(items) < 2:
+        return False
+    random.shuffle(items)
+    try:
+        if hasattr(coll, 'moveItem'):
+            coll.moveItem(items[0])
+            prev = items[0]
+            for item in items[1:]:
+                coll.moveItem(item, after=prev)
+                prev = item
+        else:
+            server = getattr(coll, '_server', None)
+            coll_key = str(getattr(coll, 'key', '') or '').strip() or f"/library/metadata/{getattr(coll, 'ratingKey', '')}"
+            if not server or not coll_key:
+                return False
+            put = server._session.put
+            server.query(f'{coll_key}/items/{items[0].ratingKey}/move', method=put)
+            prev = items[0]
+            for item in items[1:]:
+                server.query(f'{coll_key}/items/{item.ratingKey}/move?after={prev.ratingKey}', method=put)
+                prev = item
+        log_action(
+            f"Shuffled '{getattr(coll, 'title', '?')}' into a new random custom order "
+            f"({len(items)} items)."
+        )
+        return True
+    except Exception as e:
+        logging.warning("Failed to shuffle '%s': %s", getattr(coll, 'title', '?'), e)
+        return False
+
+
+def _apply_collection_sort(coll, matched_items, sort_order='custom', reorder=True):
+    """Apply sort on a regular collection. Random here is a one-off shuffle fallback —
+    the real per-view random lives in _ensure_random_smart_collection (label smart)."""
+    if coll is None:
+        return
+    order = _normalize_sort_order(sort_order)
+    if order == 'release':
+        try:
+            coll.sortUpdate('release')
+        except Exception as e:
+            logging.warning("Failed to set release sort on '%s': %s", getattr(coll, 'title', '?'), e)
+        return
+    try:
+        coll.sortUpdate('custom')
+    except Exception as e:
+        logging.warning("Failed to set custom sort on '%s': %s", getattr(coll, 'title', '?'), e)
+    if order == 'random' and reorder:
+        _shuffle_collection_custom_order(coll, matched_items)
+
+
+def _convert_smart_collection_to_regular(library, coll, matched_items=None, label='Collexions', sort_order='custom'):
     """Rebuild a smart collection as a regular one, keeping title, items, art, and pins.
 
     Plex cannot flip smart→regular on the same ratingKey. Park the smart copy
@@ -2045,7 +2111,7 @@ def _convert_smart_collection_to_regular(library, coll, matched_items=None, labe
         return coll, False
 
     try:
-        new_coll = _create_plex_collection(library, title, items, sort_order='custom', label=label)
+        new_coll = _create_plex_collection(library, title, items, sort_order=sort_order, label=label)
     except Exception as exc:
         logging.warning("Convert failed creating regular '%s': %s", title, exc)
         try:
@@ -2067,13 +2133,179 @@ def _convert_smart_collection_to_regular(library, coll, matched_items=None, labe
     return new_coll, True
 
 
+def _random_label_tag(title, base_label='Collexions'):
+    """Per-collection member label used by Kometa-style random smart collections."""
+    base = str(base_label or 'Collexions').strip() or 'Collexions'
+    name = _normalize_collection_title(title)
+    return f"{base}: {name}"
+
+
+def _smart_collection_is_label_based(coll):
+    """True when a smart collection filters on a label (tiny URI — safe for Plex Web)."""
+    try:
+        content = str(getattr(coll, 'content', '') or '')
+        return 'label=' in content or 'label%3D' in content.lower()
+    except Exception:
+        return False
+
+
+def _set_items_label(library, items, tag, add=True):
+    """Add or remove a label on library items, batched when plexapi supports it."""
+    items = [item for item in (items or []) if getattr(item, 'ratingKey', None)]
+    if not items:
+        return 0
+    try:
+        editor = library.batchMultiEdits(items)
+        (editor.addLabel(tag) if add else editor.removeLabel(tag))
+        editor.saveMultiEdits()
+        return len(items)
+    except Exception:
+        pass
+    done = 0
+    for item in items:
+        try:
+            if add:
+                item.addLabel(tag)
+            else:
+                item.removeLabel(tag)
+            done += 1
+        except Exception as e:
+            logging.warning(
+                "Label '%s' %s failed on '%s': %s",
+                tag, 'add' if add else 'remove', getattr(item, 'title', '?'), e,
+            )
+    return done
+
+
+def _ensure_random_smart_collection(library, title, matched_items, label='Collexions', keep_rating_key=None):
+    """Kometa-style random: label the members, then keep a smart collection filtered
+    on that single label with Plex sort=random, so the order reshuffles on every view.
+
+    A one-label smart filter is a tiny URI — it does not write the truncated
+    type-99 folder rows that giant id-filter smart collections caused.
+    Returns (collection, created_fresh, membership_delta).
+    """
+    tag = _random_label_tag(title, label)
+    target_by_key = {str(item.ratingKey): item for item in matched_items if getattr(item, 'ratingKey', None)}
+
+    try:
+        labeled = list(library.search(label=tag) or [])
+    except Exception as e:
+        logging.warning("Label lookup for '%s' failed: %s", tag, e)
+        labeled = []
+    labeled_by_key = {str(getattr(item, 'ratingKey', '') or ''): item for item in labeled}
+    to_add = [item for key, item in target_by_key.items() if key not in labeled_by_key]
+    to_remove = [item for key, item in labeled_by_key.items() if key and key not in target_by_key]
+    if to_add:
+        _set_items_label(library, to_add, tag, add=True)
+    if to_remove:
+        _set_items_label(library, to_remove, tag, add=False)
+
+    coll = None
+    keep_key = str(keep_rating_key or '').strip()
+    if keep_key:
+        coll = _resolve_collection(library, rating_key=keep_key)
+    if coll is None:
+        coll = _resolve_collection(library, title=title)
+
+    created_fresh = False
+    if coll is not None and not getattr(coll, 'smart', False):
+        # Regular → smart(label). Park the old copy, build the smart one under the
+        # original title, restore poster/pins, then delete the parked copy.
+        vis = _capture_collection_visibility(coll)
+        old = coll
+        old_rk = str(getattr(old, 'ratingKey', '') or '')
+        try:
+            old.editTitle(f'{title} (legacy manual)')
+            try:
+                old.reload()
+            except Exception:
+                pass
+        except Exception as exc:
+            logging.warning("Could not park '%s' before random conversion: %s", title, exc)
+            _apply_collection_sort(old, list(target_by_key.values()), 'random', reorder=True)
+            return old, False, {
+                'changed': bool(to_add or to_remove),
+                'added': len(to_add),
+                'removed': len(to_remove),
+                'memberKeys': sorted(target_by_key.keys()),
+            }
+        try:
+            coll = _create_random_smart_collection(library, title, tag)
+            created_fresh = True
+        except Exception as exc:
+            logging.warning("Random smart create failed for '%s': %s", title, exc)
+            try:
+                old.editTitle(title)
+            except Exception:
+                pass
+            _apply_collection_sort(old, list(target_by_key.values()), 'random', reorder=True)
+            return old, False, {
+                'changed': bool(to_add or to_remove),
+                'added': len(to_add),
+                'removed': len(to_remove),
+                'memberKeys': sorted(target_by_key.keys()),
+            }
+        _copy_collection_poster(old, coll)
+        _restore_collection_visibility(coll, vis)
+        try:
+            old.delete()
+        except Exception as exc:
+            logging.warning("Converted '%s' to random smart but could not delete old copy: %s", title, exc)
+        log_action(
+            f"Converted '{title}' to a random smart collection "
+            f"(label '{tag}', old key {old_rk} → {getattr(coll, 'ratingKey', '?')})."
+        )
+    elif coll is not None:
+        # Already smart — repoint the filter at our label and keep sort=random.
+        # This also repairs legacy id-filter smarts (the crashy kind) in place.
+        try:
+            coll.updateFilters(filters={'label': tag}, sort='random')
+            try:
+                coll.reload()
+            except Exception:
+                pass
+        except Exception as e:
+            logging.warning("Could not update random smart filter on '%s': %s", title, e)
+    else:
+        coll = _create_random_smart_collection(library, title, tag)
+        created_fresh = True
+        log_action(f"Created random smart collection '{title}' (label '{tag}').")
+
+    try:
+        coll.addLabel(label)
+    except Exception:
+        pass
+    return coll, created_fresh, {
+        'changed': bool(to_add or to_remove) or created_fresh,
+        'added': len(to_add),
+        'removed': len(to_remove),
+        'memberKeys': sorted(target_by_key.keys()),
+    }
+
+
+def _create_random_smart_collection(library, title, tag):
+    """Create a label-filtered smart collection sorted randomly (reshuffles per view)."""
+    try:
+        return library.createCollection(title, smart=True, filters={'label': tag}, sort='random')
+    except Exception as e:
+        logging.warning("Smart create with sort=random failed for '%s' (%s); retrying without sort.", title, e)
+    coll = library.createCollection(title, smart=True, filters={'label': tag})
+    try:
+        coll.updateFilters(filters={'label': tag}, sort='random')
+    except Exception as e:
+        logging.warning("Could not set random sort on smart collection '%s': %s", title, e)
+    return coll
+
+
 def _upsert_plex_collection(library, title, matched_items, sort_order='custom', label='Collexions', keep_rating_key=None):
     """
     Create or update exactly one Plex collection for title.
     Never delete/recreate an existing collection — that drops Library/Home/Friends
     pins and invalidates Overlays ratingKeys. Membership is written in small URI
-    batches so Plex cannot truncate the request into a type-99 folder. Existing
-    smart collections are converted to regular ones (same title, items, art, pins).
+    batches so Plex cannot truncate the request into a type-99 folder.
+    Random uses a Kometa-style label-filtered smart collection (reshuffles per view);
+    other smart collections are converted to regular ones (same title, items, art, pins).
     Returns (collection, created_fresh, membership_delta).
     """
     title = _normalize_collection_title(title)
@@ -2089,7 +2321,19 @@ def _upsert_plex_collection(library, title, matched_items, sort_order='custom', 
         coll = _resolve_collection(library, rating_key=keep_key)
     existing_all = _find_collections_by_title(library, title)
     if coll is None and existing_all:
-        coll = _pick_primary_collection(existing_all)
+        coll = _as_live_collection(library, _pick_primary_collection(existing_all))
+
+    if _normalize_sort_order(sort_order) == 'random':
+        coll, created_fresh, delta = _ensure_random_smart_collection(
+            library, title, matched_items, label=label,
+            keep_rating_key=str(getattr(coll, 'ratingKey', '') or keep_key or '') or None,
+        )
+        new_key = str(getattr(coll, 'ratingKey', '') or '').strip()
+        removed = _delete_duplicate_collections(library, title, keep_rating_key=new_key or None)
+        if removed:
+            log_action(f"Removed {removed} duplicate collection(s) named '{title}'.")
+        return coll, created_fresh, delta
+
     if coll is not None:
         keep_key = str(getattr(coll, 'ratingKey', '') or keep_key or '').strip()
         removed = _delete_duplicate_collections(library, title, keep_rating_key=keep_key)
@@ -2099,16 +2343,11 @@ def _upsert_plex_collection(library, title, matched_items, sort_order='custom', 
         is_smart = bool(getattr(coll, 'smart', False))
         if is_smart:
             converted, did = _convert_smart_collection_to_regular(
-                library, coll, matched_items=matched_items, label=label
+                library, coll, matched_items=matched_items, label=label, sort_order=sort_order
             )
             if did:
                 coll = converted
                 keys = sorted(_item_rating_keys(matched_items))
-                if sort_order == 'release':
-                    try:
-                        coll.sortUpdate('release')
-                    except Exception as e:
-                        logging.warning(f"Failed to set release sort: {e}")
                 return coll, True, {
                     'changed': True,
                     'added': len(keys),
@@ -2119,21 +2358,17 @@ def _upsert_plex_collection(library, title, matched_items, sort_order='custom', 
             delta = _update_smart_collection_in_place(coll, matched_items, sort_order=sort_order, label=label)
             return coll, False, delta
 
-        delta = _update_collection_items_in_place(coll, matched_items, label)
-        if sort_order == 'release':
-            try:
-                coll.sortUpdate('release')
-            except Exception as e:
-                logging.warning(f"Failed to set release sort: {e}")
-        elif sort_order == 'random':
-            logging.info(
-                "Keeping regular collection '%s' (key %s) — not converting to smart/random, "
-                "which would delete Home/Library/Friends pins.",
-                title,
-                keep_key,
-            )
-        return coll, False, delta
+        try:
+            delta = _update_collection_items_in_place(coll, matched_items, label)
+            _apply_collection_sort(coll, matched_items, sort_order, reorder=True)
+            return coll, False, delta
+        except Exception as e:
+            if _as_live_collection(library, coll) is not None:
+                raise
+            logging.warning("Collection '%s' vanished during update (%s) — recreating.", title, e)
+            coll = None
 
+    log_action(f"Plex collection '{title}' was missing — creating it.")
     coll = _create_plex_collection(library, title, matched_items, sort_order=sort_order, label=label)
     keys = sorted(_item_rating_keys(matched_items))
     return coll, True, {
@@ -2235,16 +2470,37 @@ def _delete_plex_collection(library_name, title=None, rating_key=None):
         return False, str(e), []
 
 
+def _as_live_collection(library, coll):
+    """Return coll only if it still exists on Plex as a collection in this library."""
+    if coll is None:
+        return None
+    try:
+        key = int(getattr(coll, 'ratingKey', 0) or 0)
+        if key <= 0:
+            return None
+        fresh = library.fetchItem(key)
+        ctype = str(getattr(fresh, 'type', '') or '').lower()
+        if ctype and ctype != 'collection':
+            return None
+        try:
+            fresh.reload()
+        except Exception:
+            return None
+        return fresh
+    except Exception:
+        return None
+
+
 def _resolve_collection(library, title=None, rating_key=None):
     """Fetch a single collection by ratingKey, or the primary match for title."""
     if rating_key:
         try:
-            return library.fetchItem(int(rating_key))
+            return _as_live_collection(library, library.fetchItem(int(rating_key)))
         except Exception:
             return None
     if title:
         matches = _find_collections_by_title(library, title)
-        return _pick_primary_collection(matches) if matches else None
+        return _as_live_collection(library, _pick_primary_collection(matches)) if matches else None
     return None
 
 
@@ -2255,27 +2511,21 @@ def _create_plex_collection(library, title, matched_items, sort_order='custom', 
     batches. A one-shot createCollection(items=hundreds) or a smart id-filter
     writes a type-99 folder that crashes Plex Web's Collections tab.
     """
-    matched_items = list(matched_items or [])
-    if not matched_items:
+    items = list(matched_items or [])
+    if not items:
         raise ValueError("No valid matched items to add")
-    if sort_order == 'random':
-        logging.info(
-            "Creating regular collection '%s' instead of smart/random — smart id-filters "
-            "corrupt Plex Web's Collections tab.",
-            title,
-        )
-    collection = library.createCollection(title, items=matched_items[:1])
+    order = _normalize_sort_order(sort_order)
+    if order == 'random':
+        random.shuffle(items)
+        log_action(f"Creating '{title}' with shuffled custom order ({len(items)} items).")
+    collection = library.createCollection(title, items=items[:1])
     try:
         collection.reload()
     except Exception:
         pass
-    if len(matched_items) > 1:
-        _add_collection_items_batched(collection, matched_items[1:])
-    if sort_order == 'release':
-        try:
-            collection.sortUpdate('release')
-        except Exception as e:
-            logging.warning(f"Failed to set release sort: {e}")
+    if len(items) > 1:
+        _add_collection_items_batched(collection, items[1:])
+    _apply_collection_sort(collection, items, order, reorder=False)
     try:
         collection.addLabel(label)
     except Exception as e:
@@ -2660,6 +2910,13 @@ def create_collection_from_source(library_name, title, source_type, source_id=''
         return {"success": False, "error": str(e)}
 
 
+def _stamp_job_run(job, status, error=''):
+    job['last_run'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    job['next_run'] = (datetime.now() + timedelta(hours=6)).strftime("%Y-%m-%d %H:%M:%S")
+    job['last_status'] = status
+    job['last_error'] = str(error or '').strip()[:500]
+
+
 def run_sync_job(job_id=None):
     """Refreshes managed collections. If job_id is provided, only syncs that specific job."""
     managed = load_managed_collections()
@@ -2672,6 +2929,9 @@ def run_sync_job(job_id=None):
     
     if not plex_url or not plex_token:
         log_action("Sync failed: Plex URL or Token missing.")
+        if job_id and job_id in managed:
+            _stamp_job_run(managed[job_id], 'failed', 'Plex URL or Token missing')
+            save_managed_collections(managed)
         return
 
     from plexapi.server import PlexServer
@@ -2680,6 +2940,9 @@ def run_sync_job(job_id=None):
         plex = PlexServer(plex_url, plex_token)
     except Exception as e:
         log_action(f"Sync failed: Plex connection error: {e}")
+        if job_id and job_id in managed:
+            _stamp_job_run(managed[job_id], 'failed', f'Plex connection error: {e}')
+            save_managed_collections(managed)
         return
 
     jobs_to_run = [job_id] if job_id else list(managed.keys())
@@ -2695,7 +2958,9 @@ def run_sync_job(job_id=None):
         source_type = normalize_source_type(job.get('source_type'), source_id)
         if source_type and source_type != job.get('source_type'):
             job['source_type'] = source_type
-        sort_order = job.get('sort_order', 'custom')
+        sort_order = _normalize_sort_order(job.get('sort_order', 'custom'))
+        if sort_order != job.get('sort_order'):
+            job['sort_order'] = sort_order
         
         # Respect schedule if not run manually
         if not job_id:
@@ -2709,15 +2974,12 @@ def run_sync_job(job_id=None):
                     pass # Invalid or missing format, proceed to run
             
         log_action(f"Auto-Sync: Syncing items for '{coll_name}'...")
-        
-        # Update run stats immediately so they persist even if we exit early
-        job['last_run'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        job['next_run'] = (datetime.now() + timedelta(hours=6)).strftime("%Y-%m-%d %H:%M:%S")
 
         # 1. Fetch latest items
         items = fetch_source_items(source_type, source_id, config)
         if not items:
             log_action(f"Auto-Sync: No items found for '{coll_name}'. Skipping.")
+            _stamp_job_run(job, 'failed', 'No items found from source')
             continue
             
         # 2. Update Plex Collection (recreate if missing)
@@ -2726,6 +2988,7 @@ def run_sync_job(job_id=None):
             mismatch = library_media_mismatch_error(library, source_type, source_id, items)
             if mismatch:
                 log_action(f"Auto-Sync: Skipping '{coll_name}' — {mismatch}")
+                _stamp_job_run(job, 'failed', mismatch)
                 continue
             label = config.get('collexions_label', 'Collexions')
             tmdb_cache = _build_library_tmdb_cache(library)
@@ -2750,6 +3013,7 @@ def run_sync_job(job_id=None):
             plex_items = _sanitize_collection_members(library, plex_items)
             if not plex_items:
                 log_action(f"Auto-Sync: No matching Plex items found for '{coll_name}'.")
+                _stamp_job_run(job, 'failed', 'No matching Plex items found')
                 continue
 
             try:
@@ -2766,8 +3030,6 @@ def run_sync_job(job_id=None):
                     coll_key = str(getattr(coll, 'ratingKey', '') or '').strip()
                     if coll_key:
                         job['rating_key'] = coll_key
-                    if membership_delta.get('converted_smart') and job.get('sort_order') == 'random':
-                        job['sort_order'] = 'custom'
                     _notify_portal_collection_updated(coll, lib_name, coll_name, membership_delta)
                     if membership_delta.get('converted_smart'):
                         log_action(
@@ -2798,13 +3060,24 @@ def run_sync_job(job_id=None):
                         log_action(f"Auto-Sync: Created '{coll_name}' with {len(plex_items)} items.")
                     else:
                         log_action(f"Auto-Sync: Updated '{coll_name}' in place (key {coll_key or keep_key or '?'}).")
+                    if membership_delta.get('skipped_smart'):
+                        _stamp_job_run(
+                            job,
+                            'warning',
+                            'Smart collection — membership not rewritten. Convert it from Gallery → Repair.',
+                        )
+                    else:
+                        _stamp_job_run(job, 'success')
             except RuntimeError as e:
                 log_action(f"Auto-Sync: Skipping '{coll_name}' — {e}")
+                _stamp_job_run(job, 'failed', str(e))
             except Exception as e:
                 log_action(f"Auto-Sync error for '{coll_name}': {e}")
+                _stamp_job_run(job, 'failed', str(e))
 
         except Exception as e:
             log_action(f"Auto-Sync error for '{coll_name}': {e}")
+            _stamp_job_run(job, 'failed', str(e))
 
     save_managed_collections(managed)
     GALLERY_CACHE['data'] = None
@@ -4236,9 +4509,20 @@ def run_job_now():
     if not job_id:
         return jsonify({"success": False, "error": "Missing job ID"}), 400
         
+    managed = load_managed_collections()
+    if job_id not in managed:
+        return jsonify({"success": False, "error": "Job not found"}), 404
+
     try:
         run_sync_job(job_id)
-        return jsonify({"success": True})
+        job = load_managed_collections().get(job_id) or {}
+        last_status = job.get('last_status') or 'success'
+        last_error = job.get('last_error') or ''
+        return jsonify({
+            "success": last_status != 'failed',
+            "last_status": last_status,
+            "last_error": last_error,
+        })
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
@@ -4256,6 +4540,136 @@ def delete_job():
         save_managed_collections(managed)
         return jsonify({"success": True})
     return jsonify({"success": False, "error": "Job not found"}), 404
+
+
+def _apply_job_sort_on_plex(job, sort_order):
+    """Apply Manual / Random / Release on the live Plex collection for a managed job.
+
+    Random converts to a Kometa-style label smart collection (reshuffles per view);
+    Manual/Release converts back to a regular collection. Pins/posters survive.
+    """
+    plex = get_plex_instance()
+    if not plex or not isinstance(job, dict):
+        return False
+    lib_name = job.get('library')
+    title = job.get('name')
+    library = plex.library.section(lib_name)
+    coll = None
+    keep_key = str(job.get('rating_key') or job.get('ratingKey') or '').strip()
+    if keep_key:
+        coll = _resolve_collection(library, rating_key=keep_key)
+    if coll is None:
+        coll = _resolve_collection(library, title=title)
+    if coll is None:
+        return False
+    try:
+        items = _sanitize_collection_members(library, list(coll.items() or []))
+    except Exception:
+        items = []
+    if not items:
+        return False
+    config = load_config()
+    label = config.get('collexions_label', 'Collexions')
+    with _collection_create_lock(lib_name, title):
+        new_coll, _created, _delta = _upsert_plex_collection(
+            library,
+            title,
+            items,
+            sort_order=sort_order,
+            label=label,
+            keep_rating_key=str(getattr(coll, 'ratingKey', '') or '') or None,
+        )
+    new_key = str(getattr(new_coll, 'ratingKey', '') or '').strip()
+    if new_key:
+        job['rating_key'] = new_key
+    return True
+
+
+def _apply_sort_jobs_background(job_ids, sort_order):
+    managed = load_managed_collections()
+    for jid in job_ids or []:
+        job = managed.get(jid)
+        if not isinstance(job, dict):
+            continue
+        try:
+            _apply_job_sort_on_plex(job, sort_order)
+        except Exception as e:
+            logging.warning("Failed applying %s sort to '%s': %s", sort_order, job.get('name'), e)
+    save_managed_collections(managed)
+    GALLERY_CACHE['data'] = None
+
+
+@app.route('/api/jobs/update', methods=['POST'])
+@require_auth
+def update_job():
+    data = request.json or {}
+    raw_sort = data.get('sort_order', None)
+    sort_order = _normalize_sort_order(raw_sort) if raw_sort is not None else None
+    has_auto = 'auto_sync' in data
+    auto_sync = bool(data.get('auto_sync')) if has_auto else None
+    managed = load_managed_collections()
+    if data.get('all'):
+        targets = [jid for jid, job in managed.items() if isinstance(job, dict)]
+    elif data.get('ids'):
+        targets = [str(jid) for jid in data.get('ids') or [] if str(jid) in managed]
+    else:
+        job_id = str(data.get('id') or '').strip()
+        if not job_id:
+            return jsonify({"success": False, "error": "Missing job ID"}), 400
+        if job_id not in managed:
+            return jsonify({"success": False, "error": "Job not found"}), 404
+        targets = [job_id]
+    if not targets:
+        return jsonify({"success": False, "error": "No jobs to update"}), 400
+    if sort_order is None and auto_sync is None:
+        return jsonify({"success": False, "error": "Nothing to update"}), 400
+    if (data.get('all') or data.get('ids')) and sort_order is None:
+        return jsonify({"success": False, "error": "sort_order is required"}), 400
+
+    for jid in targets:
+        job = managed.get(jid)
+        if isinstance(job, dict):
+            if sort_order is not None:
+                job['sort_order'] = sort_order
+            if auto_sync is not None:
+                job['auto_sync'] = auto_sync
+    save_managed_collections(managed)
+
+    if sort_order is None:
+        return jsonify({
+            "success": True,
+            "updated": len(targets),
+            "auto_sync": auto_sync,
+        })
+
+    if len(targets) == 1:
+        applied = False
+        try:
+            applied = _apply_job_sort_on_plex(managed[targets[0]], sort_order)
+            save_managed_collections(managed)
+            GALLERY_CACHE['data'] = None
+        except Exception as e:
+            logging.warning("Updated job sort but failed to apply on Plex: %s", e)
+        return jsonify({
+            "success": True,
+            "sort_order": sort_order,
+            "auto_sync": managed[targets[0]].get('auto_sync', True) if isinstance(managed.get(targets[0]), dict) else True,
+            "updated": 1,
+            "applied": applied,
+        })
+
+    threading.Thread(
+        target=_apply_sort_jobs_background,
+        args=(list(targets), sort_order),
+        daemon=True,
+    ).start()
+    log_action(f"Queued {sort_order} sort for {len(targets)} auto-sync job(s).")
+    return jsonify({
+        "success": True,
+        "sort_order": sort_order,
+        "updated": len(targets),
+        "queued": True,
+    })
 
 @app.route('/api/collections/unpin', methods=['POST'])
 @require_auth
@@ -4690,19 +5104,40 @@ def _repair_library_collections_tab(library, config=None):
                     job = candidate
                     break
             if getattr(coll, 'smart', False) and (ours or job):
-                new_coll, did = _convert_smart_collection_to_regular(
-                    library, coll, label=label
-                )
-                if did:
-                    converted += 1
-                    new_key = str(getattr(new_coll, 'ratingKey', '') or '').strip()
-                    if job is not None:
-                        if new_key:
-                            job['rating_key'] = new_key
-                        if str(job.get('sort_order') or '') == 'random':
-                            job['sort_order'] = 'custom'
-                        jobs_changed = True
-                    coll = new_coll
+                job_sort = _normalize_sort_order((job or {}).get('sort_order'))
+                if job_sort == 'random':
+                    # Kometa-style label smart — tiny filter URI, safe for Plex Web.
+                    # If it still uses a crashy id-filter, repoint it to the label
+                    # filter in place (keeps pins) instead of flattening to regular.
+                    if not _smart_collection_is_label_based(coll):
+                        try:
+                            members = _sanitize_collection_members(library, list(coll.items() or []))
+                            if members:
+                                new_coll, _cf, _delta = _ensure_random_smart_collection(
+                                    library, title, members, label=label,
+                                    keep_rating_key=str(getattr(coll, 'ratingKey', '') or '') or None,
+                                )
+                                converted += 1
+                                new_key = str(getattr(new_coll, 'ratingKey', '') or '').strip()
+                                if job is not None:
+                                    if new_key:
+                                        job['rating_key'] = new_key
+                                    jobs_changed = True
+                                coll = new_coll
+                        except Exception as exc:
+                            logging.warning("Repair could not relabel random smart '%s': %s", title, exc)
+                else:
+                    new_coll, did = _convert_smart_collection_to_regular(
+                        library, coll, label=label, sort_order=job_sort,
+                    )
+                    if did:
+                        converted += 1
+                        new_key = str(getattr(new_coll, 'ratingKey', '') or '').strip()
+                        if job is not None:
+                            if new_key:
+                                job['rating_key'] = new_key
+                            jobs_changed = True
+                        coll = new_coll
             pruned += _remove_invalid_collection_members(coll, config)
             if ours or job:
                 if _collection_poster_probe_issues(coll, config):

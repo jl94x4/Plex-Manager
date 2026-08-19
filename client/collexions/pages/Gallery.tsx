@@ -329,7 +329,7 @@ const Gallery: React.FC = () => {
     const handleRepairCollectionsTab = async () => {
         const scope = selectedLibrary !== 'All' ? selectedLibrary : 'every managed library';
         const ok = await askConfirm(
-            `Repair the Plex Collections tab for ${scope}?\n\nThis deletes folder (type 99) rows that make Plex show “Something went wrong”, and converts ColleXions smart/random collections to regular ones (same title, items, art, and pins). Real library titles are not deleted.`,
+            `Repair the Plex Collections tab for ${scope}?\n\nThis deletes folder (type 99) rows that make Plex show “Something went wrong” and fixes crash-prone smart filters. Random collections stay random — they use Kometa-style label smart collections that reshuffle on every view. Real library titles are not deleted.`,
             { title: 'Repair Plex Collections tab?', confirmLabel: 'Repair', cancelLabel: 'Cancel' },
         );
         if (!ok) return;

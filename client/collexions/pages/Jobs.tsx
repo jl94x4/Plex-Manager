@@ -2,7 +2,6 @@ import { askConfirm } from '../../shared/confirm';
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
-import { usePoll } from '../../shared/usePoll';
 import {
     Play,
     Trash2,
@@ -14,7 +13,9 @@ import {
     Activity,
     ChevronRight,
     Search,
-    Settings2
+    Settings2,
+    Pencil,
+    X
 } from 'lucide-react';
 
 import { CustomSelect } from '../components/ui/Inputs';
@@ -29,13 +30,76 @@ interface ManagedJob {
     next_run: string;
     created_at: string;
     auto_sync: boolean;
+    last_status?: string;
+    last_error?: string;
 }
+
+const SORT_OPTIONS = [
+    { value: 'custom', label: 'Manual' },
+    { value: 'random', label: 'Random 🎲' },
+    { value: 'release', label: 'Release' },
+];
+
+const jobStatusPillClass = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border whitespace-nowrap';
+
+const JobStatusPill: React.FC<{ job: ManagedJob; isRunning: boolean }> = ({ job, isRunning }) => {
+    if (isRunning) {
+        return (
+            <span className={`${jobStatusPillClass} bg-blue-500/10 text-blue-400 border-blue-500/20 shadow-[0_0_10px_rgba(59,130,246,0.15)] animate-pulse`}>
+                <span className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-ping" />
+                Running
+            </span>
+        );
+    }
+    const status = String(job.last_status || '').toLowerCase();
+    if (status === 'failed') {
+        return (
+            <span
+                className={`${jobStatusPillClass} bg-red-500/10 text-red-400 border-red-500/20`}
+                title={job.last_error || 'Last sync failed'}
+            >
+                <span className="w-1.5 h-1.5 bg-red-400 rounded-full" />
+                Failed
+            </span>
+        );
+    }
+    if (status === 'warning') {
+        return (
+            <span
+                className={`${jobStatusPillClass} bg-amber-500/10 text-amber-400 border-amber-500/20`}
+                title={job.last_error || 'Last sync completed with a warning'}
+            >
+                <span className="w-1.5 h-1.5 bg-amber-400 rounded-full" />
+                Warning
+            </span>
+        );
+    }
+    if (status === 'success' || job.last_run) {
+        return (
+            <span className={`${jobStatusPillClass} bg-emerald-500/10 text-emerald-300 border-emerald-500/20`}>
+                <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full" />
+                Success
+            </span>
+        );
+    }
+    return (
+        <span className={`${jobStatusPillClass} bg-slate-500/10 text-muted border-border`}>
+            Idle
+        </span>
+    );
+};
 
 const JobsPage: React.FC = () => {
     const [jobs, setJobs] = useState<Record<string, ManagedJob>>({});
     const [loading, setLoading] = useState(true);
     const [runningJob, setRunningJob] = useState<string | null>(null);
     const [runFeedback, setRunFeedback] = useState('');
+    const [runFeedbackTone, setRunFeedbackTone] = useState<'info' | 'error' | 'warning'>('info');
+    const [updatingSort, setUpdatingSort] = useState<string | 'all' | null>(null);
+    const [editingJobId, setEditingJobId] = useState<string | null>(null);
+    const [editSort, setEditSort] = useState('custom');
+    const [editAutoSync, setEditAutoSync] = useState(true);
+    const [savingEdit, setSavingEdit] = useState(false);
 
     // Search & Filter State
     const [searchQuery, setSearchQuery] = useState('');
@@ -60,33 +124,100 @@ const JobsPage: React.FC = () => {
 
     const handleRunNow = async (id: string) => {
         setRunningJob(id);
-        setRunFeedback('Starting sync…');
+        setRunFeedbackTone('info');
+        setRunFeedback('Syncing collection…');
         try {
-            await api.runJobNow(id);
-            setRunFeedback('Sync started — waiting for worker…');
+            const result = await api.runJobNow(id);
             await fetchJobs();
+            const status = String(result?.last_status || '').toLowerCase();
+            if (status === 'failed' || result?.success === false) {
+                setRunFeedbackTone('error');
+                setRunFeedback(result?.last_error || result?.error || 'Sync failed. Check logs for details.');
+            } else if (status === 'warning') {
+                setRunFeedbackTone('warning');
+                setRunFeedback(result?.last_error || 'Sync completed with a warning.');
+            } else {
+                setRunFeedback('');
+            }
         } catch (e) {
             console.error("Failed to run job", e);
+            setRunFeedbackTone('error');
             setRunFeedback('Failed to start sync. Check logs for details.');
+        } finally {
             setRunningJob(null);
         }
     };
 
-    usePoll(async () => {
-        if (!runningJob) return;
+    const openEdit = (id: string) => {
+        const job = jobs[id];
+        if (!job) return;
+        setEditingJobId(id);
+        setEditSort(job.sort_order || 'custom');
+        setEditAutoSync(job.auto_sync !== false);
+    };
+
+    const handleSaveEdit = async () => {
+        if (!editingJobId) return;
+        const job = jobs[editingJobId];
+        setSavingEdit(true);
         try {
-            const status = await api.getStatus();
-            const message = status?.status || 'Running…';
-            setRunFeedback(String(message));
-            await fetchJobs();
-            const lower = String(message).toLowerCase();
-            if (!/running|processing|pinning|waiting|starting/.test(lower)) {
-                setRunningJob(null);
+            const result = await api.updateJob({
+                id: editingJobId,
+                sort_order: editSort,
+                auto_sync: editAutoSync,
+            });
+            setJobs((prev) => prev[editingJobId]
+                ? { ...prev, [editingJobId]: { ...prev[editingJobId], sort_order: editSort, auto_sync: editAutoSync } }
+                : prev);
+            setEditingJobId(null);
+            if (editSort === 'random') {
+                setRunFeedbackTone('info');
+                setRunFeedback(
+                    result?.applied
+                        ? `Saved “${job?.name || 'collection'}” — it now reshuffles every time it is opened.`
+                        : `Saved “${job?.name || 'collection'}” as Random. Run Now to convert it if the order has not changed yet.`,
+                );
+            } else {
+                setRunFeedbackTone('info');
+                setRunFeedback(`Saved settings for “${job?.name || 'collection'}”.`);
             }
-        } catch {
-            // keep polling until terminal state or user leaves
+        } catch (e) {
+            console.error('Failed to update job', e);
+            setRunFeedbackTone('error');
+            setRunFeedback('Failed to save collection settings.');
+        } finally {
+            setSavingEdit(false);
         }
-    }, runningJob ? 3000 : null, { immediate: true });
+    };
+
+    const handleBulkRandom = async () => {
+        const ok = await askConfirm(
+            'Set every auto-sync job to Random? Each collection becomes a Kometa-style label smart collection that reshuffles every time it is opened — safe for the Plex Web Collections tab.',
+            {
+                title: 'Restore random order?',
+                confirmLabel: 'Set all to Random',
+                cancelLabel: 'Cancel',
+            },
+        );
+        if (!ok) return;
+        setUpdatingSort('all');
+        try {
+            const result = await api.updateJob({ all: true, sort_order: 'random' });
+            await fetchJobs();
+            setRunFeedbackTone('info');
+            setRunFeedback(
+                result?.queued
+                    ? `Random queued for ${result.updated || 'all'} jobs — converting in the background. They will reshuffle on every view.`
+                    : 'All jobs set to Random — collections now reshuffle on every view.',
+            );
+        } catch (e) {
+            console.error('Failed to set jobs to random', e);
+            setRunFeedbackTone('error');
+            setRunFeedback('Failed to set jobs to Random.');
+        } finally {
+            setUpdatingSort(null);
+        }
+    };
 
     const handleDelete = async (id: string) => {
         const ok = await askConfirm(`Are you sure you want to stop auto-syncing "${jobs[id].name}"?`, {
@@ -101,6 +232,17 @@ const JobsPage: React.FC = () => {
         } catch (e) {
             console.error("Failed to delete job", e);
         }
+    };
+
+    const getSortBadge = (sort: string) => {
+        const order = String(sort || 'custom').toLowerCase();
+        if (order === 'random') {
+            return <span className="px-2 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/30 rounded text-[10px] font-bold uppercase tracking-wider">Random</span>;
+        }
+        if (order === 'release') {
+            return <span className="px-2 py-0.5 bg-sky-500/10 text-sky-400 border border-sky-500/30 rounded text-[10px] font-bold uppercase tracking-wider">Release</span>;
+        }
+        return <span className="px-2 py-0.5 bg-card text-muted border border-border rounded text-[10px] font-bold uppercase tracking-wider">Manual</span>;
     };
 
     const getSourceBadge = (type: string) => {
@@ -152,12 +294,26 @@ const JobsPage: React.FC = () => {
                         <RefreshCcw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                         <span className="hidden sm:inline">Refresh Status</span>
                     </button>
+                    <button
+                        onClick={handleBulkRandom}
+                        disabled={updatingSort !== null || Object.keys(jobs).length === 0}
+                        className="flex items-center gap-2 bg-card hover:bg-white/10 text-text px-4 py-2.5 rounded-xl transition-colors border border-border disabled:opacity-50"
+                    >
+                        <span className="hidden sm:inline">{updatingSort === 'all' ? 'Shuffling…' : 'Set all to Random'}</span>
+                        <span className="sm:hidden">Random</span>
+                    </button>
                 </div>
             </div>
 
-            {runningJob && runFeedback ? (
-                <div className="rounded-xl border border-plex/30 bg-plex/10 px-4 py-3 text-sm text-text flex items-center gap-2">
-                    <RefreshCcw className="w-4 h-4 text-plex animate-spin shrink-0" />
+            {runFeedback ? (
+                <div className={`rounded-xl border px-4 py-3 text-sm text-text flex items-center gap-2 ${
+                    runFeedbackTone === 'error'
+                        ? 'border-red-500/30 bg-red-500/10'
+                        : runFeedbackTone === 'warning'
+                            ? 'border-amber-500/30 bg-amber-500/10'
+                            : 'border-plex/30 bg-plex/10'
+                }`}>
+                    <RefreshCcw className={`w-4 h-4 shrink-0 ${runningJob ? 'animate-spin text-plex' : runFeedbackTone === 'error' ? 'text-red-400' : runFeedbackTone === 'warning' ? 'text-amber-400' : 'text-plex'}`} />
                     <span>{runFeedback}</span>
                 </div>
             ) : null}
@@ -235,6 +391,8 @@ const JobsPage: React.FC = () => {
                                             <div className="flex items-center gap-2 flex-wrap">
                                                 <h3 className="text-lg font-bold text-text uppercase tracking-tight truncate max-w-[200px] md:max-w-md">{job.name}</h3>
                                                 {getSourceBadge(job.source_type)}
+                                                {getSortBadge(job.sort_order)}
+                                                <JobStatusPill job={job} isRunning={runningJob === id} />
                                             </div>
                                             <div className="flex items-center gap-4 mt-1 text-sm text-muted">
                                                 <span className="flex items-center gap-1">
@@ -251,7 +409,7 @@ const JobsPage: React.FC = () => {
                                     <div className="grid grid-cols-2 md:grid-cols-3 gap-6 flex-1 max-w-2xl">
                                         <div className="flex flex-col">
                                             <span className="text-[10px] text-muted font-bold uppercase tracking-widest mb-1 flex items-center gap-1">
-                                                <CheckCircle2 className="w-3 h-3 text-green-500" /> Last Sync
+                                                <CheckCircle2 className={`w-3 h-3 ${String(job.last_status || '').toLowerCase() === 'failed' ? 'text-red-400' : String(job.last_status || '').toLowerCase() === 'warning' ? 'text-amber-400' : 'text-green-500'}`} /> Last Sync
                                             </span>
                                             <span className="text-sm font-mono text-text">{job.last_run}</span>
                                         </div>
@@ -278,6 +436,13 @@ const JobsPage: React.FC = () => {
                                         >
                                             {runningJob === id ? <RefreshCcw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
                                             {runningJob === id ? '...' : 'Run Now'}
+                                        </button>
+                                        <button
+                                            onClick={() => openEdit(id)}
+                                            className="flex items-center justify-center p-2.5 bg-card hover:bg-white/10 text-muted hover:text-text border border-border rounded-lg transition-all"
+                                            title="Edit collection settings"
+                                        >
+                                            <Pencil className="w-4 h-4" />
                                         </button>
                                         <button
                                             onClick={() => handleDelete(id)}
@@ -327,6 +492,86 @@ const JobsPage: React.FC = () => {
                     )}
                 </div>
             )}
+
+            {editingJobId && jobs[editingJobId] ? (
+                <div
+                    className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm"
+                    onClick={() => { if (!savingEdit) setEditingJobId(null); }}
+                >
+                    <div
+                        className="w-full max-w-lg overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="flex items-start justify-between gap-4 px-5 py-4 border-b border-border">
+                            <div className="min-w-0">
+                                <h3 className="text-lg font-bold text-text flex items-center gap-2">
+                                    <Pencil className="w-5 h-5 text-plex shrink-0" />
+                                    Edit collection
+                                </h3>
+                                <p className="text-sm text-muted mt-1 truncate">{jobs[editingJobId].name}</p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setEditingJobId(null)}
+                                disabled={savingEdit}
+                                className="p-2 rounded-lg text-muted hover:text-text hover:bg-white/5 disabled:opacity-50"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <div className="px-5 py-4 space-y-4">
+                            <div className="grid grid-cols-2 gap-3 text-sm">
+                                <div className="rounded-xl border border-border bg-background/40 p-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">Library</p>
+                                    <p className="text-text font-medium truncate">{jobs[editingJobId].library}</p>
+                                </div>
+                                <div className="rounded-xl border border-border bg-background/40 p-3">
+                                    <p className="text-[10px] font-bold uppercase tracking-widest text-muted mb-1">Source</p>
+                                    <p className="text-text font-medium truncate">{jobs[editingJobId].source_type.replace(/_/g, ' ')}</p>
+                                </div>
+                            </div>
+                            <CustomSelect
+                                label="Sort order"
+                                value={editSort}
+                                onChange={(v) => setEditSort(String(v))}
+                                options={SORT_OPTIONS}
+                                tooltip="Random uses a Kometa-style label smart collection — Plex reshuffles the order every time you open it."
+                            />
+                            <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-background/40 px-4 py-3">
+                                <div>
+                                    <p className="text-sm font-bold text-text">Auto-sync</p>
+                                    <p className="text-xs text-muted">Refresh this collection every 6 hours</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setEditAutoSync(!editAutoSync)}
+                                    className={`shrink-0 px-5 py-2 rounded-xl border font-bold transition-all ${editAutoSync ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-background/60 border-border text-muted'}`}
+                                >
+                                    {editAutoSync ? 'Enabled' : 'Disabled'}
+                                </button>
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-2 px-5 py-4 border-t border-border">
+                            <button
+                                type="button"
+                                onClick={() => setEditingJobId(null)}
+                                disabled={savingEdit}
+                                className="px-4 py-2 rounded-lg text-sm font-bold text-muted border border-border hover:text-text hover:bg-white/5 disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => void handleSaveEdit()}
+                                disabled={savingEdit}
+                                className="px-4 py-2 rounded-lg text-sm font-bold bg-plex text-background hover:bg-plex-hover disabled:opacity-50"
+                            >
+                                {savingEdit ? 'Saving…' : 'Save settings'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            ) : null}
         </div>
     );
 };
