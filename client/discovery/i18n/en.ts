@@ -1358,7 +1358,7 @@ export const en = {
             tautulliNotConfigured: 'Tautulli isn’t configured yet — add URL + API key under Integrations, or the portal will keep using Plex.',
             openTautulliSettings: 'Open Tautulli integration',
             showUsernames: 'Show usernames in Analytics',
-            showUsernamesDescription: 'Allow non-admin users to see real usernames on the Analytics dashboard. If disabled, usernames are shown as Viewer 1, Viewer 2, etc.',
+            showUsernamesDescription: 'Allow non-admin users to see real usernames and device names on the Analytics dashboard. If disabled, usernames are shown as Viewer 1, Viewer 2, etc., and devices as Device 1, Device 2, etc.',
             cacheTitle: 'Analytics cache',
             cacheHint: 'The Advanced Analytics badge reads this cache, not the live Tautulli test. Changing the source does not update the badge until a rebuild finishes.',
             cacheSource: 'Current source: {source}',

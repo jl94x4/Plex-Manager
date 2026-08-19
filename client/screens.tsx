@@ -9917,10 +9917,12 @@ const StreamDetailsModal: React.FC<{ session: any, onClose: () => void, isAdmin?
                 {/* Body */}
                 <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain custom-scrollbar p-5 flex flex-col gap-4">
                     <div className="grid grid-cols-2 gap-2.5">
-                        <StreamSpecCard label="Player">
-                            <p className="text-sm font-semibold text-text truncate" title={session.playerTitle}>{session.playerTitle || 'Unknown'}</p>
-                            <p className="text-xs text-muted truncate mt-0.5" title={session.playerProduct}>{session.playerProduct || '—'}</p>
-                        </StreamSpecCard>
+                        {session.playerTitle ? (
+                            <StreamSpecCard label="Player">
+                                <p className="text-sm font-semibold text-text truncate" title={session.playerTitle}>{session.playerTitle}</p>
+                                <p className="text-xs text-muted truncate mt-0.5" title={session.playerProduct}>{session.playerProduct || '—'}</p>
+                            </StreamSpecCard>
+                        ) : null}
                         <StreamSpecCard label="Network">
                             <p className="text-sm font-semibold text-text font-mono tracking-tight truncate">
                                 {isAdmin ? (session.playerAddress || 'Unknown IP') : 'Hidden'}
@@ -10682,10 +10684,12 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
                                                     </div>
 
                                                     <div className="activity-details flex flex-col gap-0.5 mt-auto">
+                                                        {session.playerTitle ? (
                                                         <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-start gap-2 text-[10px] md:text-xs border-b border-white/5 pb-0.5">
                                                             <span className="text-muted uppercase tracking-wider font-bold mt-0.5">Player</span>
                                                             <span className="detail-value text-right truncate" title={session.playerTitle}>{session.playerTitle}</span>
                                                         </div>
+                                                        ) : null}
                                                         <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-2 text-[10px] md:text-xs border-b border-white/5 pb-0.5">
                                                             <span className="text-muted uppercase tracking-wider font-bold">Stream</span>
                                                             <span className={`font-bold text-right ${session.isTranscoding ? 'text-status-expiring' : 'text-status-active'}`}>

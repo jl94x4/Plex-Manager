@@ -34,12 +34,12 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
     { id: 'achievements', tabId: 'achievements', label: 'Achievements', group: 'Portal', keywords: ['xp', 'badges', 'leaderboard', 'gamification', 'achievements', 'level'] },
     { id: 'analytics', tabId: 'analytics', label: 'Analytics', group: 'Portal', keywords: ['analytics', 'tautulli', 'watch history', 'usernames', 'rebuild', 'cache', 'source'] },
     { id: 'analytics/history-source', tabId: 'analytics', sectionId: 'history-source', label: 'Watch History Source', group: 'Portal', keywords: ['tautulli', 'plex', 'watch history', 'source', 'analytics', 'achievements'] },
-    { id: 'analytics/usernames', tabId: 'analytics', sectionId: 'usernames', label: 'Show Usernames in Analytics', group: 'Portal', keywords: ['analytics', 'usernames', 'viewer', 'privacy'] },
+    { id: 'analytics/usernames', tabId: 'analytics', sectionId: 'usernames', label: 'Show Usernames in Analytics', group: 'Portal', keywords: ['analytics', 'usernames', 'viewer', 'privacy', 'device'] },
     { id: 'analytics/cache', tabId: 'analytics', sectionId: 'cache', label: 'Analytics Cache', group: 'Portal', keywords: ['rebuild', 'cache', 'source', 'tautulli'] },
 
     { id: 'plex', tabId: 'plex', label: 'Media Player', group: 'Media Stack', keywords: ['plex', 'jellyfin', 'media', 'player', 'server'] },
     { id: 'plex/connection', tabId: 'plex', sectionId: 'connection', label: 'Media Server Connection', group: 'Media Stack', keywords: ['token', 'server', 'docker', 'url', 'jellyfin', 'plex'] },
-    { id: 'plex/privacy', tabId: 'plex', sectionId: 'privacy', label: 'Stream User Privacy', group: 'Media Stack', keywords: ['privacy', 'anonymous', 'hide', 'stream', 'users'] },
+    { id: 'plex/privacy', tabId: 'plex', sectionId: 'privacy', label: 'Stream User Privacy', group: 'Media Stack', keywords: ['privacy', 'anonymous', 'hide', 'stream', 'users', 'player', 'device', 'achievements', 'leaderboard'] },
     { id: 'plex/libraries', tabId: 'plex', sectionId: 'libraries', label: 'Default Libraries', group: 'Media Stack', keywords: ['libraries', 'share', 'temporary', 'access'] },
 
     { id: 'mediastack', tabId: 'mediastack', label: 'Integrations', group: 'Media Stack', keywords: ['integrations', 'arr', 'sonarr', 'radarr', 'lidarr', 'bazarr', 'downloads', 'qbittorrent', 'rdt-client', 'real-debrid', 'transmission', 'deluge', 'sabnzbd', 'nzbget', 'nzb'] },

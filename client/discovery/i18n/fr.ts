@@ -1314,7 +1314,7 @@ export const fr: DeepPartial<EnCatalog> = {
             tautulliNotConfigured: 'Tautulli n’est pas encore configuré — ajoutez l’URL et la clé API dans Intégrations, sinon le portail continuera à utiliser Plex.',
             openTautulliSettings: 'Ouvrir l’intégration Tautulli',
             showUsernames: 'Afficher les noms d’utilisateur dans les analyses',
-            showUsernamesDescription: 'Autorise les non-admins à voir les vrais noms sur le tableau de bord Analyses. Sinon, les noms s’affichent comme Viewer 1, Viewer 2, etc.',
+            showUsernamesDescription: 'Autorise les non-admins à voir les vrais noms d’utilisateur et d’appareil sur le tableau de bord Analyses. Sinon, les noms s’affichent comme Viewer 1, Viewer 2, etc., et les appareils comme Device 1, Device 2, etc.',
             cacheTitle: 'Cache d’analyses',
             cacheHint: 'Le badge des analyses avancées lit ce cache, pas le test Tautulli en direct. Changer la source ne met pas à jour le badge tant qu’une reconstruction n’est pas terminée.',
             cacheSource: 'Source actuelle : {source}',

@@ -2369,9 +2369,15 @@ const effectiveViewerIsAdmin = (sessionUser, isRealAdmin) => (
     !!isRealAdmin && !isImpersonatingSession(sessionUser)
 );
 
+const normalizeHideStreamUsers = (config) => (
+    config?.hideStreamUsers === true ? 'anonymous' : String(config?.hideStreamUsers || 'false')
+);
+
 const shouldObfuscateAnalyticsViewers = (sessionUser, config) => {
-    const showUsernames = !!config?.showUsernamesInAnalytics;
-    return !sessionUser?.isAdmin && !showUsernames;
+    if (sessionUser?.isAdmin) return false;
+    const hideMode = normalizeHideStreamUsers(config);
+    if (hideMode === 'anonymous' || hideMode === 'hidden') return true;
+    return !config?.showUsernamesInAnalytics;
 };
 
 const obfuscateAnalyticsTopUser = (user, index, shouldObfuscate) => {
@@ -2383,6 +2389,38 @@ const obfuscateAnalyticsTopUser = (user, index, shouldObfuscate) => {
         id: `viewer-${index + 1}`,
         username: `Viewer ${index + 1}`,
         thumb: null,
+    };
+};
+
+const obfuscateAnalyticsTopDevice = (device, index, shouldObfuscate) => {
+    if (!shouldObfuscate) return device;
+    return {
+        ...device,
+        name: `Device ${index + 1}`,
+    };
+};
+
+const shouldObfuscateViewerDeviceNames = (sessionUser, config) => (
+    shouldObfuscateAnalyticsViewers(sessionUser, config)
+);
+
+const maskStreamIdentity = (sessionUser, config, identity = {}) => {
+    const mode = normalizeHideStreamUsers(config);
+    const hide = !sessionUser?.isAdmin && (mode === 'anonymous' || mode === 'hidden');
+    if (!hide) return identity;
+    if (mode === 'hidden') {
+        return {
+            ...identity,
+            user: null,
+            userThumb: null,
+            playerTitle: null,
+        };
+    }
+    return {
+        ...identity,
+        user: 'Anonymous',
+        userThumb: null,
+        playerTitle: 'Anonymous',
     };
 };
 
@@ -13880,8 +13918,11 @@ app.get('/api/plex/dashboard', requireAuth, requireMember, async (req, res) => {
                 const progress = duration > 0 ? (viewOffset / duration) * 100 : 0;
                 const plexUrl = `https://app.plex.tv/desktop/#!/server/${config.serverIdentifier}/details?key=${encodeURIComponent(m.key)}`;
 
-                const hideConfig = config.hideStreamUsers === true ? 'anonymous' : (config.hideStreamUsers || 'false');
-                const isHidden = !req.user.isAdmin && (hideConfig === 'anonymous' || hideConfig === 'hidden');
+                const identity = maskStreamIdentity(req.user, config, {
+                    user: m.User ? m.User.title : 'Unknown User',
+                    userThumb: m.User ? m.User.thumb : null,
+                    playerTitle: player.title || 'Unknown Player',
+                });
 
                 return {
                     sessionId: session.id || m.sessionKey,
@@ -13890,10 +13931,10 @@ app.get('/api/plex/dashboard', requireAuth, requireMember, async (req, res) => {
                     grandparentTitle: m.grandparentTitle,
                     year: m.year,
                     thumb: m.grandparentThumb || m.parentThumb || m.thumb,
-                    user: (isHidden && hideConfig === 'hidden') ? null : (isHidden ? 'Anonymous' : (m.User ? m.User.title : 'Unknown User')),
-                    userThumb: isHidden ? null : (m.User ? m.User.thumb : null),
+                    user: identity.user,
+                    userThumb: identity.userThumb,
                     playerProduct: player.product || 'Unknown Device',
-                    playerTitle: player.title || 'Unknown Player',
+                    playerTitle: identity.playerTitle,
                     playerAddress: req.user.isAdmin ? (player.address || 'Unknown IP') : null,
                     sessionLocation: session.location || 'Unknown',
                     state: player.state || 'playing',
@@ -14516,7 +14557,6 @@ app.get('/api/jellyfin/dashboard', requireAuth, requireMember, async (req, res) 
         const episodes = recent?.episodes || [];
         const music = recent?.music || [];
 
-        const hideConfig = config.hideStreamUsers === true ? 'anonymous' : (config.hideStreamUsers || 'false');
         const activeSessions = (Array.isArray(sessions) ? sessions : [])
             .filter((session) => session.NowPlayingItem)
             .map((session) => {
@@ -14530,7 +14570,11 @@ app.get('/api/jellyfin/dashboard', requireAuth, requireMember, async (req, res) 
                 const mediaSourceBitrate = (Array.isArray(item.MediaSources) ? item.MediaSources : [])
                     .reduce((max, source) => Math.max(max, Number(source.Bitrate || source.VideoBitrate || 0) + Number(source.AudioBitrate || 0)), 0);
                 const reportedBitrate = Number(session.TranscodingInfo?.Bitrate || item.Bitrate || streamBitrate || mediaSourceBitrate || 0);
-                const isHidden = !req.user.isAdmin && (hideConfig === 'anonymous' || hideConfig === 'hidden');
+                const identity = maskStreamIdentity(req.user, config, {
+                    user: session.UserName || 'Unknown User',
+                    userThumb: session.UserId ? withBasePath(`/api/jellyfin/user-image?userId=${encodeURIComponent(session.UserId)}`) : null,
+                    playerTitle: session.DeviceName || session.Client || 'Jellyfin Player',
+                });
                 return {
                     sessionId: session.Id,
                     title: item.Name,
@@ -14542,10 +14586,10 @@ app.get('/api/jellyfin/dashboard', requireAuth, requireMember, async (req, res) 
                         ? jellyfinImageUrlForItem(item.Type === 'Episode' ? (item.PrimaryImageItemId || item.SeriesId || item.ParentId || item.Id) : (item.PrimaryImageItemId || item.Id), 300, 450)
                         : '',
                     posterFallbackUrl: item.Type === 'Episode' && hasJellyfinPrimaryImage(item) && item.Id ? jellyfinImageUrlForItem(item.Id, 300, 450) : '',
-                    user: (isHidden && hideConfig === 'hidden') ? null : (isHidden ? 'Anonymous' : (session.UserName || 'Unknown User')),
-                    userThumb: (!isHidden && session.UserId) ? withBasePath(`/api/jellyfin/user-image?userId=${encodeURIComponent(session.UserId)}`) : null,
+                    user: identity.user,
+                    userThumb: identity.userThumb,
                     playerProduct: session.Client || 'Jellyfin',
-                    playerTitle: session.DeviceName || session.Client || 'Jellyfin Player',
+                    playerTitle: identity.playerTitle,
                     playerAddress: req.user.isAdmin ? (session.RemoteEndPoint || 'Unknown IP') : null,
                     sessionLocation: 'remote',
                     state: playState.IsPaused ? 'paused' : 'playing',
@@ -15609,6 +15653,15 @@ app.get('/api/tautulli/graphs', requireAuth, requireMember, async (req, res) => 
                 })),
             };
         }
+        if (shouldObfuscateViewerDeviceNames(req.user, config) && payload.get_plays_by_top_10_platforms && Array.isArray(payload.get_plays_by_top_10_platforms.series)) {
+            payload.get_plays_by_top_10_platforms = {
+                ...payload.get_plays_by_top_10_platforms,
+                series: payload.get_plays_by_top_10_platforms.series.map((series, index) => ({
+                    ...series,
+                    name: `Device ${index + 1}`
+                })),
+            };
+        }
 
         return res.json(payload);
     } catch (e) {
@@ -16081,7 +16134,8 @@ app.get('/api/jellystat/analytics', requireAuth, requireMember, async (req, res)
         const topDevices = (Array.isArray(mostUsedClients) ? mostUsedClients : []).map((device, index) => ({
             name: device.Client || device.DeviceName || device.Name || device.AppName || `Client ${index + 1}`,
             plays: toNumber(device.Plays ?? device.Count, 0),
-        })).sort((a, b) => b.plays - a.plays).slice(0, 10);
+        })).sort((a, b) => b.plays - a.plays).slice(0, 10)
+            .map((device, index) => obfuscateAnalyticsTopDevice(device, index, shouldObfuscateViewerDeviceNames(req.user, config)));
 
         const playbackCounts = {};
         (Array.isArray(playbackMethods) ? playbackMethods : []).forEach((method) => {
@@ -16418,9 +16472,13 @@ app.get('/api/plex/analytics', requireAuth, requireMember, async (req, res) => {
             ...user,
             username: user.username || `User ${index + 1}`,
         }, index, shouldObfuscateUsernames));
+        const topDevices = (cachedData.topDevices || []).map((device, index) => (
+            obfuscateAnalyticsTopDevice(device, index, shouldObfuscateViewerDeviceNames(req.user, config))
+        ));
         const data = {
             ...cachedData,
             topUsers,
+            topDevices,
             requestedPeriodDays: reqDays,
             cachePeriodDays: cachedPeriod,
             cacheFallback: cachedPeriod != null && String(cachedPeriod) !== String(reqDays),
