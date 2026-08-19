@@ -43,6 +43,7 @@ import { filterNavOrder, ensureCompleteNavOrder, resolveMemberNavOrder, MOBILE_N
 import { isFirefoxMobileClient, useFirefoxMobileNavShell } from './shared/useFirefoxMobileNavShell';
 import { ProfileBadgeRack, AchievementsHomeWidget } from './achievements/AchievementsDashboard';
 import { AchievementsAnalyticsLeaderboard } from './achievements/AchievementsAnalyticsLeaderboard';
+import { goToProfile } from './profile/helpers';
 import {
     STATUS_PERIODS,
     barsForPeriod,
@@ -738,7 +739,7 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
 
 
 
-const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: string | null, days: string, onClose: () => void }> = ({ userId, username, thumb, days, onClose }) => {
+const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: string | null, days: string, onClose: () => void, onOpenProfile?: (userId: string) => void }> = ({ userId, username, thumb, days, onClose, onOpenProfile }) => {
     const { t } = useDiscoverI18n();
     const [data, setData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
@@ -883,7 +884,18 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                             <p className="text-muted text-sm">{loading ? t('userAnalytics.page.loadingStats') : `${t('userAnalytics.page.totalPlays', { count: data?.totalPlays || 0 })} (${days === 'all' ? t('wrapUp.allTime') : t('wrapUp.lastNDays', { days })})`}</p>
                         </div>
                     </div>
-                    <button onClick={onClose} aria-label={t('common.close')} className="text-muted hover:text-white transition-colors bg-white/5 p-2 rounded-full"><X className="w-6 h-6" /></button>
+                    <div className="flex items-center gap-2">
+                        {onOpenProfile ? (
+                            <button
+                                type="button"
+                                onClick={() => onOpenProfile(userId)}
+                                className="text-sm font-bold text-plex hover:underline px-3 py-2 rounded-lg border border-white/10 bg-white/5"
+                            >
+                                {t('usersAdmin.actions.viewProfile')}
+                            </button>
+                        ) : null}
+                        <button onClick={onClose} aria-label={t('common.close')} className="text-muted hover:text-white transition-colors bg-white/5 p-2 rounded-full"><X className="w-6 h-6" /></button>
+                    </div>
                 </div>
 
                 {/* Tabs */}
@@ -3745,9 +3757,21 @@ const DetailsModal: React.FC<{ item: any, onClose: () => void }> = ({ item, onCl
     );
 };
 
-const ItemViewersModal: React.FC<{ item: { title: string, viewers: Record<string, any> } | null, onClose: () => void, resolveAvatar: (t: string|null|undefined) => string }> = ({ item, onClose, resolveAvatar }) => {
+const ItemViewersModal: React.FC<{
+    item: { title: string, viewers: Record<string, any> } | null,
+    onClose: () => void,
+    resolveAvatar: (t: string|null|undefined) => string,
+    onOpenProfile?: (accountId: string, username?: string) => void,
+}> = ({ item, onClose, resolveAvatar, onOpenProfile }) => {
     if (!item) return null;
-    const viewersArray = item.viewers ? Object.values(item.viewers).sort((a: any, b: any) => b.plays - a.plays) : [];
+    const viewersArray = item.viewers
+        ? Object.entries(item.viewers)
+            .map(([accountId, row]: [string, any]) => ({
+                ...row,
+                accountId: row?.accountId || accountId,
+            }))
+            .sort((a: any, b: any) => (b.plays || 0) - (a.plays || 0))
+        : [];
     
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 animate-fade-in backdrop-blur-sm" onClick={onClose}>
@@ -3763,19 +3787,37 @@ const ItemViewersModal: React.FC<{ item: { title: string, viewers: Record<string
                         <p className="p-4 text-center text-muted text-sm leading-relaxed">No specific viewer data available for this item yet. Viewer data will populate automatically as new views occur.</p>
                     ) : (
                         <div className="flex flex-col gap-1 p-2">
-                            {viewersArray.map((v: any, i: number) => (
-                                <div key={i} className="flex items-center justify-between p-3 bg-background/50 hover:bg-white/5 rounded-xl transition-colors border border-transparent hover:border-white/5">
-                                    <div className="flex items-center gap-3">
+                            {viewersArray.map((v: any, i: number) => {
+                                const name = String(v.username || '').trim();
+                                const anonymous = !name || name.toLowerCase() === 'anonymous' || /^viewer\s+\d+$/i.test(name);
+                                const canOpen = !anonymous && typeof onOpenProfile === 'function' && (v.accountId || name);
+                                return (
+                                <div key={v.accountId || i} className="flex items-center justify-between p-3 bg-background/50 hover:bg-white/5 rounded-xl transition-colors border border-transparent hover:border-white/5">
+                                    <div className="flex items-center gap-3 min-w-0">
                                         <div className="w-10 h-10 rounded-full overflow-hidden bg-white/10 shadow-inner flex-shrink-0">
-                                            <img src={resolveAvatar(v.thumb)} alt={v.username} className="w-full h-full object-cover" />
+                                            <img src={resolveAvatar(v.thumb)} alt={name} className="w-full h-full object-cover" />
                                         </div>
-                                        <span className="font-bold text-text truncate max-w-[150px] sm:max-w-[200px]">{v.username}</span>
+                                        {canOpen ? (
+                                            <button
+                                                type="button"
+                                                className="font-bold text-text truncate max-w-[150px] sm:max-w-[200px] hover:text-plex text-left"
+                                                onClick={() => {
+                                                    onOpenProfile(String(v.accountId || name), name);
+                                                    onClose();
+                                                }}
+                                            >
+                                                {name}
+                                            </button>
+                                        ) : (
+                                            <span className="font-bold text-text truncate max-w-[150px] sm:max-w-[200px]">{name}</span>
+                                        )}
                                     </div>
                                     <div className="flex items-center gap-1.5 bg-plex/10 text-plex px-3 py-1.5 rounded-lg text-sm font-mono font-bold shadow-sm">
                                         {v.plays} {v.plays === 1 ? 'play' : 'plays'}
                                     </div>
                                 </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
                 </div>
@@ -3853,6 +3895,7 @@ export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any, 
     const userSearchInputRef = useRef<HTMLInputElement>(null);
     const [userSearchMenuBox, setUserSearchMenuBox] = useState<{ top: number; left: number; width: number; maxHeight: number } | null>(null);
     const [contentTab, setContentTab] = useState<'movies' | 'shows' | 'music'>('movies');
+    const [viewerItem, setViewerItem] = useState<{ title: string, viewers: Record<string, any> } | null>(null);
     const [viewerPage, setViewerPage] = useState(1);
     const viewersPerPage = 10;
     const [viewTab, setViewTab] = useState<'overview' | 'graphs'>('overview');
@@ -4849,8 +4892,10 @@ return (
                             )}
                         >
                             <div className="flex flex-col gap-4">
-                                {activeContent.length === 0 ? <p className="text-muted text-sm col-span-full">No data available.</p> : activeContent.slice(0, 10).map((item, idx) => (
-                                    <a key={item.key} href={item.plexUrl} target="_blank" rel="noreferrer" className="flex flex-col sm:flex-row bg-black/20 rounded-xl overflow-hidden hover:bg-black/40 transition-all cursor-pointer group hover:ring-1 hover:ring-plex shadow-md">
+                                {activeContent.length === 0 ? <p className="text-muted text-sm col-span-full">No data available.</p> : activeContent.slice(0, 10).map((item, idx) => {
+                                    const viewerCount = item.viewers ? Object.keys(item.viewers).length : 0;
+                                    return (
+                                    <div key={item.key} className="flex flex-col sm:flex-row bg-black/20 rounded-xl overflow-hidden hover:bg-black/40 transition-all group hover:ring-1 hover:ring-plex shadow-md">
                                         <div className={`sm:w-32 lg:w-40 flex-shrink-0 relative ${contentTab === 'music' ? 'aspect-square' : 'aspect-[2/3]'}`}>
                                             {item.thumbUrl ? (
                                                 <img src={resolvePortalAssetUrl(item.thumbUrl)} alt={item.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
@@ -4884,19 +4929,39 @@ return (
                                                     {item.summary || "No summary available."}
                                                 </p>
                                             </div>
-                                            {item.genres && item.genres.length > 0 && (
-                                                <div className="flex flex-wrap gap-2 mt-auto">
-                                                    {item.genres.slice(0, 4).map((g: string, i: number) => (
+                                            <div className="flex flex-wrap items-center gap-2 mt-auto">
+                                                {item.genres && item.genres.length > 0 ? (
+                                                    item.genres.slice(0, 4).map((g: string, i: number) => (
                                                         <span key={i} className="text-[10px] uppercase tracking-wider bg-white/5 border border-white/10 text-muted px-2 py-1 rounded-full shadow-sm">{g}</span>
-                                                    ))}
-                                                    {item.genres.length > 4 && (
-                                                        <span className="text-[10px] uppercase tracking-wider bg-white/5 border border-white/10 text-muted px-2 py-1 rounded-full shadow-sm">+{item.genres.length - 4}</span>
-                                                    )}
-                                                </div>
-                                            )}
+                                                    ))
+                                                ) : null}
+                                                {item.genres && item.genres.length > 4 ? (
+                                                    <span className="text-[10px] uppercase tracking-wider bg-white/5 border border-white/10 text-muted px-2 py-1 rounded-full shadow-sm">+{item.genres.length - 4}</span>
+                                                ) : null}
+                                                {viewerCount > 0 ? (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setViewerItem(item)}
+                                                        className="text-[10px] uppercase tracking-wider bg-plex/15 border border-plex/30 text-plex px-2 py-1 rounded-full shadow-sm hover:bg-plex/25"
+                                                    >
+                                                        {t('analytics.overviewSnapshot.viewers', { count: viewerCount })}
+                                                    </button>
+                                                ) : null}
+                                                {item.plexUrl ? (
+                                                    <a
+                                                        href={item.plexUrl}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="text-[10px] uppercase tracking-wider bg-white/5 border border-white/10 text-muted px-2 py-1 rounded-full shadow-sm hover:text-text hover:border-plex/40"
+                                                    >
+                                                        {t('common.view')}
+                                                    </a>
+                                                ) : null}
+                                            </div>
                                         </div>
-                                    </a>
-                                ))}
+                                    </div>
+                                    );
+                                })}
                             </div>
                         </DashboardPanel>
                     </div>
@@ -4908,6 +4973,10 @@ return (
                     username={selectedUser.username}
                     thumb={selectedUser.thumb}
                     days={days}
+                    onOpenProfile={(id) => {
+                        setSelectedUser(null);
+                        if (onNavigate) goToProfile(onNavigate, id, selectedUser.username);
+                    }}
                     onClose={() => {
                         setSelectedUser(null);
                         if (window.location.hash.startsWith('#user=')) {
@@ -4916,6 +4985,17 @@ return (
                     }}
                 />
             )}
+            {viewerItem ? (
+                <ItemViewersModal
+                    item={viewerItem}
+                    onClose={() => setViewerItem(null)}
+                    resolveAvatar={(thumb) => resolveUserAvatar(thumb, 80, 80)}
+                    onOpenProfile={(id, username) => {
+                        setViewerItem(null);
+                        if (onNavigate) goToProfile(onNavigate, id, username);
+                    }}
+                />
+            ) : null}
         </DashboardPageShell>
     );
 };

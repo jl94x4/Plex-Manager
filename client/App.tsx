@@ -717,6 +717,7 @@ export const MainApp: React.FC = () => {
                         sessionInfo={sessionInfo}
                         onNavigate={setRoute as any}
                         onLogout={handleLogout}
+                        onViewAsUser={handleViewAsUser}
                     />
                 </Suspense>
             );

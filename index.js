@@ -15972,6 +15972,7 @@ const aggregateAnalyticsWindow = (historyItems, { afterTs = 0, beforeTs = null }
                 const u = userCounts[item.accountID];
                 if (!targetDict[contentKey].viewers[item.accountID]) {
                     targetDict[contentKey].viewers[item.accountID] = {
+                        accountId: String(item.accountID),
                         username: u.username,
                         thumb: u.thumb,
                         plays: 0

@@ -4,7 +4,7 @@ import {
     Shield, SlidersHorizontal, Sparkles, Swords, Trophy, User,
 } from 'lucide-react';
 import { apiFetch } from '../shared/api';
-import { logoUrl } from '../shared/basePath';
+import { logoUrl, resolvePortalAssetUrl } from '../shared/basePath';
 import { daysSinceDate, formatUkDate, getDaysUntilExpiry } from '../shared/format';
 import { DashboardPageShell, DashboardPanel } from '../shared/dashboard/DashboardChrome';
 import { discoverRowCardWidthClass } from '../shared/portalLayout';
@@ -35,6 +35,7 @@ type Props = {
     onNavigate: (route: string, options?: { path?: string }) => void;
     onLogout: () => void;
     locationPath?: string;
+    onViewAsUser?: (userId: string) => Promise<void>;
 };
 
 export const ProfilePage: React.FC<Props> = ({
@@ -42,6 +43,7 @@ export const ProfilePage: React.FC<Props> = ({
     onNavigate,
     onLogout,
     locationPath,
+    onViewAsUser,
 }) => {
     const { t } = useDiscoverI18n();
     const [data, setData] = useState<any>(null);
@@ -57,6 +59,7 @@ export const ProfilePage: React.FC<Props> = ({
     const [pinnedIds, setPinnedIds] = useState<string[]>([]);
     const [pinBusy, setPinBusy] = useState(false);
     const [nowPlaying, setNowPlaying] = useState<any>(null);
+    const [viewAsBusy, setViewAsBusy] = useState(false);
     const accountId = profileAccountIdFromPath(locationPath);
     const mediaServerType = String(sessionInfo?.mediaServerType || 'plex').toLowerCase();
     const isJellyfinPortal = mediaServerType === 'jellyfin' || mediaServerType === 'emby';
@@ -213,6 +216,11 @@ export const ProfilePage: React.FC<Props> = ({
         () => mergeProfileWrapUp(data?.watch?.wrapUp || null, personalWrapUp, Number(identity.xp) || undefined),
         [data?.watch?.wrapUp, personalWrapUp, identity.xp],
     );
+    const lastWatched = isSelf && Array.isArray(personalWrapUp?.recentHistory)
+        ? personalWrapUp.recentHistory[0]
+        : null;
+    const unlocks = Array.isArray(achievements?.earned) ? achievements.earned.slice(0, 8) : [];
+    const story = data?.watch?.taste || {};
 
     useEffect(() => {
         if (Array.isArray(data?.achievements?.pinnedBadgeIds)) {
@@ -315,7 +323,9 @@ export const ProfilePage: React.FC<Props> = ({
                                         ) : null}
                                     </h1>
                                     <p className="text-sm text-muted mt-1 leading-snug">
-                                        {identity.classTitle?.blurb || t('profilePage.subtitle', { provider: identity.provider || 'Plex' })}
+                                        {nowPlaying
+                                            ? t('profilePage.watchingNow', { title: nowPlaying.grandparentTitle || nowPlaying.title })
+                                            : (identity.classTitle?.blurb || t('profilePage.subtitle', { provider: identity.provider || 'Plex' }))}
                                     </p>
                                     <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-semibold">
                                         {achievements?.enabled ? (
@@ -389,6 +399,19 @@ export const ProfilePage: React.FC<Props> = ({
                                                 {t('navigation.logout')}
                                             </button>
                                         </>
+                                    ) : (data?.viewer?.isAdmin && account?.id && onViewAsUser) ? (
+                                        <button
+                                            type="button"
+                                            disabled={viewAsBusy}
+                                            onClick={() => {
+                                                setViewAsBusy(true);
+                                                void onViewAsUser(String(account.id)).finally(() => setViewAsBusy(false));
+                                            }}
+                                            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-sm font-bold text-text hover:border-plex/40 disabled:opacity-50"
+                                        >
+                                            <User className="w-4 h-4 text-plex" />
+                                            {t('profilePage.viewAsUser')}
+                                        </button>
                                     ) : null}
                                 </div>
                             ) : null}
@@ -444,6 +467,53 @@ export const ProfilePage: React.FC<Props> = ({
                         </DashboardPanel>
                     ) : null}
 
+                    {!data.privacy?.locked && lastWatched ? (
+                        <DashboardPanel title={t('profilePage.lastWatched')} subtitle={t('profilePage.lastWatchedHint')}>
+                            <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/25 p-3">
+                                {lastWatched.thumbUrl ? (
+                                    <img
+                                        src={resolvePortalAssetUrl(lastWatched.thumbUrl)}
+                                        alt=""
+                                        className="w-16 h-24 rounded-lg object-cover border border-white/10 shrink-0"
+                                    />
+                                ) : (
+                                    <span className="inline-flex w-16 h-24 items-center justify-center rounded-lg border border-white/10 bg-black/40 text-plex shrink-0">
+                                        <Play className="w-6 h-6" />
+                                    </span>
+                                )}
+                                <div className="min-w-0">
+                                    <p className="text-sm font-black text-text truncate">{lastWatched.title}</p>
+                                    {lastWatched.episodeTitle ? (
+                                        <p className="text-xs text-muted truncate mt-0.5">{lastWatched.episodeTitle}</p>
+                                    ) : null}
+                                </div>
+                            </div>
+                        </DashboardPanel>
+                    ) : null}
+
+                    {!data.privacy?.locked && (Number(story.activeDays) > 0 || Number(story.bingeMax) > 0 || Number(story.currentStreak) > 0 || Number(achievements?.firstUnlocks?.count) > 0) ? (
+                        <DashboardPanel title={t('profilePage.serverStory')} subtitle={t('profilePage.serverStoryHint')}>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                {[
+                                    { label: t('profilePage.activeDays'), value: Number(story.activeDays) || 0 },
+                                    { label: t('profilePage.currentStreak'), value: Number(story.currentStreak) || 0 },
+                                    { label: t('profilePage.longestStreak'), value: Number(story.longestStreak) || 0 },
+                                    { label: t('profilePage.longestBinge'), value: Number(story.bingeMax) || 0 },
+                                ].filter((row) => row.value > 0).map((row) => (
+                                    <div key={row.label} className="rounded-xl border border-white/10 bg-black/25 px-3 py-2.5">
+                                        <p className="text-[10px] uppercase tracking-widest font-bold text-muted">{row.label}</p>
+                                        <p className="mt-1 text-lg font-black text-text">{row.value}</p>
+                                    </div>
+                                ))}
+                            </div>
+                            {Number(achievements?.firstUnlocks?.count) > 0 ? (
+                                <p className="text-sm text-muted mt-3">
+                                    {t('profilePage.firstBloods', { count: Number(achievements.firstUnlocks.count) })}
+                                </p>
+                            ) : null}
+                        </DashboardPanel>
+                    ) : null}
+
                     {!data.privacy?.locked && data.compare ? (
                         <DashboardPanel title={t('profilePage.compare')} subtitle={t('profilePage.compareHint')}>
                             <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -486,7 +556,7 @@ export const ProfilePage: React.FC<Props> = ({
                                     { label: t('mediaType.movie'), value: data.watch.taste.mix?.movies },
                                     { label: t('mediaType.tv'), value: data.watch.taste.mix?.shows },
                                     { label: t('mediaType.music'), value: data.watch.taste.mix?.music },
-                                    { label: t('profilePage.watchStory'), value: Math.round(Number(data.watch.taste.hoursWatched) || 0) },
+                                    { label: t('profilePage.hours'), value: Math.round(Number(data.watch.taste.hoursWatched) || 0) },
                                 ].map((row) => (
                                     <div key={row.label} className="rounded-xl border border-white/10 bg-black/25 px-3 py-2.5">
                                         <p className="text-[10px] uppercase tracking-widest font-bold text-muted">{row.label}</p>
@@ -575,6 +645,32 @@ export const ProfilePage: React.FC<Props> = ({
                                     ))}
                                 </div>
                             ) : null}
+                        </DashboardPanel>
+                    ) : null}
+
+                    {achievements?.showOnProfile && unlocks.length > 0 ? (
+                        <DashboardPanel title={t('profilePage.unlockTimeline')} subtitle={t('profilePage.unlockTimelineHint')}>
+                            <div className="flex flex-col gap-1.5">
+                                {unlocks.map((badge: any) => (
+                                    <button
+                                        key={badge.id}
+                                        type="button"
+                                        onClick={() => setSelectedBadgeId(String(badge.id))}
+                                        className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 text-left hover:border-plex/40"
+                                    >
+                                        <span className="text-2xl leading-none">{badge.icon || '🏅'}</span>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="text-sm font-bold text-text truncate">{badge.name}</p>
+                                            <p className="text-[11px] text-muted mt-0.5 capitalize">{badge.rarity}</p>
+                                        </div>
+                                        {badge.earnedAt ? (
+                                            <span className="text-[11px] font-mono text-muted shrink-0">
+                                                {formatUkDate(badge.earnedAt)}
+                                            </span>
+                                        ) : null}
+                                    </button>
+                                ))}
+                            </div>
                         </DashboardPanel>
                     ) : null}
 
