@@ -2258,8 +2258,15 @@ def _collection_list_row_unsafe(library, coll, config=None):
                 return False
             items, total = _parse_plex_metadata_list(resp.content, resp.headers.get('Content-Type'))
             for row in items:
-                if str(row.get('ratingKey') or '').strip() == rk:
-                    return _collection_list_row_should_purge(row)
+                if str(row.get('ratingKey') or '').strip() != rk:
+                    continue
+                if _collection_list_row_should_purge(row):
+                    return True
+                # A collection row without a movie/show subtype (e.g. a smart
+                # filter missing its type=) also crashes Plex Web's Collections
+                # tab, even though the row itself is type 18.
+                subtype = str(row.get('subtype') or '').strip().lower()
+                return subtype not in ('movie', 'show')
             if not items or start + len(items) >= total:
                 return False
             start += page_size
