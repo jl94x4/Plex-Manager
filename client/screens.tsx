@@ -8,6 +8,7 @@ import { LibraryMaintenancePanel } from './maintenance/LibraryMaintenancePanel';
 import { appConfirm } from './shared/confirm';
 import { apiFetch, apiFetchShared } from './shared/api';
 import { InAppNotificationsBell } from './shared/InAppNotificationsBell';
+import { IN_APP_NOTIFICATIONS_CHANGED_EVENT } from './shared/inAppNotificationsRefresh';
 import { getPublicOrigin, logoUrl, portalUrl, resolvePortalAssetUrl, stripBasePath } from './shared/basePath';
 import { formatDate, getDaysUntilExpiry, getAccessProgressPct, addMonths, addYears, formatTime, formatEventName, formatDateTime, hexToRgb, formatSizeCeil, formatStreamingHour } from './shared/format';
 import { CustomSelect, ConfirmModal, StyledCheckbox, ScrollReveal } from './shared/ui';
@@ -10279,10 +10280,11 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
         }
         if (!silent) setOpsLoading(true);
         try {
-            const [statusRes, requestsRes, notificationsRes] = await Promise.all([
+            const [statusRes, requestsRes, notificationsRes, inboxRes] = await Promise.all([
                 apiFetch('/api/status').catch(() => null),
                 apiFetch('/api/requests/count').catch(() => null),
                 apiFetch('/api/admin/notifications/status').catch(() => null),
+                apiFetch('/api/notifications?limit=1').catch(() => null),
             ]);
 
             const services = Array.isArray(statusRes?.config?.services) ? statusRes.config.services : [];
@@ -10322,8 +10324,8 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
                     .slice(0, 4),
                 requestPending: Math.max(0, Number(requestsRes?.pending || 0)),
                 requestEngineConnected: requestsRes?.connected !== false,
-                notificationUnread: Math.max(0, Number(notificationsRes?.inApp?.unread || 0)),
-                notificationTotal: Math.max(0, Number(notificationsRes?.inApp?.total || 0)),
+                notificationUnread: Math.max(0, Number(inboxRes?.unread || 0)),
+                notificationTotal: Math.max(0, Number(inboxRes?.total || 0)),
                 failingJobs,
                 runningJobs,
             });
@@ -10342,6 +10344,13 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
     useEffect(() => {
         if (!isAdmin) return;
         void fetchOpsSnapshot(false);
+    }, [isAdmin, fetchOpsSnapshot]);
+
+    useEffect(() => {
+        if (!isAdmin) return;
+        const onChanged = () => { void fetchOpsSnapshot(true); };
+        window.addEventListener(IN_APP_NOTIFICATIONS_CHANGED_EVENT, onChanged);
+        return () => window.removeEventListener(IN_APP_NOTIFICATIONS_CHANGED_EVENT, onChanged);
     }, [isAdmin, fetchOpsSnapshot]);
 
     usePoll(() => { if (isDocumentVisible) void fetchDashboardOnly(); }, isDocumentVisible ? 10_000 : null);

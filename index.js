@@ -1351,7 +1351,7 @@ import {
 import { syncSeerrRequestAvailableNotifications } from './lib/notifications/seerrAvailablePoll.js';
 import {
     listInAppNotificationsForUser,
-    countUnreadInAppNotifications,
+    summarizeInAppNotificationsForUser,
     markInAppNotificationsRead,
     clearInAppNotificationsForUser,
     setInAppNotificationCreatedHook,
@@ -3959,7 +3959,7 @@ app.get('/api/notifications', requireAuth, requireMember, async (req, res) => {
         const unreadOnly = ['1', 'true', 'yes'].includes(String(req.query?.unreadOnly || req.query?.unread || '').toLowerCase());
         const type = String(req.query?.type || '').trim();
         const items = await listInAppNotificationsForUser(localUser.id, { limit, unreadOnly, type });
-        const unread = await countUnreadInAppNotifications(localUser.id);
+        const { unread, total } = await summarizeInAppNotificationsForUser(localUser.id);
         let enriched = items;
         try {
             const store = createRequestStore({ dataDir: REQUESTS_DIR });
@@ -3983,7 +3983,7 @@ app.get('/api/notifications', requireAuth, requireMember, async (req, res) => {
         } catch (enrichError) {
             log(`[notifications] enrich failed: ${enrichError?.message || enrichError}`);
         }
-        res.json({ items: enriched, unread });
+        res.json({ items: enriched, unread, total });
     } catch (e) {
         log(`Error listing notifications: ${e.message}`);
         res.status(500).json({ error: 'Failed to load notifications' });
