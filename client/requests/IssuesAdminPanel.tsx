@@ -24,6 +24,7 @@ import {
     issueStatusBadgeClass,
 } from '../discovery/issueUtils';
 import { useDiscoverI18n } from '../discovery/i18n';
+import { goToProfile } from '../profile/helpers';
 
 type IssueFilter = 'open' | 'resolved';
 
@@ -273,7 +274,14 @@ export const IssuesAdminPanel: React.FC<{ onCountsChange?: () => void }> = ({ on
                                                 {item.year ? <span className="text-muted font-semibold ml-2">{item.year}</span> : null}
                                             </h3>
                                             <p className="text-xs text-muted mt-1">
-                                                {t('issuesAdmin.labels.reportedBy')} {item.createdBy.displayName}
+                                                {t('issuesAdmin.labels.reportedBy')}{' '}
+                                                <button
+                                                    type="button"
+                                                    className="hover:text-plex hover:underline"
+                                                    onClick={() => goToProfile(undefined, item.createdBy.displayName)}
+                                                >
+                                                    {item.createdBy.displayName}
+                                                </button>
                                                 {' · '}
                                                 {formatIssueRelativeTime(item.createdAt || item.updatedAt, t)}
                                                 {location ? ` · ${location}` : ''}

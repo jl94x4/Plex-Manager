@@ -588,10 +588,13 @@ export const AchievementsDashboard: React.FC<{
     const [pinBusy, setPinBusy] = useState(false);
     const [celebrationBadges, setCelebrationBadges] = useState<any[]>([]);
 
-    const openMemberProfile = (entry: { accountId?: string | number | null; rank?: number | null } | null) => {
+    const openMemberProfile = (entry: { accountId?: string | number | null; username?: string | null; rank?: number | null } | null) => {
         if (!entry) return;
-        if (entry.accountId != null && String(entry.accountId).trim() && onNavigate) {
-            onNavigate('profile', { path: `/profile/${encodeURIComponent(String(entry.accountId))}` });
+        const accountId = String(entry.accountId || '').trim();
+        const username = String(entry.username || '').trim();
+        const anonymous = !username || /^viewer\s+\d+$/i.test(username) || username.toLowerCase() === 'anonymous';
+        if ((accountId || (!anonymous && username)) && onNavigate) {
+            onNavigate('profile', { path: `/profile/${encodeURIComponent(accountId || username)}` });
             return;
         }
         setDossierQuery(

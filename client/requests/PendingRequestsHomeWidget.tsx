@@ -9,6 +9,7 @@ import { RequestMetaChips } from './RequestMetaChips';
 import type { PortalRequestItem } from './types';
 import { useDiscoverI18n } from '../discovery/i18n';
 import type { DiscoverTranslate } from '../discovery/i18n/types';
+import { goToProfile, profileKeyForRequester } from '../profile/helpers';
 
 const formatRelativeTime = (t: DiscoverTranslate, value?: string | null) => {
     if (!value) return '';
@@ -194,7 +195,15 @@ export const PendingRequestsHomeWidget: React.FC<{
                                 {item.year ? <span className="text-muted font-medium"> ({item.year})</span> : null}
                             </p>
                             <p className="text-xs text-muted mt-1 truncate">
-                                {item.requestedBy.displayName} · {formatRelativeTime(t, item.createdAt)}
+                                <button
+                                    type="button"
+                                    className="hover:text-plex hover:underline"
+                                    onClick={() => goToProfile(undefined, profileKeyForRequester(item.requestedBy))}
+                                >
+                                    {item.requestedBy.displayName}
+                                </button>
+                                {' · '}
+                                {formatRelativeTime(t, item.createdAt)}
                                 {item.is4k ? ' · 4K' : ''}
                             </p>
                             <RequestMetaChips
@@ -250,7 +259,15 @@ export const PendingRequestsHomeWidget: React.FC<{
                         {item.year ? <span className="text-muted font-normal"> ({item.year})</span> : null}
                     </p>
                     <p className="text-[11px] text-muted truncate">
-                        {item.requestedBy.displayName} · {formatRelativeTime(t, item.createdAt)}
+                        <button
+                            type="button"
+                            className="hover:text-plex hover:underline"
+                            onClick={() => goToProfile(undefined, profileKeyForRequester(item.requestedBy))}
+                        >
+                            {item.requestedBy.displayName}
+                        </button>
+                        {' · '}
+                        {formatRelativeTime(t, item.createdAt)}
                         {item.is4k ? ' · 4K' : ''}
                     </p>
                 </div>

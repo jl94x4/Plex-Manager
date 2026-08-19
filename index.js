@@ -3956,6 +3956,7 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             privacyShowName,
             privacyShowPlayer,
             privacyShowAchievements,
+            privacyShowProfile,
         } = req.body || {};
         const users = await loadFile(USERS_PATH, []);
         const localUser = findLocalUserForSession(users, req.user);
@@ -4011,6 +4012,7 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             privacyShowName,
             privacyShowPlayer,
             privacyShowAchievements,
+            privacyShowProfile,
         };
         for (const [key, value] of Object.entries(boolPrefs)) {
             if (value !== undefined) users[userIndex][key] = !!value;

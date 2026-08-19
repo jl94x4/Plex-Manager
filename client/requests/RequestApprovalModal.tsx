@@ -12,6 +12,7 @@ import type {
     PortalServiceServer,
 } from './types';
 import { useDiscoverI18n } from '../discovery/i18n';
+import { goToProfile, profileKeyForRequester } from '../profile/helpers';
 
 type Props = {
     requestId: number;
@@ -318,7 +319,16 @@ export const RequestApprovalModal: React.FC<Props> = ({
                         {detail && (
                             <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
                                 <span>{t('requestsAdmin.labels.status')}: <span className="text-text font-medium capitalize">{detail.statusLabel}</span></span>
-                                <span>{t('requestsAdmin.labels.requestedBy')} <span className="text-text font-medium">{detail.requestedBy.displayName}</span></span>
+                                <span>
+                                    {t('requestsAdmin.labels.requestedBy')}{' '}
+                                    <button
+                                        type="button"
+                                        className="text-text font-medium hover:text-plex hover:underline"
+                                        onClick={() => goToProfile(undefined, profileKeyForRequester(detail.requestedBy))}
+                                    >
+                                        {detail.requestedBy.displayName}
+                                    </button>
+                                </span>
                                 {detail.createdAt && (
                                     <span>{t('requestsAdmin.labels.created')} {formatDateTime(detail.createdAt)}</span>
                                 )}
@@ -335,7 +345,14 @@ export const RequestApprovalModal: React.FC<Props> = ({
                         )}
                         {detail?.requestedBy?.displayName && (
                             <p className="text-sm text-muted mt-1">
-                                {t('requestsAdmin.labels.requestedBy')} <span className="text-text font-medium">{detail.requestedBy.displayName}</span>
+                                {t('requestsAdmin.labels.requestedBy')}{' '}
+                                <button
+                                    type="button"
+                                    className="text-text font-medium hover:text-plex hover:underline"
+                                    onClick={() => goToProfile(undefined, profileKeyForRequester(detail.requestedBy))}
+                                >
+                                    {detail.requestedBy.displayName}
+                                </button>
                                 {detail.is4k ? ' · 4K' : ''}
                                 {detail.isAnime ? ' · Anime' : ''}
                             </p>

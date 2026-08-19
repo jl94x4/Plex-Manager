@@ -58,6 +58,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
     const [privacyShowName, setPrivacyShowName] = useState(user?.privacyShowName !== false);
     const [privacyShowPlayer, setPrivacyShowPlayer] = useState(user?.privacyShowPlayer !== false);
     const [privacyShowAchievements, setPrivacyShowAchievements] = useState(user?.privacyShowAchievements !== false);
+    const [privacyShowProfile, setPrivacyShowProfile] = useState(user?.privacyShowProfile !== false);
     const [notifyRequestAvailableEmail, setNotifyRequestAvailableEmail] = useState(user?.notifyRequestAvailableEmail !== false);
     const [notifyRequestAvailableInApp, setNotifyRequestAvailableInApp] = useState(user?.notifyRequestAvailableInApp !== false);
     const [notifyRequestAvailableWebPush, setNotifyRequestAvailableWebPush] = useState(user?.notifyRequestAvailableWebPush !== false);
@@ -135,6 +136,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
         setPrivacyShowName(user?.privacyShowName !== false);
         setPrivacyShowPlayer(user?.privacyShowPlayer !== false);
         setPrivacyShowAchievements(user?.privacyShowAchievements !== false);
+        setPrivacyShowProfile(user?.privacyShowProfile !== false);
     }, [
         user?.notifyRequestAvailableEmail,
         user?.notifyRequestAvailableInApp,
@@ -166,6 +168,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
         user?.privacyShowName,
         user?.privacyShowPlayer,
         user?.privacyShowAchievements,
+        user?.privacyShowProfile,
     ]);
 
     useEffect(() => {
@@ -344,6 +347,21 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                     disabled={busy}
                                 />
                             ) : null}
+                            <PrefToggle
+                                title={t('preferencesPage.privacyShowProfile')}
+                                hint={t('preferencesPage.privacyShowProfileHint')}
+                                on={privacyShowProfile}
+                                onToggle={() => {
+                                    const next = !privacyShowProfile;
+                                    void savePref(
+                                        { privacyShowProfile: next },
+                                        () => setPrivacyShowProfile(next),
+                                        t('preferencesPage.privacyUpdated'),
+                                    );
+                                }}
+                                ariaLabel={t('preferencesPage.privacyShowProfile')}
+                                disabled={busy}
+                            />
                         </div>
                     </DashboardPanel>
 

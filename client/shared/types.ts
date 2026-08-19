@@ -19,6 +19,8 @@ export interface User {
     privacyShowPlayer?: boolean;
     /** Show me on the achievements leaderboard and peer trophy cases. */
     privacyShowAchievements?: boolean;
+    /** Let other members open my public profile. Admins can still view it. */
+    privacyShowProfile?: boolean;
     /** Email when a portal request becomes available (default on). */
     notifyRequestAvailableEmail?: boolean;
     /** In-app bell when a portal request becomes available (default on). */

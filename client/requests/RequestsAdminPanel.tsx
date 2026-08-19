@@ -18,6 +18,7 @@ import {
 } from './requestFilterUtils';
 import type { PortalRequestItem, PortalRequestUser } from './types';
 import { useDiscoverI18n } from '../discovery/i18n';
+import { goToProfile, profileKeyForRequester } from '../profile/helpers';
 
 export type { PortalRequestItem } from './types';
 
@@ -568,7 +569,14 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                             <RequestTypeBadge type={item.type} is4k={item.is4k} t={t} />
                                         </div>
                                         <p className="text-sm text-muted mb-1">
-                                            {t('requestsAdmin.labels.requestedBy')} <span className="text-text font-medium">{item.requestedBy.displayName}</span>
+                                            {t('requestsAdmin.labels.requestedBy')}{' '}
+                                            <button
+                                                type="button"
+                                                className="text-text font-medium hover:text-plex hover:underline"
+                                                onClick={() => goToProfile(undefined, profileKeyForRequester(item.requestedBy))}
+                                            >
+                                                {item.requestedBy.displayName}
+                                            </button>
                                             {' · '}
                                             {formatRelativeTime(item.createdAt, t)}
                                             {item.updatedAt && item.updatedAt !== item.createdAt

@@ -16,8 +16,8 @@ export const resolveAvatar = (thumb: string | null | undefined, size = 220) => {
     return portalUrl(`/api/plex/image?path=${encodeURIComponent(thumb)}&width=${size}&height=${size}`);
 };
 
-export const profileAccountIdFromPath = () => {
-    const path = stripBasePath(window.location.pathname);
+export const profileAccountIdFromPath = (pathname?: string) => {
+    const path = stripBasePath(pathname || (typeof window !== 'undefined' ? window.location.pathname : ''));
     const match = path.match(/^\/profile\/([^/]+)/i);
     if (!match) return '';
     try {
@@ -36,10 +36,29 @@ export const profileShareUrl = (accountId?: string | null, isSelf = false) => {
 export const goToProfile = (
     onNavigate: ((route: string, options?: { path?: string }) => void) | undefined,
     accountId?: string | number | null,
+    username?: string | number | null,
 ) => {
-    const id = String(accountId || '').trim();
-    if (!id || !onNavigate) return;
-    onNavigate('profile', { path: `/profile/${encodeURIComponent(id)}` });
+    const id = String(accountId || username || '').trim();
+    if (!id || /^viewer\s+\d+$/i.test(id) || id.toLowerCase() === 'anonymous') return;
+    if (onNavigate) {
+        onNavigate('profile', { path: `/profile/${encodeURIComponent(id)}` });
+        return;
+    }
+    if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('portal-open-profile', { detail: { accountId: id } }));
+    }
+};
+
+export const profileKeyForRequester = (requestedBy?: {
+    plexId?: string | number | null;
+    plexAccountId?: string | number | null;
+    username?: string | null;
+    displayName?: string | null;
+} | null) => {
+    if (!requestedBy) return '';
+    const plex = String(requestedBy.plexId || requestedBy.plexAccountId || '').trim();
+    const name = String(requestedBy.username || requestedBy.displayName || '').trim();
+    return plex || name;
 };
 
 export const requestDiscoveryPath = (item: {

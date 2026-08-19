@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    ArrowDownRight, ArrowUpRight, Check, Clock, Copy, Crown, Link2, LogOut, Mail, Minus, Share2,
-    Shield, SlidersHorizontal, Sparkles, Trophy, User,
+    ArrowDownRight, ArrowUpRight, Check, Clock, Copy, Crown, Link2, Lock, LogOut, Mail, Minus, Play, Share2,
+    Shield, SlidersHorizontal, Sparkles, Swords, Trophy, User,
 } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { logoUrl } from '../shared/basePath';
@@ -34,12 +34,14 @@ type Props = {
     sessionInfo?: any;
     onNavigate: (route: string, options?: { path?: string }) => void;
     onLogout: () => void;
+    locationPath?: string;
 };
 
 export const ProfilePage: React.FC<Props> = ({
     sessionInfo,
     onNavigate,
     onLogout,
+    locationPath,
 }) => {
     const { t } = useDiscoverI18n();
     const [data, setData] = useState<any>(null);
@@ -54,7 +56,8 @@ export const ProfilePage: React.FC<Props> = ({
     const [selectedBadgeId, setSelectedBadgeId] = useState<string | null>(null);
     const [pinnedIds, setPinnedIds] = useState<string[]>([]);
     const [pinBusy, setPinBusy] = useState(false);
-    const accountId = profileAccountIdFromPath();
+    const [nowPlaying, setNowPlaying] = useState<any>(null);
+    const accountId = profileAccountIdFromPath(locationPath);
     const mediaServerType = String(sessionInfo?.mediaServerType || 'plex').toLowerCase();
     const isJellyfinPortal = mediaServerType === 'jellyfin' || mediaServerType === 'emby';
 
@@ -87,6 +90,7 @@ export const ProfilePage: React.FC<Props> = ({
         setSelectedBadgeId(null);
         setCopiedLink(false);
         setShareWrapUpOpen(false);
+        setNowPlaying(null);
         if (!data?.viewer?.isSelf) return undefined;
         let cancelled = false;
         const wrapUpSubjectId = String(
@@ -120,6 +124,41 @@ export const ProfilePage: React.FC<Props> = ({
         void load();
         return () => { cancelled = true; };
     }, [accountId, data?.viewer?.isSelf, isJellyfinPortal, sessionInfo?.account?.id, sessionInfo?.impersonation?.targetUserId, sessionInfo?.session?.id, sessionInfo?.session?.username]);
+
+    useEffect(() => {
+        if (!data || data.privacy?.locked) {
+            setNowPlaying(null);
+            return undefined;
+        }
+        const subjectId = String(data.identity?.accountId || accountId || '').trim();
+        const subjectName = String(data.identity?.username || '').trim().toLowerCase();
+        const nameHidden = !subjectName || subjectName === 'anonymous' || /^viewer\s+\d+$/.test(subjectName);
+        if (!subjectId && nameHidden) {
+            setNowPlaying(null);
+            return undefined;
+        }
+        let cancelled = false;
+        const load = async () => {
+            try {
+                const payload = await apiFetch(
+                    isJellyfinPortal ? '/api/jellyfin/dashboard?limit=5' : '/api/plex/dashboard?limit=5',
+                );
+                const sessions = Array.isArray(payload?.activeSessions) ? payload.activeSessions : [];
+                const hit = sessions.find((session: any) => {
+                    const sessionId = String(session?.accountId || '').trim();
+                    const sessionName = String(session?.user || '').trim().toLowerCase();
+                    if (subjectId && sessionId && sessionId === subjectId) return true;
+                    if (nameHidden) return false;
+                    return !!sessionName && sessionName === subjectName;
+                }) || null;
+                if (!cancelled) setNowPlaying(hit);
+            } catch {
+                if (!cancelled) setNowPlaying(null);
+            }
+        };
+        void load();
+        return () => { cancelled = true; };
+    }, [accountId, data, isJellyfinPortal]);
 
     const identity = data?.identity || {};
     const account = data?.account;
@@ -270,7 +309,7 @@ export const ProfilePage: React.FC<Props> = ({
                                         {identity.classTitle?.label || identity.provider || t('profilePage.eyebrow')}
                                     </p>
                                     <h1 className="text-3xl sm:text-4xl font-black text-text truncate">
-                                        {identity.username || sessionInfo?.session?.username || t('profilePage.member')}
+                                        {identity.username || (isSelf ? sessionInfo?.session?.username : '') || t('profilePage.member')}
                                         {identity.isMe ? (
                                             <span className="ml-2 text-sm font-bold text-plex">{t('profilePage.you')}</span>
                                         ) : null}
@@ -360,7 +399,117 @@ export const ProfilePage: React.FC<Props> = ({
 
             {!loading && !error && data && (
                 <>
-                    {wrapAnalytics && (Number(wrapAnalytics.totalPlays) > 0 || Number(wrapAnalytics.hoursWatched) > 0 || wrapAnalytics.leaderboardRank) ? (
+                    {data.privacy?.privateToPeers && data.viewer?.isAdmin && !isSelf ? (
+                        <div className="rounded-2xl border border-amber-400/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                            {t('profilePage.privateBanner')}
+                        </div>
+                    ) : null}
+
+                    {data.privacy?.locked ? (
+                        <DashboardPanel title={t('profilePage.privateTitle')}>
+                            <div className="flex items-start gap-3 text-sm text-muted">
+                                <Lock className="w-5 h-5 text-plex shrink-0 mt-0.5" />
+                                <p>{t('profilePage.privateHint', { name: identity.username || t('profilePage.member') })}</p>
+                            </div>
+                        </DashboardPanel>
+                    ) : null}
+
+                    {!data.privacy?.locked && nowPlaying ? (
+                        <DashboardPanel title={t('profilePage.currentlyWatching')} subtitle={t('profilePage.currentlyWatchingHint')}>
+                            <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/25 p-3">
+                                {nowPlaying.thumb ? (
+                                    <img
+                                        src={resolveAvatar(nowPlaying.thumb, 120)}
+                                        alt=""
+                                        className="w-16 h-24 rounded-lg object-cover border border-white/10 shrink-0"
+                                    />
+                                ) : (
+                                    <span className="inline-flex w-16 h-24 items-center justify-center rounded-lg border border-white/10 bg-black/40 text-plex shrink-0">
+                                        <Play className="w-6 h-6" />
+                                    </span>
+                                )}
+                                <div className="min-w-0">
+                                    <p className="text-sm font-black text-text truncate">
+                                        {nowPlaying.grandparentTitle || nowPlaying.title}
+                                    </p>
+                                    {nowPlaying.grandparentTitle && nowPlaying.title ? (
+                                        <p className="text-xs text-muted truncate mt-0.5">{nowPlaying.title}</p>
+                                    ) : null}
+                                    <p className="text-[11px] text-muted mt-1 capitalize">
+                                        {nowPlaying.state || 'playing'}
+                                        {Number(nowPlaying.progress) > 0 ? ` · ${Math.round(Number(nowPlaying.progress))}%` : ''}
+                                    </p>
+                                </div>
+                            </div>
+                        </DashboardPanel>
+                    ) : null}
+
+                    {!data.privacy?.locked && data.compare ? (
+                        <DashboardPanel title={t('profilePage.compare')} subtitle={t('profilePage.compareHint')}>
+                            <div className="flex flex-wrap items-center gap-2 text-sm">
+                                <span className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/25 px-3 py-2 font-bold">
+                                    <Swords className="w-4 h-4 text-plex" />
+                                    {Number(data.compare.xpGap) > 0
+                                        ? t('profilePage.xpAhead', { n: Math.abs(Number(data.compare.xpGap) || 0).toLocaleString() })
+                                        : Number(data.compare.xpGap) < 0
+                                            ? t('profilePage.xpBehind', { n: Math.abs(Number(data.compare.xpGap) || 0).toLocaleString() })
+                                            : t('profilePage.xpTied')}
+                                </span>
+                                <span className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/25 px-3 py-2 font-bold">
+                                    {t('profilePage.sharedBadges', { count: Number(data.compare.sharedCount) || 0 })}
+                                </span>
+                            </div>
+                            {Array.isArray(data.compare.shared) && data.compare.shared.length ? (
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                    {data.compare.shared.map((badge: any) => (
+                                        <button
+                                            key={badge.id}
+                                            type="button"
+                                            onClick={() => setSelectedBadgeId(String(badge.id))}
+                                            className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-black/25 px-2.5 py-1.5 text-xs font-bold hover:border-plex/40"
+                                        >
+                                            <span>{badge.icon || '🏅'}</span>
+                                            <span className="truncate max-w-[10rem]">{badge.name}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-sm text-muted mt-3">{t('profilePage.noSharedBadges')}</p>
+                            )}
+                        </DashboardPanel>
+                    ) : null}
+
+                    {!data.privacy?.locked && data.watch?.taste && (Number(data.watch.taste.hoursWatched) > 0 || Number(data.watch.taste.mix?.total) > 0) ? (
+                        <DashboardPanel title={t('profilePage.taste')} subtitle={t('profilePage.tasteHint')}>
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                                {[
+                                    { label: t('mediaType.movie'), value: data.watch.taste.mix?.movies },
+                                    { label: t('mediaType.tv'), value: data.watch.taste.mix?.shows },
+                                    { label: t('mediaType.music'), value: data.watch.taste.mix?.music },
+                                    { label: t('profilePage.watchStory'), value: Math.round(Number(data.watch.taste.hoursWatched) || 0) },
+                                ].map((row) => (
+                                    <div key={row.label} className="rounded-xl border border-white/10 bg-black/25 px-3 py-2.5">
+                                        <p className="text-[10px] uppercase tracking-widest font-bold text-muted">{row.label}</p>
+                                        <p className="mt-1 text-lg font-black text-text">{Number(row.value) || 0}</p>
+                                    </div>
+                                ))}
+                            </div>
+                            {Array.isArray(data.watch.taste.genres) && data.watch.taste.genres.length ? (
+                                <div className="mt-3 flex flex-wrap gap-1.5">
+                                    {data.watch.taste.genres.map((genre: any) => (
+                                        <span
+                                            key={genre.id}
+                                            className="inline-flex items-center rounded-full border border-white/10 bg-black/25 px-2.5 py-1 text-[11px] font-bold capitalize"
+                                        >
+                                            {genre.label} · {genre.count}
+                                        </span>
+                                    ))}
+                                </div>
+                            ) : null}
+                        </DashboardPanel>
+                    ) : null}
+
+                    {!data.privacy?.locked && wrapAnalytics && (Number(wrapAnalytics.totalPlays) > 0 || Number(wrapAnalytics.hoursWatched) > 0 || wrapAnalytics.leaderboardRank) ? (
                         <DashboardPanel
                             title={t('profilePage.watchStory')}
                             subtitle={t('profilePage.watchStoryHint')}

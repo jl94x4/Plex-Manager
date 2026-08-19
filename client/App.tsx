@@ -138,6 +138,9 @@ export const MainApp: React.FC = () => {
     };
 
     const [currentRoute, setCurrentRoute] = useState<'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'achievements' | 'support' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'editions' | 'requests' | 'discovery' | 'about' | 'preferences' | 'profile' | 'invite' | 'loading'>('loading');
+    const [profilePath, setProfilePath] = useState(() => (
+        typeof window !== 'undefined' ? stripBasePath(window.location.pathname) : '/profile'
+    ));
     const [sessionInfo, setSessionInfo] = useState<any>(null);
     // Default temporary access off so login never flashes the trial panel before public config arrives.
     const [publicConfig, setPublicConfig] = useState<any>({ allowTemporaryAccess: false });
@@ -370,6 +373,7 @@ export const MainApp: React.FC = () => {
             }
             if (options?.hash) path += options.hash;
             window.history.pushState({}, '', portalUrl(path));
+            if (route === 'profile') setProfilePath(stripBasePath(path.split('#')[0] || path));
             if (route === 'discovery') {
                 window.dispatchEvent(new Event('portal-discovery-navigate'));
                 if (String(path).includes('/discovery/queue')) {
@@ -491,7 +495,10 @@ export const MainApp: React.FC = () => {
             else if (path.startsWith('/discovery')) setCurrentRoute('discovery');
             else if (path.startsWith('/about')) setCurrentRoute('about');
             else if (path.startsWith('/preferences')) setCurrentRoute('preferences');
-            else if (path.startsWith('/profile')) setCurrentRoute('profile');
+            else if (path.startsWith('/profile')) {
+                setCurrentRoute('profile');
+                setProfilePath(stripBasePath(window.location.pathname));
+            }
             else if (path.startsWith('/analytics')) setCurrentRoute('analytics');
             else if (path.startsWith('/achievements') && data.navFeatures?.achievements) setCurrentRoute('achievements');
             else if (path.startsWith('/achievements')) {
@@ -534,6 +541,16 @@ export const MainApp: React.FC = () => {
         window.addEventListener('popstate', onPopState);
         return () => window.removeEventListener('popstate', onPopState);
     }, [checkSession]);
+
+    useEffect(() => {
+        const onOpenProfile = (event: Event) => {
+            const id = String((event as CustomEvent)?.detail?.accountId || (event as CustomEvent)?.detail?.username || '').trim();
+            if (!id) return;
+            setRoute('profile', { path: `/profile/${encodeURIComponent(id)}` });
+        };
+        window.addEventListener('portal-open-profile', onOpenProfile as EventListener);
+        return () => window.removeEventListener('portal-open-profile', onOpenProfile as EventListener);
+    }, [setRoute]);
 
     const handleLogout = async () => {
         await apiFetch('/api/auth/logout', { method: 'POST' });
@@ -695,6 +712,8 @@ export const MainApp: React.FC = () => {
             return (
                 <Suspense fallback={<Loader isLoading={true} isCinematic={!!publicConfig?.useCinematicLoading} />}>
                     <ProfilePage
+                        key={profilePath}
+                        locationPath={profilePath}
                         sessionInfo={sessionInfo}
                         onNavigate={setRoute as any}
                         onLogout={handleLogout}

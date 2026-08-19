@@ -11,6 +11,7 @@ import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { CustomSelect } from '../shared/ui';
 import { formatIssueRelativeTime, issueStatusBadgeClass } from '../discovery/issueUtils';
 import { useDiscoverI18n } from '../discovery/i18n';
+import { goToProfile } from '../profile/helpers';
 
 type TicketFilter = 'open' | 'resolved' | 'closed' | 'all';
 
@@ -539,7 +540,15 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                                                     {' · '}
                                                     {active.categoryLabel}
                                                     {' · '}
-                                                    {active.createdBy?.displayName}
+                                                    {active.createdBy?.id || active.createdBy?.displayName ? (
+                                                        <button
+                                                            type="button"
+                                                            className="hover:text-plex hover:underline"
+                                                            onClick={() => goToProfile(undefined, active.createdBy?.id, active.createdBy?.displayName)}
+                                                        >
+                                                            {active.createdBy?.displayName}
+                                                        </button>
+                                                    ) : (active.createdBy?.displayName || '')}
                                                     {active.createdAt ? ` · ${formatDateTime(active.createdAt)}` : ''}
                                                 </p>
                                             </div>
