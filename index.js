@@ -25794,7 +25794,7 @@ app.post('/api/media-automation/control', requireAdmin, requireMediaAutomation, 
         } else if (action === 'process') {
             await mediaAutomationService.scheduler.processNow();
         } else if (action === 'scan' || action === 'scannow') {
-            const result = await mediaAutomationService.scanNow();
+            const result = await mediaAutomationService.scanNow({ source: 'manual' });
             await appendAuditLog('media_automation_scan', req.user, null, result || {});
             return res.json({ ok: true, action: 'scan', result, status: await mediaAutomationService.status() });
         } else if (action === 'reload') {
@@ -25822,7 +25822,7 @@ app.post('/api/media-automation/scan', requireAdmin, requireMediaAutomation, asy
         const libraryId = req.body?.libraryId == null || req.body?.libraryId === ''
             ? null
             : req.body.libraryId;
-        const result = await mediaAutomationService.scanNow({ preview, planOnly, libraryId });
+        const result = await mediaAutomationService.scanNow({ preview, planOnly, libraryId, source: 'manual' });
         await appendAuditLog('media_automation_scan', req.user, null, {
             preview,
             planOnly,
