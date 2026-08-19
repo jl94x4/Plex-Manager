@@ -2141,48 +2141,140 @@ def _random_label_tag(title, base_label='Collexions'):
 
 
 def _smart_collection_is_label_based(coll):
-    """True when a smart collection filters on a label (tiny URI — safe for Plex Web)."""
+    """True when a smart collection filters on a label (tiny URI — safe shape)."""
     try:
         content = str(getattr(coll, 'content', '') or '')
-        return 'label=' in content or 'label%3D' in content.lower()
+        return 'label=' in content or 'label%3d' in content.lower()
     except Exception:
         return False
 
 
 def _set_items_label(library, items, tag, add=True):
-    """Add or remove a label on library items, batched when plexapi supports it."""
+    """Add or remove a label on library items in small batches (never one giant URI)."""
     items = [item for item in (items or []) if getattr(item, 'ratingKey', None)]
     if not items:
         return 0
+    done = 0
+    for chunk in _chunked(items, 50):
+        try:
+            editor = library.batchMultiEdits(chunk)
+            (editor.addLabel(tag) if add else editor.removeLabel(tag))
+            editor.saveMultiEdits()
+            done += len(chunk)
+            continue
+        except Exception:
+            pass
+        for item in chunk:
+            try:
+                if add:
+                    item.addLabel(tag)
+                else:
+                    item.removeLabel(tag)
+                done += 1
+            except Exception as e:
+                logging.warning(
+                    "Label '%s' %s failed on '%s': %s",
+                    tag, 'add' if add else 'remove', getattr(item, 'title', '?'), e,
+                )
+    return done
+
+
+def _label_filter_key(library, tag, retries=6, delay=2):
+    """Resolve a label to its numeric Plex filter id (Kometa filters by id, not text)."""
+    want = str(tag or '').strip().lower()
+    for attempt in range(retries):
+        try:
+            for choice in library.listFilterChoices('label') or []:
+                if str(getattr(choice, 'title', '') or '').strip().lower() == want:
+                    return str(choice.key)
+        except Exception as e:
+            logging.debug("listFilterChoices('label') failed: %s", e)
+        if attempt < retries - 1:
+            time.sleep(delay)
+    raise RuntimeError(f"Label '{tag}' has not appeared in Plex section filters yet")
+
+
+def _random_smart_uri(library, label_key):
+    """Smart-filter URI shaped exactly like Kometa's smart_label builder."""
+    server = library._server
+    smart_type = 2 if normalize_media_kind(getattr(library, 'type', None)) == 'show' else 1
+    section_key = str(getattr(library, 'key', '') or '').rstrip('/').split('/')[-1]
+    uri = (
+        f"server://{server.machineIdentifier}/com.plexapp.plugins.library"
+        f"/library/sections/{section_key}/all?type={smart_type}&sort=random&label={label_key}"
+    )
+    return uri, smart_type, section_key
+
+
+def _create_random_smart_collection(library, title, tag):
+    """Create a label-filtered smart collection sorted randomly, using the exact raw
+    endpoint, numeric label id, and URI shape Kometa uses for smart_label builds."""
+    server = library._server
+    label_key = _label_filter_key(library, tag)
+    uri, smart_type, section_key = _random_smart_uri(library, label_key)
+    args = {'type': smart_type, 'title': title, 'smart': 1, 'sectionId': section_key, 'uri': uri}
+    server.query(f"/library/collections{_join_query_args(args)}", method=server._session.post)
+    for cand in _find_collections_by_title(library, title):
+        if getattr(cand, 'smart', False):
+            return _as_live_collection(library, cand) or cand
+    raise RuntimeError(f"Smart collection '{title}' was not created")
+
+
+def _update_random_smart_filter(library, coll, tag):
+    """Repoint an existing smart collection at our label + random sort (Kometa's PUT)."""
+    server = library._server
+    label_key = _label_filter_key(library, tag)
+    uri, _smart_type, _section_key = _random_smart_uri(library, label_key)
+    coll_key = f"/library/collections/{coll.ratingKey}"
+    server.query(f"{coll_key}/items{_join_query_args({'uri': uri})}", method=server._session.put)
     try:
-        editor = library.batchMultiEdits(items)
-        (editor.addLabel(tag) if add else editor.removeLabel(tag))
-        editor.saveMultiEdits()
-        return len(items)
+        coll.reload()
     except Exception:
         pass
-    done = 0
-    for item in items:
-        try:
-            if add:
-                item.addLabel(tag)
-            else:
-                item.removeLabel(tag)
-            done += 1
-        except Exception as e:
-            logging.warning(
-                "Label '%s' %s failed on '%s': %s",
-                tag, 'add' if add else 'remove', getattr(item, 'title', '?'), e,
+
+
+def _collection_list_row_unsafe(library, coll, config=None):
+    """Check the raw collections-list row Plex wrote for this collection.
+
+    Some PMS builds write corrupt rows for API-created smart collections; this
+    scans the same XML list Plex Web renders and flags rows the tab cannot draw.
+    """
+    try:
+        config = config or load_config()
+        url = str(config.get('plex_url') or '').rstrip('/')
+        token = str(config.get('plex_token') or '')
+        section_key = str(getattr(library, 'key', '') or '').rstrip('/').split('/')[-1]
+        rk = str(getattr(coll, 'ratingKey', '') or '').strip()
+        if not (url and token and section_key and rk):
+            return False
+        start, page_size = 0, 50
+        while True:
+            resp = _fetch_section_collection_page(
+                url, token, section_key,
+                list_path='collections', accept='application/xml',
+                start=start, page_size=page_size,
             )
-    return done
+            if resp.status_code >= 400:
+                return False
+            items, total = _parse_plex_metadata_list(resp.content, resp.headers.get('Content-Type'))
+            for row in items:
+                if str(row.get('ratingKey') or '').strip() == rk:
+                    return _collection_list_row_should_purge(row)
+            if not items or start + len(items) >= total:
+                return False
+            start += page_size
+    except Exception as exc:
+        logging.debug("Collections-list row probe failed: %s", exc)
+        return False
 
 
 def _ensure_random_smart_collection(library, title, matched_items, label='Collexions', keep_rating_key=None):
     """Kometa-style random: label the members, then keep a smart collection filtered
     on that single label with Plex sort=random, so the order reshuffles on every view.
 
-    A one-label smart filter is a tiny URI — it does not write the truncated
-    type-99 folder rows that giant id-filter smart collections caused.
+    After any smart create/update the raw collections-list row is verified; if this
+    PMS wrote a corrupt row, the collection is converted back to a regular shuffled
+    one so the Plex Web Collections tab never breaks.
     Returns (collection, created_fresh, membership_delta).
     """
     tag = _random_label_tag(title, label)
@@ -2191,7 +2283,7 @@ def _ensure_random_smart_collection(library, title, matched_items, label='Collex
     try:
         labeled = list(library.search(label=tag) or [])
     except Exception as e:
-        logging.warning("Label lookup for '%s' failed: %s", tag, e)
+        logging.debug("Label lookup for '%s' failed (label may be new): %s", tag, e)
         labeled = []
     labeled_by_key = {str(getattr(item, 'ratingKey', '') or ''): item for item in labeled}
     to_add = [item for key, item in target_by_key.items() if key not in labeled_by_key]
@@ -2200,6 +2292,14 @@ def _ensure_random_smart_collection(library, title, matched_items, label='Collex
         _set_items_label(library, to_add, tag, add=True)
     if to_remove:
         _set_items_label(library, to_remove, tag, add=False)
+
+    def _delta(created):
+        return {
+            'changed': bool(to_add or to_remove) or created,
+            'added': len(to_add),
+            'removed': len(to_remove),
+            'memberKeys': sorted(target_by_key.keys()),
+        }
 
     coll = None
     keep_key = str(keep_rating_key or '').strip()
@@ -2224,12 +2324,7 @@ def _ensure_random_smart_collection(library, title, matched_items, label='Collex
         except Exception as exc:
             logging.warning("Could not park '%s' before random conversion: %s", title, exc)
             _apply_collection_sort(old, list(target_by_key.values()), 'random', reorder=True)
-            return old, False, {
-                'changed': bool(to_add or to_remove),
-                'added': len(to_add),
-                'removed': len(to_remove),
-                'memberKeys': sorted(target_by_key.keys()),
-            }
+            return old, False, _delta(False)
         try:
             coll = _create_random_smart_collection(library, title, tag)
             created_fresh = True
@@ -2240,12 +2335,7 @@ def _ensure_random_smart_collection(library, title, matched_items, label='Collex
             except Exception:
                 pass
             _apply_collection_sort(old, list(target_by_key.values()), 'random', reorder=True)
-            return old, False, {
-                'changed': bool(to_add or to_remove),
-                'added': len(to_add),
-                'removed': len(to_remove),
-                'memberKeys': sorted(target_by_key.keys()),
-            }
+            return old, False, _delta(False)
         _copy_collection_poster(old, coll)
         _restore_collection_visibility(coll, vis)
         try:
@@ -2257,14 +2347,10 @@ def _ensure_random_smart_collection(library, title, matched_items, label='Collex
             f"(label '{tag}', old key {old_rk} → {getattr(coll, 'ratingKey', '?')})."
         )
     elif coll is not None:
-        # Already smart — repoint the filter at our label and keep sort=random.
-        # This also repairs legacy id-filter smarts (the crashy kind) in place.
+        # Already smart — repoint at our label filter + random sort. This also
+        # repairs legacy id-filter smarts (the crashy kind) in place.
         try:
-            coll.updateFilters(filters={'label': tag}, sort='random')
-            try:
-                coll.reload()
-            except Exception:
-                pass
+            _update_random_smart_filter(library, coll, tag)
         except Exception as e:
             logging.warning("Could not update random smart filter on '%s': %s", title, e)
     else:
@@ -2272,30 +2358,29 @@ def _ensure_random_smart_collection(library, title, matched_items, label='Collex
         created_fresh = True
         log_action(f"Created random smart collection '{title}' (label '{tag}').")
 
+    # Trust but verify: if this PMS wrote a corrupt collections-list row for the
+    # smart collection, convert it straight back to a regular shuffled collection.
+    if getattr(coll, 'smart', False) and _collection_list_row_unsafe(library, coll):
+        log_action(
+            f"Plex wrote a corrupt collections-list row for smart '{title}' — "
+            f"this server cannot render API smart collections; falling back to a "
+            f"regular shuffled collection."
+        )
+        fallback, did = _convert_smart_collection_to_regular(
+            library, coll,
+            matched_items=list(target_by_key.values()),
+            label=label,
+            sort_order='random',
+        )
+        if did:
+            coll = fallback
+            created_fresh = True
+
     try:
         coll.addLabel(label)
     except Exception:
         pass
-    return coll, created_fresh, {
-        'changed': bool(to_add or to_remove) or created_fresh,
-        'added': len(to_add),
-        'removed': len(to_remove),
-        'memberKeys': sorted(target_by_key.keys()),
-    }
-
-
-def _create_random_smart_collection(library, title, tag):
-    """Create a label-filtered smart collection sorted randomly (reshuffles per view)."""
-    try:
-        return library.createCollection(title, smart=True, filters={'label': tag}, sort='random')
-    except Exception as e:
-        logging.warning("Smart create with sort=random failed for '%s' (%s); retrying without sort.", title, e)
-    coll = library.createCollection(title, smart=True, filters={'label': tag})
-    try:
-        coll.updateFilters(filters={'label': tag}, sort='random')
-    except Exception as e:
-        logging.warning("Could not set random sort on smart collection '%s': %s", title, e)
-    return coll
+    return coll, created_fresh, _delta(created_fresh)
 
 
 def _upsert_plex_collection(library, title, matched_items, sort_order='custom', label='Collexions', keep_rating_key=None):
@@ -4579,6 +4664,8 @@ def _apply_job_sort_on_plex(job, sort_order):
             label=label,
             keep_rating_key=str(getattr(coll, 'ratingKey', '') or '') or None,
         )
+        # Conversions churn the collections list — purge any crash rows they left.
+        _finalize_collection_for_plex_web(new_coll, library, config)
     new_key = str(getattr(new_coll, 'ratingKey', '') or '').strip()
     if new_key:
         job['rating_key'] = new_key
@@ -5106,10 +5193,10 @@ def _repair_library_collections_tab(library, config=None):
             if getattr(coll, 'smart', False) and (ours or job):
                 job_sort = _normalize_sort_order((job or {}).get('sort_order'))
                 if job_sort == 'random':
-                    # Kometa-style label smart — tiny filter URI, safe for Plex Web.
-                    # If it still uses a crashy id-filter, repoint it to the label
-                    # filter in place (keeps pins) instead of flattening to regular.
-                    if not _smart_collection_is_label_based(coll):
+                    # Kometa-style label smart — keep it when the row renders safely.
+                    # Repoint crashy id-filters at the label, and let the ensure()
+                    # verifier convert to regular if this PMS writes a corrupt row.
+                    if not _smart_collection_is_label_based(coll) or _collection_list_row_unsafe(library, coll, config):
                         try:
                             members = _sanitize_collection_members(library, list(coll.items() or []))
                             if members:
