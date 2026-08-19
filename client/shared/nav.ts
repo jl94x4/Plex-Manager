@@ -39,6 +39,7 @@ export const DEFAULT_NAV_ORDER = [
     'support',
     'maintenance',
     'about',
+    'profile',
     'preferences',
     'settings',
     'logout',
@@ -69,6 +70,7 @@ export const NAV_ITEM_LABELS: Record<string, string> = {
     status: 'Status',
     maintenance: 'Cleaner',
     about: 'About',
+    profile: 'Profile',
     preferences: 'Preferences',
     settings: 'Settings',
     logs: 'Logs',
@@ -124,6 +126,8 @@ const LEGACY_DEFAULT_NAV_ORDERS = [
     ['home', 'discover', 'request', 'analytics', 'users', 'downloads', 'upgrader', 'collexions', 'scanner', 'media-automation', 'poster-sets', 'overlays', 'editions', 'mediastack', 'requests', 'status', 'achievements', 'maintenance', 'about', 'preferences', 'settings', 'logout'],
     // Pre–Discover-tab Review Queue (standalone Requests nav item).
     ['home', 'discover', 'request', 'analytics', 'users', 'downloads', 'upgrader', 'collexions', 'scanner', 'media-automation', 'poster-sets', 'overlays', 'editions', 'mediastack', 'requests', 'status', 'achievements', 'support', 'maintenance', 'about', 'preferences', 'settings', 'logout'],
+    // Pre-profile page stock order.
+    ['home', 'discover', 'request', 'analytics', 'users', 'downloads', 'upgrader', 'collexions', 'scanner', 'media-automation', 'poster-sets', 'overlays', 'editions', 'mediastack', 'status', 'achievements', 'support', 'maintenance', 'about', 'preferences', 'settings', 'logout'],
 ];
 
 const sameOrder = (a: string[], b: string[]) => (

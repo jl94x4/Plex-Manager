@@ -71,6 +71,7 @@ export const fr: DeepPartial<EnCatalog> = {
         request: 'Demander',
         about: 'À propos',
         preferences: 'Préférences',
+        profile: 'Profil',
         settings: 'Paramètres',
         logout: 'Déconnexion',
         more: 'Plus',

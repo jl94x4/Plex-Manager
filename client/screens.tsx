@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react';
 import ReactDOM from 'react-dom';
-import { Home, Film, Activity, Sparkles, LogOut, Settings, FileText, BarChart3, Users, PlaySquare, TrendingUp, X, Star, Layers, HardDrive, Calendar, Tv, Clock, DownloadCloud, MonitorSmartphone, Copy, ChevronUp, ChevronDown, List, Palette, Music, Play, Pause, Upload, Shield, CheckCircle, AlertCircle, RefreshCw, ChevronLeft, ChevronRight, Trophy, PlayCircle, Coffee, Compass, PieChart, Clapperboard, AlertTriangle, Check, Cpu, Monitor, LineChart as LucideLineChart, Share2, Search, BookOpen, Loader2, Eye, EyeOff, ClipboardList, ArrowUpCircle, MoreHorizontal, ExternalLink, Info, GitFork, MapPin, Radar, Image as ImageIcon, SlidersHorizontal, LifeBuoy } from 'lucide-react';
+import { Home, Film, Activity, Sparkles, LogOut, Settings, FileText, BarChart3, Users, PlaySquare, TrendingUp, X, Star, Layers, HardDrive, Calendar, Tv, Clock, DownloadCloud, MonitorSmartphone, Copy, ChevronUp, ChevronDown, List, Palette, Music, Play, Pause, Upload, Shield, CheckCircle, AlertCircle, RefreshCw, ChevronLeft, ChevronRight, Trophy, PlayCircle, Coffee, Compass, PieChart, Clapperboard, AlertTriangle, Check, Cpu, Monitor, LineChart as LucideLineChart, Share2, Search, BookOpen, Loader2, Eye, EyeOff, ClipboardList, ArrowUpCircle, MoreHorizontal, ExternalLink, Info, GitFork, MapPin, Radar, Image as ImageIcon, SlidersHorizontal, LifeBuoy, User } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
 
 import { SettingsDashboard } from './settings/SettingsDashboard';
@@ -240,11 +240,12 @@ const UserCard: React.FC<{
     onRevoke: () => void;
     onViewAs?: () => void;
     onViewAnalytics?: () => void;
+    onViewProfile?: () => void;
     isConfigured: boolean;
     isSelected: boolean;
     onSelect: (id: string) => void;
     providerLabel?: string;
-}> = ({ user, onEdit, onDelete, onRevoke, onViewAs, onViewAnalytics, isConfigured, isSelected, onSelect, providerLabel = 'Plex' }) => {
+}> = ({ user, onEdit, onDelete, onRevoke, onViewAs, onViewAnalytics, onViewProfile, isConfigured, isSelected, onSelect, providerLabel = 'Plex' }) => {
     const { t } = useDiscoverI18n();
     const { status, statusText, daysRemainingText, pillClass, borderClass, glowClass } = useMemo(() => {
         const days = getDaysUntilExpiry(user.expiryDate);
@@ -344,6 +345,16 @@ const UserCard: React.FC<{
                 </div>
             </div>
             <div className="relative flex flex-wrap gap-2 mt-auto pt-4" onClick={e => e.stopPropagation()}>
+                {onViewProfile && (
+                    <button
+                        className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5"
+                        onClick={onViewProfile}
+                        title={t('usersAdmin.actions.viewProfile')}
+                    >
+                        <User className="w-3.5 h-3.5" />
+                        {t('usersAdmin.actions.viewProfile')}
+                    </button>
+                )}
                 {onViewAnalytics && (
                     <button
                         className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5"
@@ -5274,7 +5285,7 @@ export const AboutDashboard: React.FC<{ appVersion?: string; mediaServerType?: s
 
 // --- Admin Dashboard Component ---
 
-export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: () => void, onViewStatus: () => void, onViewDashboard: () => void, onViewAsUser: (userId: string) => Promise<void> }> = ({ onLogout, onViewUserPortal, onViewStatus, onViewDashboard, onViewAsUser }) => {
+export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: () => void, onViewStatus: () => void, onViewDashboard: () => void, onViewAsUser: (userId: string) => Promise<void>, onViewProfile?: (userId: string) => void }> = ({ onLogout, onViewUserPortal, onViewStatus, onViewDashboard, onViewAsUser, onViewProfile }) => {
     const { t } = useDiscoverI18n();
     const [users, setUsers] = useState<User[]>([]);
     const [isConfigured, setConfigured] = useState(false);
@@ -6029,6 +6040,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                                     onViewAnalytics={() => {
                                         window.location.assign(portalUrl(`/analytics#user=${encodeURIComponent(user.username)}`));
                                     }}
+                                    onViewProfile={onViewProfile ? () => onViewProfile(String(user.id || user.plexAccountId || user.username)) : undefined}
                                     isConfigured={isConfigured}
                                     isSelected={selectedUserIds.includes(user.id)}
                                     onSelect={handleToggleSelection}
@@ -12093,7 +12105,7 @@ export const MaintenanceDashboard: React.FC = () => {
 interface NavigationProps {
     currentRoute: string;
     onNavigate: (
-        route: 'admin' | 'user' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'editions' | 'requests' | 'discovery' | 'about' | 'achievements' | 'support',
+        route: 'admin' | 'user' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'editions' | 'requests' | 'discovery' | 'about' | 'achievements' | 'support' | 'preferences' | 'profile',
         options?: { hash?: string; reviewId?: number; path?: string },
     ) => void;
     onLogout: () => void;
@@ -12397,6 +12409,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         'requests': { label: t('navigation.requests'), icon: ClipboardList, route: 'requests', adminOnly: true },
         'request': { label: t('navigation.discoverRequest'), icon: Sparkles, route: 'discovery', adminOnly: false },
         'about': { label: t('navigation.about'), icon: Info, route: 'about', adminOnly: false },
+        'profile': { label: t('navigation.profile'), icon: User, route: 'profile', adminOnly: false },
         'preferences': { label: t('navigation.preferences'), icon: SlidersHorizontal, route: 'preferences', adminOnly: false },
         'settings': { label: t('navigation.settings'), icon: Settings, route: 'settings', adminOnly: true },
         'logout': { label: t('navigation.logout'), icon: LogOut, route: '', adminOnly: false, onClick: onLogout }
@@ -12644,8 +12657,8 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                     <div className="grid grid-cols-[minmax(0,1fr)_2.75rem] gap-1.5 items-stretch w-full min-w-0">
                         <button
                             type="button"
-                            onClick={() => setProfileOpen(true)}
-                            className="min-w-0 flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-plex/40 transition-all py-1 px-1.5 text-left overflow-hidden"
+                            onClick={() => onNavigate('profile')}
+                            className={`min-w-0 flex items-center gap-1.5 rounded-xl border bg-white/5 hover:bg-white/10 hover:border-plex/40 transition-all py-1 px-1.5 text-left overflow-hidden ${currentRoute === 'profile' ? 'border-plex/50 bg-plex/10' : 'border-white/10'}`}
                         >
                             <img
                                 src={profileIcon}

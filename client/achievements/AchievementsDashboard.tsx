@@ -544,7 +544,10 @@ export const XpBreakdownModal: React.FC<{
     );
 };
 
-export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ sessionInfo = null }) => {
+export const AchievementsDashboard: React.FC<{
+    sessionInfo?: any;
+    onNavigate?: (route: string, options?: { path?: string }) => void;
+}> = ({ sessionInfo = null, onNavigate }) => {
     const { tAchievements } = useAchievementsI18n();
     const [data, setData] = useState<any>(null);
     const [board, setBoard] = useState<any[] | null>(null);
@@ -569,6 +572,19 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
     const [dossierQuery, setDossierQuery] = useState<{ accountId?: string | number | null; rank?: number | null } | null>(null);
     const [pinBusy, setPinBusy] = useState(false);
     const [celebrationBadges, setCelebrationBadges] = useState<any[]>([]);
+
+    const openMemberProfile = (entry: { accountId?: string | number | null; rank?: number | null } | null) => {
+        if (!entry) return;
+        if (entry.accountId != null && String(entry.accountId).trim() && onNavigate) {
+            onNavigate('profile', { path: `/profile/${encodeURIComponent(String(entry.accountId))}` });
+            return;
+        }
+        setDossierQuery(
+            entry.accountId != null
+                ? { accountId: entry.accountId }
+                : { rank: entry.rank },
+        );
+    };
 
     const sessionThumb = useMemo(() => {
         const session = sessionInfo?.session || {};
@@ -1047,14 +1063,7 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
                                 const defendPct = rivals.below
                                     ? Math.max(4, Math.min(96, Math.round(((Number(rivals.below.xp) || 0) / Math.max(1, myXp)) * 100)))
                                     : 0;
-                                const openRival = (entry: any) => {
-                                    if (!entry) return;
-                                    setDossierQuery(
-                                        entry.accountId != null
-                                            ? { accountId: entry.accountId }
-                                            : { rank: entry.rank },
-                                    );
-                                };
+                                const openRival = (entry: any) => openMemberProfile(entry);
                                 return (
                                 <div className="relative overflow-hidden rounded-2xl border border-plex/25 bg-gradient-to-br from-plex/15 via-black/40 to-black/20 p-3.5 sm:p-4">
                                     <div className="pointer-events-none absolute -right-8 -top-10 h-32 w-32 rounded-full bg-plex/20 blur-3xl" />
@@ -1185,11 +1194,7 @@ export const AchievementsDashboard: React.FC<{ sessionInfo?: any }> = ({ session
                                     <button
                                         type="button"
                                         key={`${entry.rank}-${entry.username}`}
-                                        onClick={() => setDossierQuery(
-                                            entry.accountId != null
-                                                ? { accountId: entry.accountId }
-                                                : { rank: entry.rank },
-                                        )}
+                                        onClick={() => openMemberProfile(entry)}
                                         title={tAchievements('dossier.openHint')}
                                         className={`rounded-xl px-3 py-2.5 border min-w-0 text-left transition-colors hover:border-plex/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-plex/50 ${
                                             entry.isMe ? 'border-plex/50 bg-plex/10' : 'border-white/5 bg-black/20'

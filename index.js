@@ -70,6 +70,7 @@ import { createEditionsRouter } from './lib/editions/index.js';
 import { startEditionsScheduler, runEditionsScheduledJob } from './lib/editions/scheduler.js';
 import { startOverlaysScheduler, startOverlaysBundleScheduler, runOverlaysScheduledJob } from './lib/overlays/scheduler.js';
 import { registerAchievementsRoutes } from './lib/achievements/http.js';
+import { registerProfileRoutes } from './lib/profile/http.js';
 import { registerSupportTicketRoutes } from './lib/support-tickets/http.js';
 import { createSupportTicketFromMediaIssue, attachTicketIdsToIssues } from './lib/support-tickets/fromIssue.js';
 import { mapTautulliHistoryRowToPlexItem } from './lib/achievements/tautulliHistory.js';
@@ -17404,6 +17405,67 @@ achievementsHttp = registerAchievementsRoutes(app, {
         const payload = await response.json().catch(() => null);
         return Array.isArray(payload?.Items) ? payload.Items : [];
     },
+});
+
+registerProfileRoutes(app, {
+    requireAuth,
+    requireMember,
+    loadFile,
+    CONFIG_PATH,
+    USERS_PATH,
+    resolvePortalAccountId: async (req, config) => {
+        const mediaServerType = String(config.mediaServerType || 'plex').toLowerCase();
+        if (mediaServerType === 'plex') {
+            const users = await loadFile(USERS_PATH, []);
+            const portalUser = findLocalUserForSession(users, req.user);
+            const stored = String(portalUser?.plexAccountId || '').trim();
+            if (stored) return stored;
+            return req.user?.id || req.user?.plexId || null;
+        }
+        return req.user?.jellyfinId || req.user?.id || null;
+    },
+    resolveLocalUser: async (sessionUser) => {
+        const users = await loadFile(USERS_PATH, []);
+        return findLocalUserForSession(users, sessionUser);
+    },
+    loadRequestSummary: async (req, config) => {
+        try {
+            if (getRequestEngine(config) === 'portal') {
+                const portalRequests = getPortalRequestService(config);
+                const payload = await portalRequests.listMemberRequests(req.user, { filter: 'all', take: 6, skip: 0 });
+                const results = Array.isArray(payload?.results) ? payload.results : [];
+                return {
+                    total: Number(payload?.counts?.total) || results.length,
+                    pending: Number(payload?.counts?.pending) || 0,
+                    recent: results.slice(0, 6).map((item) => ({
+                        id: item.id ?? null,
+                        title: item.title || item.mediaTitle || '',
+                        posterUrl: item.posterUrl || item.posterPath || null,
+                        status: item.status || null,
+                        mediaType: item.mediaType || item.type || null,
+                    })),
+                };
+            }
+            const gate = getRequestAppGate(config);
+            if (!gate?.ready) return null;
+            const payload = await requestAppService.listMemberRequests(config, req.user, { filter: 'all', take: 6, skip: 0 });
+            const results = Array.isArray(payload?.results) ? payload.results : [];
+            return {
+                total: Number(payload?.total ?? payload?.counts?.total) || results.length,
+                pending: Number(payload?.pending ?? payload?.counts?.pending) || 0,
+                recent: results.slice(0, 6).map((item) => ({
+                    id: item.id ?? null,
+                    title: item.title || item.mediaTitle || '',
+                    posterUrl: item.posterUrl || item.posterPath || item.image || null,
+                    status: item.status || item.mediaStatus || null,
+                    mediaType: item.mediaType || item.type || null,
+                })),
+            };
+        } catch {
+            return null;
+        }
+    },
+    log,
 });
 
 registerSupportTicketRoutes(app, {

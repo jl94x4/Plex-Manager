@@ -34,6 +34,7 @@ const EditionsDashboard = lazy(() => import('./editions/EditionsDashboard').then
 const AchievementsDashboard = lazy(() => import('./achievements/AchievementsDashboard').then(m => ({ default: m.AchievementsDashboard })));
 const SupportInbox = lazy(() => import('./support/SupportInbox').then(m => ({ default: m.SupportInbox })));
 const PreferencesPage = lazy(() => import('./preferences/PreferencesPage').then(m => ({ default: m.PreferencesPage })));
+const ProfilePage = lazy(() => import('./profile/ProfilePage').then(m => ({ default: m.ProfilePage })));
 import {
     updateFavicon,
     Login,
@@ -136,7 +137,7 @@ export const MainApp: React.FC = () => {
         closeConfirm();
     };
 
-    const [currentRoute, setCurrentRoute] = useState<'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'achievements' | 'support' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'editions' | 'requests' | 'discovery' | 'about' | 'preferences' | 'invite' | 'loading'>('loading');
+    const [currentRoute, setCurrentRoute] = useState<'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'achievements' | 'support' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'editions' | 'requests' | 'discovery' | 'about' | 'preferences' | 'profile' | 'invite' | 'loading'>('loading');
     const [sessionInfo, setSessionInfo] = useState<any>(null);
     // Default temporary access off so login never flashes the trial panel before public config arrives.
     const [publicConfig, setPublicConfig] = useState<any>({ allowTemporaryAccess: false });
@@ -313,7 +314,7 @@ export const MainApp: React.FC = () => {
         setShowWhatsNew(false);
     }, [publicConfig?.appVersion]);
 
-    const setRoute = useCallback((route: 'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'achievements' | 'support' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'editions' | 'requests' | 'discovery' | 'about' | 'preferences' | 'invite' | 'loading', options?: { hash?: string; reviewId?: number; path?: string }) => {
+    const setRoute = useCallback((route: 'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'achievements' | 'support' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'editions' | 'requests' | 'discovery' | 'about' | 'preferences' | 'profile' | 'invite' | 'loading', options?: { hash?: string; reviewId?: number; path?: string }) => {
         if (route === 'logs') {
             setCurrentRoute('settings');
             window.history.pushState({}, '', portalUrl('/settings#logs'));
@@ -363,6 +364,10 @@ export const MainApp: React.FC = () => {
             }
             if (route === 'about') path = '/about';
             if (route === 'preferences') path = '/preferences';
+            if (route === 'profile') {
+                const custom = String(options?.path || '').trim();
+                path = custom.startsWith('/profile') ? custom : '/profile';
+            }
             if (options?.hash) path += options.hash;
             window.history.pushState({}, '', portalUrl(path));
             if (route === 'discovery') {
@@ -486,6 +491,7 @@ export const MainApp: React.FC = () => {
             else if (path.startsWith('/discovery')) setCurrentRoute('discovery');
             else if (path.startsWith('/about')) setCurrentRoute('about');
             else if (path.startsWith('/preferences')) setCurrentRoute('preferences');
+            else if (path.startsWith('/profile')) setCurrentRoute('profile');
             else if (path.startsWith('/analytics')) setCurrentRoute('analytics');
             else if (path.startsWith('/achievements') && data.navFeatures?.achievements) setCurrentRoute('achievements');
             else if (path.startsWith('/achievements')) {
@@ -668,7 +674,7 @@ export const MainApp: React.FC = () => {
         if (currentRoute === 'downloads') return <DownloadStatusPage isAdmin={isAdmin} />;
         if (currentRoute === 'analytics') return <AnalyticsDashboard isAdmin={isAdmin} sessionInfo={sessionInfo} />;
         if (currentRoute === 'achievements' && sessionInfo?.navFeatures?.achievements) {
-            return <AchievementsDashboard sessionInfo={sessionInfo} />;
+            return <AchievementsDashboard sessionInfo={sessionInfo} onNavigate={setRoute as any} />;
         }
         if (currentRoute === 'support' && sessionInfo?.navFeatures?.support !== false) {
             return (
@@ -685,7 +691,20 @@ export const MainApp: React.FC = () => {
                 </Suspense>
             );
         }
-        if (currentRoute === 'admin' || currentRoute === 'users') return <AdminDashboard onLogout={handleLogout} onViewUserPortal={() => setRoute('user')} onViewStatus={() => setRoute('status')} onViewDashboard={() => setRoute('dashboard')} onViewAsUser={handleViewAsUser} />;
+        if (currentRoute === 'profile') {
+            return (
+                <Suspense fallback={<Loader isLoading={true} isCinematic={!!publicConfig?.useCinematicLoading} />}>
+                    <ProfilePage
+                        sessionInfo={sessionInfo}
+                        onNavigate={setRoute as any}
+                        onLogout={handleLogout}
+                        activeTheme={activeTheme}
+                        setActiveTheme={setActiveTheme}
+                    />
+                </Suspense>
+            );
+        }
+        if (currentRoute === 'admin' || currentRoute === 'users') return <AdminDashboard onLogout={handleLogout} onViewUserPortal={() => setRoute('user')} onViewStatus={() => setRoute('status')} onViewDashboard={() => setRoute('dashboard')} onViewAsUser={handleViewAsUser} onViewProfile={(userId) => setRoute('profile', { path: `/profile/${encodeURIComponent(userId)}` })} />;
         return <UserDashboard sessionInfo={sessionInfo} publicConfig={publicConfig} onLogout={handleLogout} refreshSession={checkSession} onViewAdmin={() => setRoute('users')} onViewStatus={() => setRoute('status')} onViewDashboard={() => setRoute('dashboard')} onViewSettings={() => setRoute('settings')} onViewLogs={() => setRoute('logs')} onViewCollexions={() => setRoute('collexions')} onViewScanner={() => setRoute('scanner')} onViewMediaAutomation={() => setRoute('media-automation')} onViewRequests={(reviewId) => setRoute('requests', reviewId ? { reviewId } : undefined)} onPendingRequestsChange={refreshPendingRequestCount} onNavigate={setRoute as any} />;
     };
 
