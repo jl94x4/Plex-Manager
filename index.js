@@ -17419,6 +17419,16 @@ registerProfileRoutes(app, {
             const users = await loadFile(USERS_PATH, []);
             const portalUser = findLocalUserForSession(users, req.user);
             const stored = String(portalUser?.plexAccountId || '').trim();
+            const adminCloudId = String(config?.adminPlexId || '').trim();
+            if (stored && stored !== adminCloudId) return stored;
+            const impersonating = !!(req.user?.actor && req.user?.impersonatingUserId);
+            const ownerByPlexId = !impersonating && !!adminCloudId && [
+                req.user?.id,
+                req.user?.plexId,
+                portalUser?.id,
+                portalUser?.plexId,
+            ].filter(Boolean).some((id) => String(id) === adminCloudId);
+            if (ownerByPlexId) return '1';
             if (stored) return stored;
             return req.user?.id || req.user?.plexId || null;
         }
@@ -17429,37 +17439,36 @@ registerProfileRoutes(app, {
         return findLocalUserForSession(users, sessionUser);
     },
     loadRequestSummary: async (req, config) => {
+        const slim = (item) => ({
+            id: item.id ?? null,
+            title: item.title || item.mediaTitle || '',
+            posterUrl: item.posterUrl || item.posterPath || item.image || null,
+            status: item.status ?? null,
+            statusLabel: item.statusLabel || null,
+            mediaType: item.mediaType || item.type || null,
+            tmdbId: Number(item.tmdbId) || null,
+            mbid: item.mbid || null,
+            is4k: !!item.is4k,
+        });
         try {
             if (getRequestEngine(config) === 'portal') {
                 const portalRequests = getPortalRequestService(config);
-                const payload = await portalRequests.listMemberRequests(req.user, { filter: 'all', take: 6, skip: 0 });
+                const payload = await portalRequests.listMemberRequests(req.user, { filter: 'all', take: 24, skip: 0 });
                 const results = Array.isArray(payload?.results) ? payload.results : [];
                 return {
                     total: Number(payload?.counts?.total) || results.length,
                     pending: Number(payload?.counts?.pending) || 0,
-                    recent: results.slice(0, 6).map((item) => ({
-                        id: item.id ?? null,
-                        title: item.title || item.mediaTitle || '',
-                        posterUrl: item.posterUrl || item.posterPath || null,
-                        status: item.status || null,
-                        mediaType: item.mediaType || item.type || null,
-                    })),
+                    recent: results.map(slim),
                 };
             }
             const gate = getRequestAppGate(config);
             if (!gate?.ready) return null;
-            const payload = await requestAppService.listMemberRequests(config, req.user, { filter: 'all', take: 6, skip: 0 });
+            const payload = await requestAppService.listMemberRequests(config, req.user, { filter: 'all', take: 24, skip: 0 });
             const results = Array.isArray(payload?.results) ? payload.results : [];
             return {
                 total: Number(payload?.total ?? payload?.counts?.total) || results.length,
                 pending: Number(payload?.pending ?? payload?.counts?.pending) || 0,
-                recent: results.slice(0, 6).map((item) => ({
-                    id: item.id ?? null,
-                    title: item.title || item.mediaTitle || '',
-                    posterUrl: item.posterUrl || item.posterPath || item.image || null,
-                    status: item.status || item.mediaStatus || null,
-                    mediaType: item.mediaType || item.type || null,
-                })),
+                recent: results.map(slim),
             };
         } catch {
             return null;

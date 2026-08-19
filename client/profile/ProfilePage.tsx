@@ -356,6 +356,10 @@ export const ProfilePage: React.FC<Props> = ({
                                 <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1">
                                     {data.requests.recent.map((item: any) => {
                                         const poster = requestPoster(item);
+                                        const qualities = Array.isArray(item.qualities) && item.qualities.length
+                                            ? item.qualities
+                                            : (item.is4k ? ['4K'] : []);
+                                        const qualityLabel = qualities.includes('4K') ? qualities.join(' · ') : null;
                                         return (
                                             <div
                                                 key={String(item.id || item.title)}
@@ -371,7 +375,9 @@ export const ProfilePage: React.FC<Props> = ({
                                                     )}
                                                 </div>
                                                 <p className="mt-1.5 text-[11px] font-bold text-text truncate">{item.title}</p>
-                                                <p className="text-[10px] text-muted truncate">{item.status || item.mediaType}</p>
+                                                <p className="text-[10px] text-muted truncate">
+                                                    {[qualityLabel, item.status || item.mediaType].filter(Boolean).join(' · ')}
+                                                </p>
                                             </div>
                                         );
                                     })}
