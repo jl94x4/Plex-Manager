@@ -380,12 +380,34 @@ class CollexionsApiService {
         return apiFetch(base('/jobs'));
     }
 
-    async runJobNow(id: string): Promise<any> {
+    async runJobNow(idOrPayload: string | { id?: string; ids?: string[]; all?: boolean }): Promise<any> {
+        const payload = typeof idOrPayload === 'string' ? { id: idOrPayload } : idOrPayload;
         return withTimeout(
-            cx('/jobs/run', { method: 'POST', body: JSON.stringify({ id }) }),
+            cx('/jobs/run', { method: 'POST', body: JSON.stringify(payload) }),
             COLLEXIONS_LONG_MS,
-            'Running sync job',
+            payload.all ? 'Running all sync jobs' : 'Running sync job',
         );
+    }
+
+    async getJobRunProgress(): Promise<{
+        running: boolean;
+        total: number;
+        done: number;
+        failed: number;
+        current: string;
+        currentId: string;
+        percent: number;
+    }> {
+        const raw = await withTimeout(cx('/jobs/progress'), 8000, 'Job progress') as Record<string, unknown>;
+        return {
+            running: Boolean(raw?.running),
+            total: Number(raw?.total || 0),
+            done: Number(raw?.done || 0),
+            failed: Number(raw?.failed || 0),
+            current: String(raw?.current || ''),
+            currentId: String(raw?.current_id || ''),
+            percent: Number(raw?.percent || 0),
+        };
     }
 
     async updateJob(payload: { id?: string; ids?: string[]; all?: boolean; sort_order?: string; auto_sync?: boolean }): Promise<any> {

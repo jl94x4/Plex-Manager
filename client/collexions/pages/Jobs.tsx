@@ -42,6 +42,16 @@ const SORT_OPTIONS = [
 
 const jobStatusPillClass = 'inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider border whitespace-nowrap';
 
+type JobRunProgress = {
+    running: boolean;
+    total: number;
+    done: number;
+    failed: number;
+    current: string;
+    currentId: string;
+    percent: number;
+};
+
 const JobStatusPill: React.FC<{ job: ManagedJob; isRunning: boolean }> = ({ job, isRunning }) => {
     if (isRunning) {
         return (
@@ -93,6 +103,7 @@ const JobsPage: React.FC = () => {
     const [jobs, setJobs] = useState<Record<string, ManagedJob>>({});
     const [loading, setLoading] = useState(true);
     const [runningJob, setRunningJob] = useState<string | null>(null);
+    const [runAllProgress, setRunAllProgress] = useState<JobRunProgress | null>(null);
     const [runFeedback, setRunFeedback] = useState('');
     const [runFeedbackTone, setRunFeedbackTone] = useState<'info' | 'error' | 'warning'>('info');
     const [updatingSort, setUpdatingSort] = useState<string | 'all' | null>(null);
@@ -111,15 +122,32 @@ const JobsPage: React.FC = () => {
         fetchJobs();
     }, []);
 
-    const fetchJobs = async () => {
-        setLoading(true);
+    const fetchJobs = async (opts?: { silent?: boolean }) => {
+        if (!opts?.silent) setLoading(true);
         try {
             const data = await api.getJobs();
             setJobs(data);
         } catch (e) {
             console.error("Failed to fetch jobs", e);
         }
-        setLoading(false);
+        if (!opts?.silent) setLoading(false);
+    };
+
+    const isJobRunning = (id: string) => (
+        runningJob === id || (runningJob === 'all' && runAllProgress?.currentId === id)
+    );
+
+    const watchRunAllProgress = async (): Promise<JobRunProgress | null> => {
+        const deadline = Date.now() + 45 * 60 * 1000;
+        let latest: JobRunProgress | null = null;
+        while (Date.now() < deadline) {
+            latest = await api.getJobRunProgress();
+            setRunAllProgress(latest);
+            await fetchJobs({ silent: true });
+            if (!latest.running) return latest;
+            await new Promise((resolve) => setTimeout(resolve, 1500));
+        }
+        return latest;
     };
 
     const handleRunNow = async (id: string) => {
@@ -145,6 +173,69 @@ const JobsPage: React.FC = () => {
             setRunFeedback('Failed to start sync. Check logs for details.');
         } finally {
             setRunningJob(null);
+        }
+    };
+
+    const handleRunAll = async () => {
+        const count = Object.keys(jobs).length;
+        if (!count || runningJob) return;
+        const ok = await askConfirm(
+            `Run all ${count} auto-sync job${count === 1 ? '' : 's'} now? They will sync one after another in the background.`,
+            {
+                title: 'Run all jobs?',
+                confirmLabel: 'Run all',
+                cancelLabel: 'Cancel',
+            },
+        );
+        if (!ok) return;
+        setRunningJob('all');
+        setRunFeedbackTone('info');
+        setRunFeedback(`Running all ${count} jobs…`);
+        setRunAllProgress({
+            running: true,
+            total: count,
+            done: 0,
+            failed: 0,
+            current: '',
+            currentId: '',
+            percent: 0,
+        });
+        try {
+            try {
+                const result = await api.runJobNow({ all: true });
+                if (result?.progress) {
+                    setRunAllProgress({
+                        running: Boolean(result.progress.running),
+                        total: Number(result.progress.total || result.count || count),
+                        done: Number(result.progress.done || 0),
+                        failed: Number(result.progress.failed || 0),
+                        current: String(result.progress.current || ''),
+                        currentId: String(result.progress.current_id || ''),
+                        percent: Number(result.progress.percent || 0),
+                    });
+                }
+            } catch (startErr) {
+                const message = startErr instanceof Error ? startErr.message : '';
+                if (!/already running/i.test(message)) throw startErr;
+            }
+            const final = await watchRunAllProgress();
+            await fetchJobs();
+            const done = Number(final?.done || count);
+            const failed = Number(final?.failed || 0);
+            if (failed > 0) {
+                setRunFeedbackTone('warning');
+                setRunFeedback(`Finished ${done} jobs — ${failed} failed. Check logs for details.`);
+            } else {
+                setRunFeedbackTone('info');
+                setRunFeedback(`Finished all ${done} jobs.`);
+            }
+        } catch (e) {
+            console.error('Failed to run all jobs', e);
+            setRunFeedbackTone('error');
+            setRunFeedback('Failed to start run-all. A sync may already be running.');
+        } finally {
+            setRunningJob(null);
+            setRunAllProgress(null);
         }
     };
 
@@ -295,8 +386,19 @@ const JobsPage: React.FC = () => {
                         <span className="hidden sm:inline">Refresh Status</span>
                     </button>
                     <button
+                        onClick={handleRunAll}
+                        disabled={runningJob !== null || updatingSort !== null || Object.keys(jobs).length === 0}
+                        className="flex items-center gap-2 bg-green-950/30 hover:bg-green-600 text-green-400 hover:text-text px-4 py-2.5 rounded-xl transition-colors border border-green-900/50 disabled:opacity-50"
+                    >
+                        {runningJob === 'all'
+                            ? <RefreshCcw className="w-4 h-4 animate-spin" />
+                            : <Play className="w-4 h-4" />}
+                        <span className="hidden sm:inline">{runningJob === 'all' ? 'Running all…' : 'Run all'}</span>
+                        <span className="sm:hidden">All</span>
+                    </button>
+                    <button
                         onClick={handleBulkRandom}
-                        disabled={updatingSort !== null || Object.keys(jobs).length === 0}
+                        disabled={updatingSort !== null || runningJob !== null || Object.keys(jobs).length === 0}
                         className="flex items-center gap-2 bg-card hover:bg-white/10 text-text px-4 py-2.5 rounded-xl transition-colors border border-border disabled:opacity-50"
                     >
                         <span className="hidden sm:inline">{updatingSort === 'all' ? 'Shuffling…' : 'Set all to Random'}</span>
@@ -305,7 +407,27 @@ const JobsPage: React.FC = () => {
                 </div>
             </div>
 
-            {runFeedback ? (
+            {runAllProgress ? (
+                <div className="rounded-xl border border-plex/30 bg-plex/10 px-4 py-3 text-sm text-text">
+                    <div className="flex items-center justify-between gap-3">
+                        <span className="min-w-0 truncate">
+                            {runAllProgress.current
+                                ? `Syncing “${runAllProgress.current}”…`
+                                : runFeedback || 'Running all jobs…'}
+                        </span>
+                        <span className="shrink-0 font-mono text-xs text-plex">
+                            {runAllProgress.done}/{runAllProgress.total}
+                            {runAllProgress.failed > 0 ? ` · ${runAllProgress.failed} failed` : ''}
+                        </span>
+                    </div>
+                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-black/30">
+                        <div
+                            className="h-full rounded-full bg-plex transition-[width] duration-500 ease-out"
+                            style={{ width: `${Math.max(2, runAllProgress.percent)}%` }}
+                        />
+                    </div>
+                </div>
+            ) : runFeedback ? (
                 <div className={`rounded-xl border px-4 py-3 text-sm text-text flex items-center gap-2 ${
                     runFeedbackTone === 'error'
                         ? 'border-red-500/30 bg-red-500/10'
@@ -392,7 +514,7 @@ const JobsPage: React.FC = () => {
                                                 <h3 className="text-lg font-bold text-text uppercase tracking-tight truncate max-w-[200px] md:max-w-md">{job.name}</h3>
                                                 {getSourceBadge(job.source_type)}
                                                 {getSortBadge(job.sort_order)}
-                                                <JobStatusPill job={job} isRunning={runningJob === id} />
+                                                <JobStatusPill job={job} isRunning={isJobRunning(id)} />
                                             </div>
                                             <div className="flex items-center gap-4 mt-1 text-sm text-muted">
                                                 <span className="flex items-center gap-1">
@@ -431,11 +553,11 @@ const JobsPage: React.FC = () => {
                                     <div className="flex items-center gap-2 border-t lg:border-t-0 pt-4 lg:pt-0">
                                         <button
                                             onClick={() => handleRunNow(id)}
-                                            disabled={runningJob === id}
+                                            disabled={runningJob !== null}
                                             className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-green-950/30 hover:bg-green-600 text-green-400 hover:text-text border border-green-900/50 rounded-lg text-sm font-bold transition-all disabled:opacity-50"
                                         >
-                                            {runningJob === id ? <RefreshCcw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-                                            {runningJob === id ? '...' : 'Run Now'}
+                                            {isJobRunning(id) ? <RefreshCcw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                                            {isJobRunning(id) ? '...' : 'Run Now'}
                                         </button>
                                         <button
                                             onClick={() => openEdit(id)}

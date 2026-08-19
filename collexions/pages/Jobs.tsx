@@ -92,6 +92,7 @@ const JobsPage: React.FC = () => {
     const [jobs, setJobs] = useState<Record<string, ManagedJob>>({});
     const [loading, setLoading] = useState(true);
     const [runningJob, setRunningJob] = useState<string | null>(null);
+    const [runAllProgress, setRunAllProgress] = useState<{ done: number; total: number; current: string; percent: number; failed: number } | null>(null);
     const [updatingSort, setUpdatingSort] = useState<string | 'all' | null>(null);
     const [editingJobId, setEditingJobId] = useState<string | null>(null);
     const [editSort, setEditSort] = useState('custom');
@@ -128,6 +129,37 @@ const JobsPage: React.FC = () => {
             console.error("Failed to run job", e);
         }
         setRunningJob(null);
+    };
+
+    const handleRunAll = async () => {
+        const count = Object.keys(jobs).length;
+        if (!count || runningJob) return;
+        if (!window.confirm(`Run all ${count} auto-sync job${count === 1 ? '' : 's'} now? They will sync one after another in the background.`)) {
+            return;
+        }
+        setRunningJob('all');
+        setRunAllProgress({ done: 0, total: count, current: '', percent: 0, failed: 0 });
+        try {
+            await api.runJobNow({ all: true });
+            const deadline = Date.now() + 45 * 60 * 1000;
+            while (Date.now() < deadline) {
+                const p = await api.getJobRunProgress();
+                setRunAllProgress({
+                    done: p.done,
+                    total: p.total || count,
+                    current: p.current,
+                    percent: p.percent,
+                    failed: p.failed,
+                });
+                await fetchJobs();
+                if (!p.running) break;
+                await new Promise((resolve) => setTimeout(resolve, 1500));
+            }
+        } catch (e) {
+            console.error('Failed to run all jobs', e);
+        }
+        setRunningJob(null);
+        setRunAllProgress(null);
     };
 
     const openEdit = (id: string) => {
@@ -245,8 +277,19 @@ const JobsPage: React.FC = () => {
                         <span className="hidden sm:inline">Refresh Status</span>
                     </button>
                     <button
+                        onClick={handleRunAll}
+                        disabled={runningJob !== null || updatingSort !== null || Object.keys(jobs).length === 0}
+                        className="flex items-center gap-2 bg-green-950/30 hover:bg-green-600 text-green-400 hover:text-white px-4 py-2.5 rounded-xl transition-colors border border-green-900/50 disabled:opacity-50"
+                    >
+                        {runningJob === 'all'
+                            ? <RefreshCcw className="w-4 h-4 animate-spin" />
+                            : <Play className="w-4 h-4" />}
+                        <span className="hidden sm:inline">{runningJob === 'all' ? 'Running all…' : 'Run all'}</span>
+                        <span className="sm:hidden">All</span>
+                    </button>
+                    <button
                         onClick={handleBulkRandom}
-                        disabled={updatingSort !== null || Object.keys(jobs).length === 0}
+                        disabled={updatingSort !== null || runningJob !== null || Object.keys(jobs).length === 0}
                         className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-4 py-2.5 rounded-xl transition-colors border border-slate-700/50 disabled:opacity-50"
                     >
                         <span className="hidden sm:inline">{updatingSort === 'all' ? 'Shuffling…' : 'Set all to Random'}</span>
@@ -254,6 +297,25 @@ const JobsPage: React.FC = () => {
                     </button>
                 </div>
             </div>
+
+            {runAllProgress ? (
+                <div className="rounded-xl border border-plex-orange/30 bg-plex-orange/10 px-4 py-3 text-sm text-white">
+                    <div className="flex items-center justify-between gap-3">
+                        <span className="min-w-0 truncate">
+                            {runAllProgress.current ? `Syncing “${runAllProgress.current}”…` : 'Running all jobs…'}
+                        </span>
+                        <span className="shrink-0 font-mono text-xs text-plex-orange">
+                            {runAllProgress.done}/{runAllProgress.total}
+                        </span>
+                    </div>
+                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-black/30">
+                        <div
+                            className="h-full rounded-full bg-plex-orange transition-[width] duration-500 ease-out"
+                            style={{ width: `${Math.max(2, runAllProgress.percent)}%` }}
+                        />
+                    </div>
+                </div>
+            ) : null}
 
             {/* Filters Bar */}
             <div className="bg-slate-900/40 border border-slate-800 p-4 rounded-2xl flex flex-col md:flex-row gap-4 items-center justify-between">
@@ -329,7 +391,7 @@ const JobsPage: React.FC = () => {
                                                 <h3 className="text-lg font-bold text-white uppercase tracking-tight truncate max-w-[200px] md:max-w-md">{job.name}</h3>
                                                 {getSourceBadge(job.source_type)}
                                                 {getSortBadge(job.sort_order)}
-                                                <JobStatusPill job={job} isRunning={runningJob === id} />
+                                                <JobStatusPill job={job} isRunning={runningJob === id || (runningJob === 'all' && runAllProgress?.current === job.name)} />
                                             </div>
                                             <div className="flex items-center gap-4 mt-1 text-sm text-slate-500">
                                                 <span className="flex items-center gap-1">
@@ -368,11 +430,11 @@ const JobsPage: React.FC = () => {
                                     <div className="flex items-center gap-2 border-t lg:border-t-0 pt-4 lg:pt-0">
                                         <button
                                             onClick={() => handleRunNow(id)}
-                                            disabled={runningJob === id}
+                                            disabled={runningJob === id || runningJob === 'all'}
                                             className="flex-1 lg:flex-none flex items-center justify-center gap-2 px-4 py-2.5 bg-green-950/30 hover:bg-green-600 text-green-400 hover:text-white border border-green-900/50 rounded-lg text-sm font-bold transition-all disabled:opacity-50"
                                         >
-                                            {runningJob === id ? <RefreshCcw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-                                            {runningJob === id ? '...' : 'Run Now'}
+                                            {runningJob === id || runningJob === 'all' ? <RefreshCcw className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
+                                            {runningJob === id || runningJob === 'all' ? '...' : 'Run Now'}
                                         </button>
                                         <button
                                             onClick={() => openEdit(id)}

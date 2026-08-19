@@ -3009,6 +3009,66 @@ def _stamp_job_run(job, status, error=''):
     job['last_error'] = str(error or '').strip()[:500]
 
 
+_JOB_RUN_LOCK = threading.Lock()
+_JOB_RUN_STATE_LOCK = threading.Lock()
+_JOB_RUN_STATE = {
+    'running': False,
+    'total': 0,
+    'done': 0,
+    'failed': 0,
+    'current': '',
+    'current_id': '',
+}
+
+
+def _job_run_set(**kwargs):
+    with _JOB_RUN_STATE_LOCK:
+        _JOB_RUN_STATE.update(kwargs)
+
+
+def _job_run_snapshot():
+    with _JOB_RUN_STATE_LOCK:
+        snap = dict(_JOB_RUN_STATE)
+    total = int(snap.get('total') or 0)
+    done = int(snap.get('done') or 0)
+    if total > 0:
+        percent = int(round(100.0 * min(done, total) / total))
+    else:
+        percent = 100 if not snap.get('running') else 0
+    snap['percent'] = max(0, min(100, percent))
+    return snap
+
+
+def _run_jobs_background(job_ids):
+    """Force-run managed jobs one after another. Caller must already hold _JOB_RUN_LOCK."""
+    ids = [str(jid) for jid in (job_ids or []) if jid]
+    log_action(f"Run-all started ({len(ids)} job(s)).")
+    try:
+        for jid in ids:
+            managed = load_managed_collections()
+            job = managed.get(jid) if isinstance(managed.get(jid), dict) else {}
+            _job_run_set(current=str((job or {}).get('name') or jid), current_id=jid)
+            failed = False
+            try:
+                run_sync_job(jid)
+                after = load_managed_collections().get(jid) or {}
+                failed = str(after.get('last_status') or '').lower() == 'failed'
+            except Exception as e:
+                failed = True
+                logging.warning("Run-all failed for %s: %s", jid, e)
+            with _JOB_RUN_STATE_LOCK:
+                _JOB_RUN_STATE['done'] = int(_JOB_RUN_STATE.get('done') or 0) + 1
+                if failed:
+                    _JOB_RUN_STATE['failed'] = int(_JOB_RUN_STATE.get('failed') or 0) + 1
+        log_action(f"Run-all finished ({len(ids)} job(s)).")
+    finally:
+        _job_run_set(running=False, current='', current_id='')
+        try:
+            _JOB_RUN_LOCK.release()
+        except RuntimeError:
+            pass
+
+
 def run_sync_job(job_id=None):
     """Refreshes managed collections. If job_id is provided, only syncs that specific job."""
     managed = load_managed_collections()
@@ -4596,27 +4656,72 @@ def get_jobs():
 @app.route('/api/jobs/run', methods=['POST'])
 @require_auth
 def run_job_now():
-    data = request.json
-    job_id = data.get('id')
-    if not job_id:
-        return jsonify({"success": False, "error": "Missing job ID"}), 400
-        
+    data = request.json or {}
     managed = load_managed_collections()
-    if job_id not in managed:
-        return jsonify({"success": False, "error": "Job not found"}), 404
+    if data.get('all'):
+        targets = [jid for jid, job in managed.items() if isinstance(job, dict)]
+    elif data.get('ids'):
+        targets = [str(jid) for jid in data.get('ids') or [] if str(jid) in managed]
+    else:
+        job_id = str(data.get('id') or '').strip()
+        if not job_id:
+            return jsonify({"success": False, "error": "Missing job ID"}), 400
+        if job_id not in managed:
+            return jsonify({"success": False, "error": "Job not found"}), 404
+        targets = [job_id]
+    if not targets:
+        return jsonify({"success": False, "error": "No jobs to run"}), 400
 
-    try:
-        run_sync_job(job_id)
-        job = load_managed_collections().get(job_id) or {}
-        last_status = job.get('last_status') or 'success'
-        last_error = job.get('last_error') or ''
+    if not _JOB_RUN_LOCK.acquire(blocking=False):
         return jsonify({
-            "success": last_status != 'failed',
-            "last_status": last_status,
-            "last_error": last_error,
-        })
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+            "success": False,
+            "error": "A sync is already running",
+            "running": True,
+            "progress": _job_run_snapshot(),
+        }), 409
+
+    if len(targets) == 1:
+        try:
+            run_sync_job(targets[0])
+            job = load_managed_collections().get(targets[0]) or {}
+            last_status = job.get('last_status') or 'success'
+            last_error = job.get('last_error') or ''
+            return jsonify({
+                "success": last_status != 'failed',
+                "last_status": last_status,
+                "last_error": last_error,
+            })
+        except Exception as e:
+            return jsonify({"success": False, "error": str(e)}), 500
+        finally:
+            _JOB_RUN_LOCK.release()
+
+    _job_run_set(
+        running=True,
+        total=len(targets),
+        done=0,
+        failed=0,
+        current='',
+        current_id='',
+    )
+    threading.Thread(
+        target=_run_jobs_background,
+        args=(list(targets),),
+        daemon=True,
+    ).start()
+    log_action(f"Queued run-all for {len(targets)} auto-sync job(s).")
+    return jsonify({
+        "success": True,
+        "queued": True,
+        "count": len(targets),
+        "progress": _job_run_snapshot(),
+    })
+
+
+@app.route('/api/jobs/progress', methods=['GET'])
+@require_auth
+def get_job_run_progress():
+    return jsonify(_job_run_snapshot())
 
 @app.route('/api/jobs/delete', methods=['POST'])
 @require_auth
