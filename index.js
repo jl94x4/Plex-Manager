@@ -17229,6 +17229,18 @@ achievementsHttp = registerAchievementsRoutes(app, {
     fetchPlexServerAccounts,
     shouldObfuscateAnalyticsViewers,
     log,
+    fetchPlexJson: async (uri, config, pathQuery) => {
+        if (!uri || !config?.plexToken || !pathQuery) return null;
+        const path = String(pathQuery);
+        const sep = path.includes('?') ? '&' : '?';
+        const response = await fetchWithTimeout(
+            `${uri}${path}${sep}X-Plex-Token=${config.plexToken}`,
+            { headers: plexClientHeaders(config.plexToken) },
+            30000,
+        ).catch(() => null);
+        if (!response?.ok) return null;
+        return response.json().catch(() => null);
+    },
     fetchPlexMetadataGenres: async (uri, config, ratingKey) => {
         if (!uri || !config?.plexToken || !ratingKey) return [];
         const response = await fetchWithTimeout(
@@ -17240,8 +17252,9 @@ achievementsHttp = registerAchievementsRoutes(app, {
         const payload = await response.json().catch(() => null);
         const meta = payload?.MediaContainer?.Metadata?.[0];
         if (!meta) return [];
-        const tags = Array.isArray(meta.Genre) ? meta.Genre.map((g) => g?.tag).filter(Boolean) : [];
-        return tags;
+        const raw = meta.Genre;
+        const list = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+        return list.map((g) => (typeof g === 'string' ? g : g?.tag)).filter(Boolean);
     },
     fetchTautulliUserHistoryItems,
     fetchTautulliTimezone,
