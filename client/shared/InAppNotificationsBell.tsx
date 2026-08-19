@@ -245,7 +245,7 @@ const StackedArtwork: React.FC<{ items: InAppNotification[]; count: number }> = 
     if (!front) return null;
     return (
         <span
-            className="relative block shrink-0"
+            className="relative inline-flex shrink-0 items-start"
             style={{
                 width: STACK_TILE_W + (back ? STACK_FAN_X : 0),
                 height: STACK_TILE_H + (back ? STACK_FAN_Y : 0),
@@ -259,7 +259,7 @@ const StackedArtwork: React.FC<{ items: InAppNotification[]; count: number }> = 
                     <NotificationArtwork item={back} hoverLift={false} peek />
                 </span>
             )}
-            <span className="absolute left-0 top-0 z-[2]">
+            <span className="relative z-[2] inline-flex shrink-0">
                 <NotificationArtwork item={front} hoverLift={false} />
                 {count > 1 && (
                     <span className="absolute -right-1 -top-1 z-20 inline-flex h-4 min-w-4 items-center justify-center rounded-full border border-plex/40 bg-plex px-1 text-[9px] font-black leading-none text-background tabular-nums shadow-sm">
@@ -740,7 +740,7 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                                         className="notif-row-enter border-b border-border/40 last:border-b-0"
                                         style={{ animationDelay: `${Math.min(index, 12) * 28}ms` }}
                                     >
-                                        <div className={`group relative flex items-start ${
+                                        <div className={`group relative flex items-start px-2 sm:px-3 py-2 ${
                                             unreadCount > 0 ? 'bg-plex/[0.045]' : ''
                                         }`}>
                                             {unreadCount > 0 && (
@@ -753,12 +753,10 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                                                 aria-label={expanded
                                                     ? t('notifications.stack.collapse')
                                                     : t('notifications.stack.expand', { count: stack.items.length })}
-                                                className="min-w-0 flex-1 text-left px-3.5 sm:px-4 py-3 transition-all duration-200 hover:bg-plex/[0.07] focus-visible:outline-none focus-visible:bg-plex/10"
+                                                className="notif-row-btn min-w-0 flex-1 text-left rounded-xl px-1.5 py-1.5 transition-all duration-200 hover:bg-plex/[0.07] focus-visible:outline-none focus-visible:bg-plex/10"
                                             >
-                                                <div className="flex items-start gap-3">
-                                                    <span className="relative shrink-0 pt-1 pr-1">
-                                                        <StackedArtwork items={stack.items} count={stack.items.length} />
-                                                    </span>
+                                                <div className="flex items-start gap-2.5">
+                                                    <StackedArtwork items={stack.items} count={stack.items.length} />
                                                     <div className="min-w-0 flex-1">
                                                         <div className="flex items-start justify-between gap-2">
                                                             <p className={`text-sm leading-snug ${unreadCount > 0 ? 'font-bold text-text' : 'font-semibold text-text/90'}`}>
@@ -789,7 +787,7 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                                                 onClick={() => { void removeItems(stack.items.map((row) => row.id)); }}
                                                 aria-label={t('notifications.removeStackAria', { count: stack.items.length })}
                                                 title={t('notifications.remove')}
-                                                className="mt-3 mr-2 shrink-0 rounded-lg p-1.5 text-muted hover:bg-white/10 hover:text-text focus-visible:outline-none focus-visible:bg-white/10"
+                                                className="mt-1.5 mr-0.5 shrink-0 rounded-lg p-1.5 text-muted hover:bg-white/10 hover:text-text focus-visible:outline-none focus-visible:bg-white/10"
                                             >
                                                 <X className="h-3.5 w-3.5" />
                                             </button>
