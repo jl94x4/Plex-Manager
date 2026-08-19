@@ -36,6 +36,8 @@ import {
     pathsFromRadarrEvent,
     pathsFromLidarrEvent,
     classifyArrEvent,
+    scannerActivityNotifyEvent,
+    isScannerActivityNotifyEnabled,
     buildScansFromPaths,
     parseAutoscanYaml,
     buildTargets,
@@ -1380,6 +1382,7 @@ import {
 } from './lib/notifications/opsNotify.js';
 import { enrichInAppNotificationItems } from './lib/notifications/mediaMeta.js';
 import { lookupJobNotificationPoster, resolveJobNotifySourcePath } from './lib/notifications/jobPoster.js';
+import { resolveScannerNotifyPoster } from './lib/notifications/scannerPoster.js';
 import { watcherTitleKey, setWatchingTitle } from './lib/notifications/requestWatchers.js';
 import { normalizeReleaseDatePreference, isFutureReleaseDate } from './lib/notifications/releaseDates.js';
 import {
@@ -2068,6 +2071,23 @@ const notifyOps = async (event, { title, body, href, dedupeKey, cooldownMs, meta
         log(`[ops-notify] ${event} failed: ${error?.message || error}`);
         return { notified: false };
     }
+};
+
+const notifyScannerActivity = (config, meta = {}, scan = null) => {
+    const event = scannerActivityNotifyEvent(meta.action);
+    if (!event || !isScannerActivityNotifyEnabled(config, event)) return;
+    const titleParts = [meta.title, meta.quality].map((part) => String(part || '').trim()).filter(Boolean);
+    const title = titleParts.join(' · ') || scan?.folder || meta.reason || 'Library item';
+    const folder = String(scan?.folder || '').trim();
+    void (async () => {
+        const artwork = await resolveScannerNotifyPoster({ artwork: meta, config });
+        await notifyOps(event, {
+            title,
+            body: [meta.reason, folder].filter(Boolean).join(' · '),
+            dedupeKey: `scanner:${event}:${title}`,
+            meta: artwork,
+        });
+    })().catch(() => {});
 };
 
 const mediaJobNotifyMeta = async (entry, config = {}) => {
@@ -3918,6 +3938,9 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             notifyNewEpisodeWebPush,
             notifyCollexionsFailed,
             notifyScannerFailed,
+            notifyScannerDeleted,
+            notifyScannerUpgrade,
+            notifyScannerImport,
             notifyStatusDown,
             notifyStatusUp,
             notifyMediaJobFailed,
@@ -3968,6 +3991,9 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             notifyNewEpisodeWebPush,
             notifyCollexionsFailed,
             notifyScannerFailed,
+            notifyScannerDeleted,
+            notifyScannerUpgrade,
+            notifyScannerImport,
             notifyStatusDown,
             notifyStatusUp,
             notifyMediaJobFailed,
@@ -4962,6 +4988,9 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 requestNotReleasedNotifyInApp: config.requestNotReleasedNotifyInApp !== false,
                 requestNotReleasedNotifyWebPush: config.requestNotReleasedNotifyWebPush !== false,
                 notifyReleaseDatePreference: normalizeReleaseDatePreference(config.notifyReleaseDatePreference),
+                scannerNotifyDeleted: config.scannerNotifyDeleted === true,
+                scannerNotifyUpgrade: config.scannerNotifyUpgrade === true,
+                scannerNotifyImport: config.scannerNotifyImport === true,
                 notificationTemplates: normalizeNotificationTemplates(config.notificationTemplates),
                 notificationTemplateDefaults: DEFAULT_NOTIFY_TEMPLATES,
                 notificationTemplateEvents: NOTIFY_EVENTS,
@@ -5122,6 +5151,9 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 requestNotReleasedNotifyInApp: true,
                 requestNotReleasedNotifyWebPush: true,
                 notifyReleaseDatePreference: 'digital',
+                scannerNotifyDeleted: false,
+                scannerNotifyUpgrade: false,
+                scannerNotifyImport: false,
                 notificationTemplates: {},
                 notificationTemplateDefaults: DEFAULT_NOTIFY_TEMPLATES,
                 notificationTemplateEvents: NOTIFY_EVENTS,
@@ -5175,7 +5207,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         inactiveCleanupEnabled, inactiveCleanupDays,
         primaryColor, customLogoUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
-        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, supportTicketsEnabled, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
+        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, supportTicketsEnabled, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, scannerNotifyDeleted, scannerNotifyUpgrade, scannerNotifyImport, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
     } = req.body;
 
@@ -5672,6 +5704,15 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
                 ? notifyReleaseDatePreference
                 : existingConfig.notifyReleaseDatePreference,
         ),
+        scannerNotifyDeleted: scannerNotifyDeleted !== undefined
+            ? !!scannerNotifyDeleted
+            : !!existingConfig.scannerNotifyDeleted,
+        scannerNotifyUpgrade: scannerNotifyUpgrade !== undefined
+            ? !!scannerNotifyUpgrade
+            : !!existingConfig.scannerNotifyUpgrade,
+        scannerNotifyImport: scannerNotifyImport !== undefined
+            ? !!scannerNotifyImport
+            : !!existingConfig.scannerNotifyImport,
         webPushEnabled: webPushEnabled !== undefined
             ? !!webPushEnabled
             : (existingConfig.webPushEnabled !== false),
@@ -25214,6 +25255,7 @@ const handleArrTrigger = async (req, res, kind) => {
                 title: meta.title || `${kind.charAt(0).toUpperCase()}${kind.slice(1)} webhook`,
                 error: `${eventType || 'Unknown'} webhook contained no usable media paths.`,
             }, { countProcessed: false });
+            notifyScannerActivity(config, meta);
             if (kind === 'sonarr' && /^download$/i.test(eventType)) {
                 void schedulePosterSetsArrHook(event).catch(() => undefined);
             }
@@ -25227,6 +25269,7 @@ const handleArrTrigger = async (req, res, kind) => {
             ...classifyArrEvent(kind, event),
         });
         await enqueueScans(scans);
+        notifyScannerActivity(config, classifyArrEvent(kind, event), scans[0]);
         log(`[scanner] Queued ${scans.length} from ${kind}:${trigger.name} (${eventType}${scans[0]?.reason ? ` · ${scans[0].reason}` : ''}): ${scans.map((s) => s.folder).join(' | ')}`);
         if (kind === 'sonarr' && /^download$/i.test(eventType)) {
             void schedulePosterSetsArrHook(event).catch(() => undefined);

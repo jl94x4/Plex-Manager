@@ -128,6 +128,24 @@ const typeVisual = (type?: string) => {
                 tone: 'text-amber-300 bg-amber-500/15 border-amber-500/35',
                 tile: 'from-amber-500/30 via-orange-500/10 to-card',
             };
+        case 'scanner_deleted':
+            return {
+                Icon: Trash2,
+                tone: 'text-rose-400 bg-rose-500/15 border-rose-500/35',
+                tile: 'from-rose-500/30 via-orange-500/10 to-card',
+            };
+        case 'scanner_upgrade':
+            return {
+                Icon: Sparkles,
+                tone: 'text-plex bg-plex/15 border-plex/35',
+                tile: 'from-plex/30 via-amber-500/10 to-card',
+            };
+        case 'scanner_import':
+            return {
+                Icon: CircleCheck,
+                tone: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/35',
+                tile: 'from-emerald-500/30 via-teal-500/10 to-card',
+            };
         case 'status_down':
             return {
                 Icon: AlertTriangle,
@@ -172,6 +190,9 @@ const STACK_TITLE_TYPES = new Set([
     'support_ticket',
     'collexions_failed',
     'scanner_failed',
+    'scanner_deleted',
+    'scanner_upgrade',
+    'scanner_import',
     'status_down',
     'status_up',
     'media_job_failed',

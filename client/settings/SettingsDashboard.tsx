@@ -685,6 +685,9 @@ export const SettingsDashboard: React.FC = () => {
     const [requestNotReleasedNotifyInApp, setRequestNotReleasedNotifyInApp] = useState(true);
     const [requestNotReleasedNotifyWebPush, setRequestNotReleasedNotifyWebPush] = useState(true);
     const [notifyReleaseDatePreference, setNotifyReleaseDatePreference] = useState('digital');
+    const [scannerNotifyDeleted, setScannerNotifyDeleted] = useState(false);
+    const [scannerNotifyUpgrade, setScannerNotifyUpgrade] = useState(false);
+    const [scannerNotifyImport, setScannerNotifyImport] = useState(false);
     const [webPushEnabled, setWebPushEnabled] = useState(true);
     const [notificationTemplates, setNotificationTemplates] = useState<Record<string, Record<string, string>>>({});
     const [notificationTemplateDefaults, setNotificationTemplateDefaults] = useState<Record<string, Record<string, string>>>({});
@@ -697,7 +700,7 @@ export const SettingsDashboard: React.FC = () => {
     const [ntfyPriority, setNtfyPriority] = useState(3);
     const [ntfyEvents, setNtfyEvents] = useState<Record<string, boolean>>({
         available: true, approved: true, declined: true, season: true, episode: false, admin_pending: true,
-        collexions_failed: true, scanner_failed: true, status_down: true, status_up: true,
+        collexions_failed: true, scanner_failed: true, scanner_deleted: true, scanner_upgrade: true, scanner_import: true, status_down: true, status_up: true,
         media_job_failed: true, media_job_completed: false,
     });
     const [webhookEnabled, setWebhookEnabled] = useState(false);
@@ -705,7 +708,7 @@ export const SettingsDashboard: React.FC = () => {
     const [webhookHeadersJson, setWebhookHeadersJson] = useState('');
     const [webhookEvents, setWebhookEvents] = useState<Record<string, boolean>>({
         available: true, approved: false, declined: false, season: false, episode: false, admin_pending: false,
-        collexions_failed: false, scanner_failed: false, status_down: false, status_up: false,
+        collexions_failed: false, scanner_failed: false, scanner_deleted: false, scanner_upgrade: false, scanner_import: false, status_down: false, status_up: false,
         media_job_failed: false, media_job_completed: false,
     });
     const [watchHistorySource, setWatchHistorySource] = useState<'plex' | 'tautulli'>('plex');
@@ -1575,6 +1578,9 @@ export const SettingsDashboard: React.FC = () => {
             setRequestNotReleasedNotifyInApp(initialSettings.requestNotReleasedNotifyInApp !== false);
             setRequestNotReleasedNotifyWebPush(initialSettings.requestNotReleasedNotifyWebPush !== false);
             setNotifyReleaseDatePreference(initialSettings.notifyReleaseDatePreference || 'digital');
+            setScannerNotifyDeleted(initialSettings.scannerNotifyDeleted === true);
+            setScannerNotifyUpgrade(initialSettings.scannerNotifyUpgrade === true);
+            setScannerNotifyImport(initialSettings.scannerNotifyImport === true);
             setWebPushEnabled(initialSettings.webPushEnabled !== false);
             setNotificationTemplates(
                 initialSettings.notificationTemplates && typeof initialSettings.notificationTemplates === 'object'
@@ -1605,13 +1611,13 @@ export const SettingsDashboard: React.FC = () => {
                 initialSettings.ntfyEvents && typeof initialSettings.ntfyEvents === 'object'
                     ? {
                         available: true, approved: true, declined: true, season: true, episode: false, admin_pending: true,
-                        collexions_failed: true, scanner_failed: true, status_down: true, status_up: true,
+                        collexions_failed: true, scanner_failed: true, scanner_deleted: true, scanner_upgrade: true, scanner_import: true, status_down: true, status_up: true,
                         media_job_failed: true, media_job_completed: false,
                         ...initialSettings.ntfyEvents,
                     }
                     : {
                         available: true, approved: true, declined: true, season: true, episode: false, admin_pending: true,
-                        collexions_failed: true, scanner_failed: true, status_down: true, status_up: true,
+                        collexions_failed: true, scanner_failed: true, scanner_deleted: true, scanner_upgrade: true, scanner_import: true, status_down: true, status_up: true,
                         media_job_failed: true, media_job_completed: false,
                     },
             );
@@ -1622,13 +1628,13 @@ export const SettingsDashboard: React.FC = () => {
                 initialSettings.webhookEvents && typeof initialSettings.webhookEvents === 'object'
                     ? {
                         available: true, approved: false, declined: false, season: false, episode: false, admin_pending: false,
-                        collexions_failed: false, scanner_failed: false, status_down: false, status_up: false,
+                        collexions_failed: false, scanner_failed: false, scanner_deleted: false, scanner_upgrade: false, scanner_import: false, status_down: false, status_up: false,
                         media_job_failed: false, media_job_completed: false,
                         ...initialSettings.webhookEvents,
                     }
                     : {
                         available: true, approved: false, declined: false, season: false, episode: false, admin_pending: false,
-                        collexions_failed: false, scanner_failed: false, status_down: false, status_up: false,
+                        collexions_failed: false, scanner_failed: false, scanner_deleted: false, scanner_upgrade: false, scanner_import: false, status_down: false, status_up: false,
                         media_job_failed: false, media_job_completed: false,
                     },
             );
@@ -2067,6 +2073,9 @@ export const SettingsDashboard: React.FC = () => {
             requestNotReleasedNotifyInApp,
             requestNotReleasedNotifyWebPush,
             notifyReleaseDatePreference,
+            scannerNotifyDeleted,
+            scannerNotifyUpgrade,
+            scannerNotifyImport,
             webPushEnabled,
             notificationTemplates,
             ntfyEnabled,
@@ -2620,6 +2629,12 @@ export const SettingsDashboard: React.FC = () => {
                                 setRequestNotReleasedNotifyWebPush={setRequestNotReleasedNotifyWebPush}
                                 notifyReleaseDatePreference={notifyReleaseDatePreference}
                                 setNotifyReleaseDatePreference={setNotifyReleaseDatePreference}
+                                scannerNotifyDeleted={scannerNotifyDeleted}
+                                setScannerNotifyDeleted={setScannerNotifyDeleted}
+                                scannerNotifyUpgrade={scannerNotifyUpgrade}
+                                setScannerNotifyUpgrade={setScannerNotifyUpgrade}
+                                scannerNotifyImport={scannerNotifyImport}
+                                setScannerNotifyImport={setScannerNotifyImport}
                                 webPushEnabled={webPushEnabled}
                                 setWebPushEnabled={setWebPushEnabled}
                                 notificationTemplates={notificationTemplates}

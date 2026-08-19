@@ -3,7 +3,7 @@ import { Bell, Loader2, RefreshCw, Send } from 'lucide-react';
 import { useDiscoverI18n } from '../discovery/i18n';
 import { apiFetch } from '../shared/api';
 import { notifyInAppNotificationsChanged } from '../shared/inAppNotificationsRefresh';
-import { SettingsToggleRow } from '../shared/ui';
+import { CustomSelect, SettingsToggleRow } from '../shared/ui';
 import { SettingFieldLabel, SettingHint } from './SettingHint';
 import { NotificationTemplatesPanel } from './NotificationTemplatesPanel';
 
@@ -199,6 +199,12 @@ type Props = {
     setRequestNotReleasedNotifyWebPush: (v: boolean) => void;
     notifyReleaseDatePreference: string;
     setNotifyReleaseDatePreference: (v: string) => void;
+    scannerNotifyDeleted: boolean;
+    setScannerNotifyDeleted: (v: boolean) => void;
+    scannerNotifyUpgrade: boolean;
+    setScannerNotifyUpgrade: (v: boolean) => void;
+    scannerNotifyImport: boolean;
+    setScannerNotifyImport: (v: boolean) => void;
     webPushEnabled: boolean;
     setWebPushEnabled: (v: boolean) => void;
     notificationTemplates: Record<string, Record<string, string>>;
@@ -265,6 +271,12 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
     setRequestNotReleasedNotifyWebPush,
     notifyReleaseDatePreference,
     setNotifyReleaseDatePreference,
+    scannerNotifyDeleted,
+    setScannerNotifyDeleted,
+    scannerNotifyUpgrade,
+    setScannerNotifyUpgrade,
+    scannerNotifyImport,
+    setScannerNotifyImport,
     webPushEnabled,
     setWebPushEnabled,
     notificationTemplates,
@@ -322,6 +334,9 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
         admin_pending: t('settings.notifications.events.admin_pending'),
         collexions_failed: t('settings.notifications.events.collexions_failed'),
         scanner_failed: t('settings.notifications.events.scanner_failed'),
+        scanner_deleted: t('settings.notifications.events.scanner_deleted'),
+        scanner_upgrade: t('settings.notifications.events.scanner_upgrade'),
+        scanner_import: t('settings.notifications.events.scanner_import'),
         status_down: t('settings.notifications.events.status_down'),
         status_up: t('settings.notifications.events.status_up'),
         media_job_failed: t('settings.notifications.events.media_job_failed'),
@@ -572,19 +587,20 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                     border={false}
                 />
                 <div className={requestNotReleasedNotifyEnabled ? 'space-y-3' : 'space-y-3 opacity-50 pointer-events-none'}>
-                    <div>
+                    <div className="w-full max-w-md">
                         <SettingFieldLabel htmlFor="notifyReleaseDatePreference">{t('settings.notifications.notReleased.preferredReleaseDate')}</SettingFieldLabel>
-                        <select
+                        <CustomSelect
                             id="notifyReleaseDatePreference"
-                            className="w-full max-w-md rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
                             value={notifyReleaseDatePreference || 'digital'}
-                            onChange={(e) => setNotifyReleaseDatePreference(e.target.value)}
-                        >
-                            <option value="digital">{t('settings.notifications.notReleased.options.digital')}</option>
-                            <option value="theatrical">{t('settings.notifications.notReleased.options.theatrical')}</option>
-                            <option value="physical">{t('settings.notifications.notReleased.options.physical')}</option>
-                            <option value="tmdb">{t('settings.notifications.notReleased.options.tmdb')}</option>
-                        </select>
+                            onChange={setNotifyReleaseDatePreference}
+                            options={[
+                                { value: 'digital', label: t('settings.notifications.notReleased.options.digital') },
+                                { value: 'theatrical', label: t('settings.notifications.notReleased.options.theatrical') },
+                                { value: 'physical', label: t('settings.notifications.notReleased.options.physical') },
+                                { value: 'tmdb', label: t('settings.notifications.notReleased.options.tmdb') },
+                            ]}
+                            className="w-full"
+                        />
                     </div>
                     <SettingsToggleRow
                         title={t('settings.notifications.common.email')}
@@ -605,6 +621,34 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                         border={false}
                     />
                 </div>
+            </div>
+
+            <div id={getSettingsSectionElementId('notifications-scanner')} className="scroll-mt-24 space-y-3">
+                <h4 className="text-sm font-bold text-text uppercase tracking-wider">{t('settings.notifications.scannerActivity.title')}</h4>
+                <p className="text-xs text-muted max-w-2xl">
+                    {t('settings.notifications.scannerActivity.description')}
+                </p>
+                <SettingsToggleRow
+                    title={t('settings.notifications.scannerActivity.deletedTitle')}
+                    description={t('settings.notifications.scannerActivity.deletedDescription')}
+                    checked={scannerNotifyDeleted}
+                    onChange={setScannerNotifyDeleted}
+                    border={false}
+                />
+                <SettingsToggleRow
+                    title={t('settings.notifications.scannerActivity.upgradeTitle')}
+                    description={t('settings.notifications.scannerActivity.upgradeDescription')}
+                    checked={scannerNotifyUpgrade}
+                    onChange={setScannerNotifyUpgrade}
+                    border={false}
+                />
+                <SettingsToggleRow
+                    title={t('settings.notifications.scannerActivity.importTitle')}
+                    description={t('settings.notifications.scannerActivity.importDescription')}
+                    checked={scannerNotifyImport}
+                    onChange={setScannerNotifyImport}
+                    border={false}
+                />
             </div>
 
             <div id={getSettingsSectionElementId('notifications-ntfy')} className="scroll-mt-24 space-y-3">
@@ -651,16 +695,20 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                             onChange={(e) => setNtfyToken(e.target.value)}
                         />
                     </div>
-                    <div>
+                    <div className="w-full max-w-xs">
                         <SettingFieldLabel htmlFor="ntfyPriority">{t('settings.notifications.ntfy.priority')}</SettingFieldLabel>
-                        <input
+                        <CustomSelect
                             id="ntfyPriority"
-                            type="number"
-                            min={1}
-                            max={5}
-                            className="w-28 rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
                             value={ntfyPriority}
-                            onChange={(e) => setNtfyPriority(Math.max(1, Math.min(5, Number(e.target.value) || 3)))}
+                            onChange={(value) => setNtfyPriority(Math.max(1, Math.min(5, Number(value) || 3)))}
+                            options={[
+                                { value: 1, label: '1' },
+                                { value: 2, label: '2' },
+                                { value: 3, label: '3' },
+                                { value: 4, label: '4' },
+                                { value: 5, label: '5' },
+                            ]}
+                            className="w-full"
                         />
                     </div>
                     <div className="flex flex-wrap gap-3 pt-1">

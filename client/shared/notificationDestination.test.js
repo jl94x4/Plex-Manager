@@ -67,7 +67,7 @@ const resolveNotificationDestination = (item = {}) => {
     if (href.startsWith('/collexions') || type === 'collexions_failed') {
         return { kind: 'route', route: 'collexions', labelKey: 'notifications.openCollexions' };
     }
-    if (href.startsWith('/scanner') || type === 'scanner_failed') {
+    if (href.startsWith('/scanner') || type === 'scanner_failed' || type === 'scanner_deleted' || type === 'scanner_upgrade' || type === 'scanner_import') {
         return { kind: 'route', route: 'scanner', labelKey: 'notifications.openScanner' };
     }
     if (href.startsWith('/status') || type === 'status_down' || type === 'status_up') {
@@ -149,6 +149,9 @@ test('ops alerts deep-link to the matching admin page', () => {
         kind: 'route', route: 'collexions', labelKey: 'notifications.openCollexions',
     });
     assert.equal(resolveNotificationDestination({ type: 'scanner_failed' }).route, 'scanner');
+    assert.equal(resolveNotificationDestination({ type: 'scanner_deleted' }).route, 'scanner');
+    assert.equal(resolveNotificationDestination({ type: 'scanner_upgrade' }).route, 'scanner');
+    assert.equal(resolveNotificationDestination({ type: 'scanner_import' }).route, 'scanner');
     assert.equal(resolveNotificationDestination({ type: 'status_down' }).route, 'status');
     assert.equal(resolveNotificationDestination({ type: 'media_job_completed' }).route, 'media-automation');
 });

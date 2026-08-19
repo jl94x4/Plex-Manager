@@ -80,6 +80,9 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession }
     );
     const [notifyCollexionsFailed, setNotifyCollexionsFailed] = useState(user?.notifyCollexionsFailed !== false);
     const [notifyScannerFailed, setNotifyScannerFailed] = useState(user?.notifyScannerFailed !== false);
+    const [notifyScannerDeleted, setNotifyScannerDeleted] = useState(user?.notifyScannerDeleted !== false);
+    const [notifyScannerUpgrade, setNotifyScannerUpgrade] = useState(user?.notifyScannerUpgrade !== false);
+    const [notifyScannerImport, setNotifyScannerImport] = useState(user?.notifyScannerImport !== false);
     const [notifyStatusDown, setNotifyStatusDown] = useState(user?.notifyStatusDown !== false);
     const [notifyStatusUp, setNotifyStatusUp] = useState(user?.notifyStatusUp !== false);
     const [notifyMediaJobFailed, setNotifyMediaJobFailed] = useState(user?.notifyMediaJobFailed !== false);
@@ -116,6 +119,9 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession }
         );
         setNotifyCollexionsFailed(user?.notifyCollexionsFailed !== false);
         setNotifyScannerFailed(user?.notifyScannerFailed !== false);
+        setNotifyScannerDeleted(user?.notifyScannerDeleted !== false);
+        setNotifyScannerUpgrade(user?.notifyScannerUpgrade !== false);
+        setNotifyScannerImport(user?.notifyScannerImport !== false);
         setNotifyStatusDown(user?.notifyStatusDown !== false);
         setNotifyStatusUp(user?.notifyStatusUp !== false);
         setNotifyMediaJobFailed(user?.notifyMediaJobFailed !== false);
@@ -141,6 +147,9 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession }
         user?.notifyNewEpisodeWebPush,
         user?.notifyCollexionsFailed,
         user?.notifyScannerFailed,
+        user?.notifyScannerDeleted,
+        user?.notifyScannerUpgrade,
+        user?.notifyScannerImport,
         user?.notifyStatusDown,
         user?.notifyStatusUp,
         user?.notifyMediaJobFailed,
@@ -500,6 +509,51 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession }
                                         );
                                     }}
                                     ariaLabel={t('homeDashboard.toggleScannerFailedAria')}
+                                    disabled={busy}
+                                />
+                                <PrefToggle
+                                    title={t('homeDashboard.scannerDeletedAlerts')}
+                                    hint={t('homeDashboard.scannerDeletedAlertsHint')}
+                                    on={notifyScannerDeleted}
+                                    onToggle={() => {
+                                        const next = !notifyScannerDeleted;
+                                        void savePref(
+                                            { notifyScannerDeleted: next },
+                                            () => setNotifyScannerDeleted(next),
+                                            t('preferencesPage.notificationsUpdated'),
+                                        );
+                                    }}
+                                    ariaLabel={t('homeDashboard.toggleScannerDeletedAria')}
+                                    disabled={busy}
+                                />
+                                <PrefToggle
+                                    title={t('homeDashboard.scannerUpgradeAlerts')}
+                                    hint={t('homeDashboard.scannerUpgradeAlertsHint')}
+                                    on={notifyScannerUpgrade}
+                                    onToggle={() => {
+                                        const next = !notifyScannerUpgrade;
+                                        void savePref(
+                                            { notifyScannerUpgrade: next },
+                                            () => setNotifyScannerUpgrade(next),
+                                            t('preferencesPage.notificationsUpdated'),
+                                        );
+                                    }}
+                                    ariaLabel={t('homeDashboard.toggleScannerUpgradeAria')}
+                                    disabled={busy}
+                                />
+                                <PrefToggle
+                                    title={t('homeDashboard.scannerImportAlerts')}
+                                    hint={t('homeDashboard.scannerImportAlertsHint')}
+                                    on={notifyScannerImport}
+                                    onToggle={() => {
+                                        const next = !notifyScannerImport;
+                                        void savePref(
+                                            { notifyScannerImport: next },
+                                            () => setNotifyScannerImport(next),
+                                            t('preferencesPage.notificationsUpdated'),
+                                        );
+                                    }}
+                                    ariaLabel={t('homeDashboard.toggleScannerImportAria')}
                                     disabled={busy}
                                 />
                                 <PrefToggle
