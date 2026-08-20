@@ -38,6 +38,7 @@ import {
     classifyArrEvent,
     scannerActivityNotifyEvent,
     isScannerActivityNotifyEnabled,
+    formatScannerNotifyTitle,
     buildScansFromPaths,
     parseAutoscanYaml,
     buildTargets,
@@ -2090,8 +2091,7 @@ const notifyOps = async (event, { title, body, href, dedupeKey, cooldownMs, meta
 const notifyScannerActivity = (config, meta = {}, scan = null) => {
     const event = scannerActivityNotifyEvent(meta.action);
     if (!event || !isScannerActivityNotifyEnabled(config, event)) return;
-    const titleParts = [meta.title, meta.quality].map((part) => String(part || '').trim()).filter(Boolean);
-    const title = titleParts.join(' · ') || scan?.folder || meta.reason || 'Library item';
+    const title = formatScannerNotifyTitle(meta, scan);
     const folder = String(scan?.folder || '').trim();
     void (async () => {
         const artwork = await resolveScannerNotifyPoster({ artwork: meta, config });
