@@ -1369,6 +1369,24 @@ def _reload_item_thumb(item) -> str:
     return _item_poster_thumb(item)
 
 
+def _overlay_label_explained_locally(paths: dict | None, rating_key: str) -> bool:
+    """True when this app's own banner stack (New Season / New Episode / Live /
+    Recently Added / Top 10) currently owns an active layer for this item — meaning
+    the Plex "Overlay" label is explained by our own stamp, not a separate/external
+    Kometa install. Without this check, "skip if Overlay label present and not in my
+    own Kometa log" would treat any title with just a New Season banner (which sets
+    the same label) as "managed by a real Kometa install" and refuse to touch it."""
+    if not paths or not rating_key:
+        return False
+    try:
+        from layer_stack import load_registry, active_layers
+
+        registry = load_registry(paths, str(rating_key))
+        return bool(active_layers(registry))
+    except Exception:
+        return False
+
+
 def _add_overlay_label(item) -> None:
     try:
         item.addLabel("Overlay")
@@ -1990,7 +2008,12 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                 _progress(progress, f"Title {key}: not found in Plex — skipped")
                 continue
             scanned += 1
-            if skip_kometa and key not in log and _has_kometa_overlay_label(item):
+            if (
+                skip_kometa
+                and key not in log
+                and _has_kometa_overlay_label(item)
+                and not _overlay_label_explained_locally(paths, key)
+            ):
                 _progress(
                     progress,
                     f"{getattr(item, 'title', key)}: skipped (Overlay label / external Kometa)",
@@ -2069,7 +2092,12 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                 key = str(getattr(item, "ratingKey", "") or "")
                 if not key:
                     continue
-                if skip_kometa and key not in log and _has_kometa_overlay_label(item):
+                if (
+                    skip_kometa
+                    and key not in log
+                    and _has_kometa_overlay_label(item)
+                    and not _overlay_label_explained_locally(paths, key)
+                ):
                     continue  # managed by a real Kometa install — leave alone
                 item_type = str(getattr(item, "type", "") or "").lower()
                 row = should.get(key) or {
