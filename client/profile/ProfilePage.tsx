@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
     ArrowDownRight, ArrowUpRight, Check, ChevronRight, Clock, Copy, Crown, Film, Link2, Lock, LogOut, Mail,
-    Minus, Music, Play, Share2, Shield, SlidersHorizontal, Sparkles, Swords, Trophy, Tv, User,
+    Minus, Music, Play, Share2, Shield, SlidersHorizontal, Sparkles, Swords, Trophy, Tv, User, UserCheck, UserPlus,
 } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { logoUrl, resolvePortalAssetUrl } from '../shared/basePath';
@@ -144,6 +144,7 @@ export const ProfilePage: React.FC<Props> = ({
     const [pinBusy, setPinBusy] = useState(false);
     const [nowPlaying, setNowPlaying] = useState<any>(null);
     const [viewAsBusy, setViewAsBusy] = useState(false);
+    const [followBusy, setFollowBusy] = useState(false);
     const accountId = profileAccountIdFromPath(locationPath);
     const mediaServerType = String(sessionInfo?.mediaServerType || 'plex').toLowerCase();
     const isJellyfinPortal = mediaServerType === 'jellyfin' || mediaServerType === 'emby';
@@ -296,6 +297,25 @@ export const ProfilePage: React.FC<Props> = ({
         }
     };
 
+    const toggleFollow = async () => {
+        if (!data?.social?.canPin || followBusy) return;
+        const next = !data.social.viewerPinned;
+        const target = String(identity.accountId || accountId || '').trim();
+        if (!target) return;
+        setFollowBusy(true);
+        try {
+            await apiFetch('/api/profile/pin', {
+                method: 'POST',
+                body: JSON.stringify({ accountId: target, pinned: next }),
+            });
+            setData((prev: any) => (prev ? { ...prev, social: { ...prev.social, viewerPinned: next } } : prev));
+        } catch (err: any) {
+            setToasts((prev) => pushToast(prev, err?.message || t('profilePage.followFailed'), 'error'));
+        } finally {
+            setFollowBusy(false);
+        }
+    };
+
     const wrapAnalytics = useMemo(
         () => mergeProfileWrapUp(data?.watch?.wrapUp || null, personalWrapUp, Number(identity.xp) || undefined),
         [data?.watch?.wrapUp, personalWrapUp, identity.xp],
@@ -428,6 +448,9 @@ export const ProfilePage: React.FC<Props> = ({
                                             ? t('profilePage.watchingNow', { title: nowPlaying.grandparentTitle || nowPlaying.title })
                                             : (identity.classTitle?.blurb || t('profilePage.subtitle', { provider: identity.provider || 'Plex' }))}
                                     </p>
+                                    {data.social?.bio ? (
+                                        <p className="mt-2 max-w-xl text-sm text-text/90 leading-relaxed">{data.social.bio}</p>
+                                    ) : null}
                                     <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px] font-semibold">
                                         {achievements?.enabled ? (
                                             <>
@@ -473,6 +496,21 @@ export const ProfilePage: React.FC<Props> = ({
                             </div>
                             {data ? (
                                 <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                    {data.social?.canPin ? (
+                                        <button
+                                            type="button"
+                                            disabled={followBusy}
+                                            onClick={() => { void toggleFollow(); }}
+                                            className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-bold disabled:opacity-50 ${
+                                                data.social.viewerPinned
+                                                    ? 'border-plex/40 bg-plex/15 text-plex'
+                                                    : 'border-white/10 bg-black/25 text-text hover:border-plex/40'
+                                            }`}
+                                        >
+                                            {data.social.viewerPinned ? <UserCheck className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
+                                            {data.social.viewerPinned ? t('profilePage.following') : t('profilePage.follow')}
+                                        </button>
+                                    ) : null}
                                     <button
                                         type="button"
                                         onClick={() => { void copyProfileLink(); }}
@@ -568,6 +606,58 @@ export const ProfilePage: React.FC<Props> = ({
                         </DashboardPanel>
                     ) : null}
 
+                    {!data.privacy?.locked && data.social && (data.social.email || data.social.libraries || (Array.isArray(data.social.following) && data.social.following.length)) ? (
+                        <DashboardPanel title={t('profilePage.about')}>
+                            {data.social.email ? (
+                                <p className="text-sm text-text mb-3">
+                                    <span className="text-[10px] uppercase tracking-widest font-bold text-muted mr-2">{t('profilePage.publicEmail')}</span>
+                                    {data.social.email}
+                                </p>
+                            ) : null}
+                            {data.social.libraries ? (
+                                <p className="text-sm text-text mb-3">
+                                    <span className="text-[10px] uppercase tracking-widest font-bold text-muted mr-2">{t('profilePage.libraries')}</span>
+                                    {data.social.libraries.all
+                                        ? t('profilePage.allLibraries')
+                                        : (data.social.libraries.names || []).join(' · ')}
+                                </p>
+                            ) : null}
+                            {Array.isArray(data.social.following) && data.social.following.length ? (
+                                <div>
+                                    <p className="text-[10px] uppercase tracking-widest font-bold text-muted mb-2">{t('profilePage.followingList')}</p>
+                                    <div className="flex flex-wrap gap-2">
+                                    {data.social.following.map((peer: any, index: number) => {
+                                        const canOpen = !!peer.accountId && String(peer.username || '').toLowerCase() !== 'anonymous';
+                                        const body = (
+                                            <>
+                                                <img src={resolveAvatar(peer.thumb, 48)} alt="" className="w-6 h-6 rounded-full object-cover" />
+                                                <span className="truncate max-w-[8rem]">{peer.username}</span>
+                                            </>
+                                        );
+                                        return canOpen ? (
+                                            <button
+                                                key={peer.accountId || index}
+                                                type="button"
+                                                onClick={() => goToProfile(onNavigate, peer.accountId, peer.username)}
+                                                className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/25 px-2 py-1 text-xs font-bold hover:border-plex/40"
+                                            >
+                                                {body}
+                                            </button>
+                                        ) : (
+                                            <span
+                                                key={peer.accountId || index}
+                                                className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/25 px-2 py-1 text-xs font-bold text-muted"
+                                            >
+                                                {body}
+                                            </span>
+                                        );
+                                    })}
+                                    </div>
+                                </div>
+                            ) : null}
+                        </DashboardPanel>
+                    ) : null}
+
                     {!data.privacy?.locked && lastWatched ? (
                         <DashboardPanel title={t('profilePage.lastWatched')} subtitle={t('profilePage.lastWatchedHint')}>
                             <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/25 p-3">
@@ -647,6 +737,33 @@ export const ProfilePage: React.FC<Props> = ({
                             ) : (
                                 <p className="text-sm text-muted mt-3">{t('profilePage.noSharedBadges')}</p>
                             )}
+                            {Array.isArray(data.compare.sharedWatched) && data.compare.sharedWatched.length ? (
+                                <div className="mt-4">
+                                    <p className="text-[10px] uppercase tracking-widest font-bold text-muted mb-2">
+                                        {t('profilePage.sharedWatched')}
+                                    </p>
+                                    <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                                        {data.compare.sharedWatched.map((item: any) => (
+                                            <div
+                                                key={`${item.kind}-${item.title}`}
+                                                className="w-20 shrink-0"
+                                                title={item.title}
+                                            >
+                                                {item.thumbUrl ? (
+                                                    <img
+                                                        src={resolvePortalAssetUrl(item.thumbUrl)}
+                                                        alt=""
+                                                        className="w-20 h-[7.5rem] rounded-lg object-cover border border-white/10"
+                                                    />
+                                                ) : (
+                                                    <div className="w-20 h-[7.5rem] rounded-lg border border-white/10 bg-black/40" />
+                                                )}
+                                                <p className="mt-1 text-[11px] font-bold text-text truncate">{item.title}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            ) : null}
                         </DashboardPanel>
                     ) : null}
 

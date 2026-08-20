@@ -60,6 +60,9 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
     const [privacyShowPlayer, setPrivacyShowPlayer] = useState(user?.privacyShowPlayer !== false);
     const [privacyShowAchievements, setPrivacyShowAchievements] = useState(user?.privacyShowAchievements !== false);
     const [privacyShowProfile, setPrivacyShowProfile] = useState(user?.privacyShowProfile !== false);
+    const [privacyShowEmail, setPrivacyShowEmail] = useState(user?.privacyShowEmail === true);
+    const [privacyShowLibraries, setPrivacyShowLibraries] = useState(user?.privacyShowLibraries === true);
+    const [profileBio, setProfileBio] = useState(String(user?.profileBio || ''));
     const [notifyRequestAvailableEmail, setNotifyRequestAvailableEmail] = useState(user?.notifyRequestAvailableEmail !== false);
     const [notifyRequestAvailableInApp, setNotifyRequestAvailableInApp] = useState(user?.notifyRequestAvailableInApp !== false);
     const [notifyRequestAvailableWebPush, setNotifyRequestAvailableWebPush] = useState(user?.notifyRequestAvailableWebPush !== false);
@@ -139,6 +142,9 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
         setPrivacyShowPlayer(user?.privacyShowPlayer !== false);
         setPrivacyShowAchievements(user?.privacyShowAchievements !== false);
         setPrivacyShowProfile(user?.privacyShowProfile !== false);
+        setPrivacyShowEmail(user?.privacyShowEmail === true);
+        setPrivacyShowLibraries(user?.privacyShowLibraries === true);
+        setProfileBio(String(user?.profileBio || ''));
     }, [
         user?.notifyRequestAvailableEmail,
         user?.notifyRequestAvailableInApp,
@@ -171,6 +177,9 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
         user?.privacyShowPlayer,
         user?.privacyShowAchievements,
         user?.privacyShowProfile,
+        user?.privacyShowEmail,
+        user?.privacyShowLibraries,
+        user?.profileBio,
         dirty,
     ]);
 
@@ -226,6 +235,9 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                     privacyShowPlayer,
                     privacyShowAchievements,
                     privacyShowProfile,
+                    privacyShowEmail,
+                    privacyShowLibraries,
+                    profileBio,
                     notifyRequestAvailableEmail,
                     notifyRequestAvailableInApp,
                     notifyRequestAvailableWebPush,
@@ -370,8 +382,38 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                 ariaLabel={t('preferencesPage.privacyShowProfile')}
                                 disabled={busy}
                             />
+                            <PrefToggle
+                                title={t('preferencesPage.privacyShowEmail')}
+                                hint={t('preferencesPage.privacyShowEmailHint')}
+                                on={privacyShowEmail}
+                                onToggle={flip(setPrivacyShowEmail)}
+                                ariaLabel={t('preferencesPage.privacyShowEmail')}
+                                disabled={busy}
+                            />
+                            <PrefToggle
+                                title={t('preferencesPage.privacyShowLibraries')}
+                                hint={t('preferencesPage.privacyShowLibrariesHint')}
+                                on={privacyShowLibraries}
+                                onToggle={flip(setPrivacyShowLibraries)}
+                                ariaLabel={t('preferencesPage.privacyShowLibraries')}
+                                disabled={busy}
+                            />
                         </div>
                     </DashboardPanel>
+
+                    <DashboardPanel title={t('preferencesPage.bioTitle')} subtitle={t('preferencesPage.bioSubtitle')}>
+                        <textarea
+                            value={profileBio}
+                            maxLength={280}
+                            rows={3}
+                            onChange={(event) => {
+                                setProfileBio(event.target.value);
+                                setDirty(true);
+                            }}
+                            placeholder={t('preferencesPage.bioPlaceholder')}
+                            className="w-full rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-sm text-text placeholder:text-muted focus:border-plex/40 focus:outline-none"
+                        />
+                        <p className="mt-1.5 text-[11px] text-muted text-right">{profileBio.length}/280</p>
 
                     <DashboardPanel title={t('preferencesPage.notificationsTitle')} subtitle={t('preferencesPage.notificationsSubtitle')}>
                         <div className="flex flex-col gap-5">

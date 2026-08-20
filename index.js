@@ -77,11 +77,13 @@ import { mapTautulliHistoryRowToPlexItem } from './lib/achievements/tautulliHist
 import { isTautulliWatchHistorySource, buildAchievementsHomeRankContext, summarizeAchievementsBackfill } from './lib/achievements/index.js';
 import { loadAchievementsState, setLeaderboardOptOut } from './lib/achievements/store.js';
 import { resolveAchievementsAccountId } from './lib/profile/assemble.js';
+import { sanitizeProfileBio } from './lib/profile/social.js';
 import {
     applyMemberNamePrivacyToRows,
     applyStreamPrivacy,
     findPortalUserForStream,
     normalizeMemberPrivacy,
+    privacyMaskNowPlayingOthers,
 } from './lib/privacy/memberPrivacy.js';
 import {
     backfillJoiningDatesFromHistory,
@@ -1403,6 +1405,8 @@ import {
     pickOwnPlexNowPlayingSession,
     expandPlexIdVariants,
     asArray as plexSessionAsArray,
+    collectOthersWatchingSamePlexTitle,
+    collectOthersWatchingSameJellyfinTitle,
 } from './lib/streams/nowPlaying.js';
 const PLEX_API = 'https://plex.tv/api';
 
@@ -3957,6 +3961,9 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             privacyShowPlayer,
             privacyShowAchievements,
             privacyShowProfile,
+            privacyShowEmail,
+            privacyShowLibraries,
+            profileBio,
         } = req.body || {};
         const users = await loadFile(USERS_PATH, []);
         const localUser = findLocalUserForSession(users, req.user);
@@ -4013,9 +4020,14 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             privacyShowPlayer,
             privacyShowAchievements,
             privacyShowProfile,
+            privacyShowEmail,
+            privacyShowLibraries,
         };
         for (const [key, value] of Object.entries(boolPrefs)) {
             if (value !== undefined) users[userIndex][key] = !!value;
+        }
+        if (profileBio !== undefined) {
+            users[userIndex].profileBio = sanitizeProfileBio(profileBio);
         }
         if (privacyShowAchievements !== undefined) {
             try {
@@ -14804,6 +14816,17 @@ app.get('/api/streams/now-playing', requireAuth, requireMember, async (req, res)
                         state: mapped.state,
                     }
                     : null,
+                others: mapped
+                    ? privacyMaskNowPlayingOthers({
+                        others: collectOthersWatchingSameJellyfinTitle(list, mine, {
+                            jellyfinId: req.user?.jellyfinId || localUser?.jellyfinId,
+                            username: req.user?.username || localUser?.username,
+                        }),
+                        users,
+                        viewer: req.user,
+                        config,
+                    })
+                    : [],
             });
         }
 
@@ -14887,6 +14910,14 @@ app.get('/api/streams/now-playing', requireAuth, requireMember, async (req, res)
                     state: mapped.state,
                 }
                 : null,
+            others: mapped
+                ? privacyMaskNowPlayingOthers({
+                    others: collectOthersWatchingSamePlexTitle(list, mineMeta, identity),
+                    users,
+                    viewer: req.user,
+                    config,
+                })
+                : [],
         });
     } catch (e) {
         log(`Now playing error: ${e.message}`);
@@ -17540,6 +17571,16 @@ registerProfileRoutes(app, {
             return null;
         }
     },
+    loadAnalyticsCache: async () => loadFile(ANALYTICS_CACHE_PATH, {}),
+    listLibrarySections: async (config) => {
+        try {
+            return await listPlexLibrariesForConfig(config);
+        } catch {
+            return [];
+        }
+    },
+    saveFile,
+    blockIfImpersonating,
     log,
 });
 

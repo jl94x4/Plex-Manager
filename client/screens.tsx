@@ -8186,7 +8186,7 @@ export const UserDashboard: React.FC<{
     const nowPlayingEnabled = sessionInfo?.session?.isAdmin
         ? true
         : (!user || user.showDiscoverNowPlaying !== false);
-    const { session: nowPlaying } = useNowPlaying(nowPlayingEnabled);
+    const { session: nowPlaying, others: nowPlayingOthers } = useNowPlaying(nowPlayingEnabled);
     const showQualityBadges = publicConfig?.showPosterQualityBadges !== false;
     const mediaServerType = String(publicConfig?.mediaServerType || 'plex').toLowerCase();
     const homeNowPlayingCompanionEnabled = publicConfig?.homeNowPlayingCompanionEnabled !== false;
@@ -8962,7 +8962,9 @@ export const UserDashboard: React.FC<{
                 {nowPlaying ? (
                     <DiscoverNowPlayingStrip
                         session={nowPlaying}
+                        others={nowPlayingOthers}
                         onNavigate={(path) => onNavigate?.('discovery', { path })}
+                        onOpenProfile={(id) => goToProfile(onNavigate, id)}
                     />
                 ) : null}
             </div>

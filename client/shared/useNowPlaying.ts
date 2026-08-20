@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiFetch } from './api';
 
+export type NowPlayingOther = {
+    username: string;
+    accountId?: string | null;
+    thumb?: string | null;
+};
+
 export type NowPlayingSession = {
     mediaType: 'movie' | 'tv';
     tmdbId: number | null;
@@ -17,15 +23,18 @@ type NowPlayingPayload = {
     enabled?: boolean;
     optedOut?: boolean;
     session?: NowPlayingSession | null;
+    others?: NowPlayingOther[];
 };
 
 export const useNowPlaying = (enabled = true, pollMs = 10000) => {
     const [session, setSession] = useState<NowPlayingSession | null>(null);
+    const [others, setOthers] = useState<NowPlayingOther[]>([]);
     const [ready, setReady] = useState(false);
 
     const refresh = useCallback(async () => {
         if (!enabled) {
             setSession(null);
+            setOthers([]);
             setReady(true);
             return;
         }
@@ -33,11 +42,14 @@ export const useNowPlaying = (enabled = true, pollMs = 10000) => {
             const data = await apiFetch('/api/streams/now-playing') as NowPlayingPayload;
             if (!data?.enabled || data?.optedOut || !data?.session) {
                 setSession(null);
+                setOthers([]);
             } else {
                 setSession(data.session);
+                setOthers(Array.isArray(data.others) ? data.others : []);
             }
         } catch {
             setSession(null);
+            setOthers([]);
         } finally {
             setReady(true);
         }
@@ -57,7 +69,7 @@ export const useNowPlaying = (enabled = true, pollMs = 10000) => {
         };
     }, [enabled, pollMs, refresh]);
 
-    return { session, ready, refresh };
+    return { session, others, ready, refresh };
 };
 
 export default useNowPlaying;

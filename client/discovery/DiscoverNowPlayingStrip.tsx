@@ -1,11 +1,14 @@
 import React from 'react';
 import { Pause, Play } from 'lucide-react';
-import type { NowPlayingSession } from '../shared/useNowPlaying';
+import type { NowPlayingOther, NowPlayingSession } from '../shared/useNowPlaying';
+import { goToProfile } from '../profile/helpers';
 import { useDiscoverI18n } from './i18n';
 
 type Props = {
     session: NowPlayingSession;
+    others?: NowPlayingOther[];
     onNavigate?: (path: string) => void;
+    onOpenProfile?: (accountId: string) => void;
     /** Extra classes on the outer absolute wrapper. */
     className?: string;
 };
@@ -16,7 +19,7 @@ const pad = (n: number) => String(n).padStart(2, '0');
  * Trakt-style thin green Now Playing bar.
  * The full strip width is the item runtime; the brighter fill is watch progress.
  */
-export const DiscoverNowPlayingStrip: React.FC<Props> = ({ session, onNavigate, className = '' }) => {
+export const DiscoverNowPlayingStrip: React.FC<Props> = ({ session, others = [], onNavigate, onOpenProfile, className = '' }) => {
     const { t } = useDiscoverI18n();
     const hasTmdb = Number.isFinite(Number(session.tmdbId)) && Number(session.tmdbId) > 0;
     const basePath = hasTmdb
@@ -112,6 +115,37 @@ export const DiscoverNowPlayingStrip: React.FC<Props> = ({ session, onNavigate, 
                     <span className="hidden md:inline shrink-0 font-mono text-white/80 tabular-nums drop-shadow-sm">
                         {`· ${Math.round(progress)}%`}
                     </span>
+                    {others.length ? (
+                        <>
+                            <span className="text-white/70 shrink-0">·</span>
+                            <span className="text-white/85 drop-shadow-sm">
+                                {t('nowPlaying.with')}
+                                {' '}
+                                {others.map((peer, index) => {
+                                    const canOpen = !!peer.accountId && peer.username.toLowerCase() !== 'anonymous';
+                                    const open = (event: React.MouseEvent) => {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                        if (!canOpen || !peer.accountId) return;
+                                        if (onOpenProfile) onOpenProfile(peer.accountId);
+                                        else goToProfile(undefined, peer.accountId, peer.username);
+                                    };
+                                    return (
+                                        <span key={`${peer.accountId || peer.username}-${index}`}>
+                                            {index > 0 ? ', ' : ''}
+                                            {canOpen ? (
+                                                <button type="button" className={linkClass} onClick={open}>
+                                                    {peer.username}
+                                                </button>
+                                            ) : (
+                                                <span>{peer.username}</span>
+                                            )}
+                                        </span>
+                                    );
+                                })}
+                            </span>
+                        </>
+                    ) : null}
                 </div>
             </div>
         </div>

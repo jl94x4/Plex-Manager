@@ -21,6 +21,12 @@ export interface User {
     privacyShowAchievements?: boolean;
     /** Let other members open my public profile. Admins can still view it. */
     privacyShowProfile?: boolean;
+    /** Let other members see the email on my public profile. Off by default. */
+    privacyShowEmail?: boolean;
+    /** Let other members see which libraries I can access. Off by default. */
+    privacyShowLibraries?: boolean;
+    /** Short public bio. Empty hides it. */
+    profileBio?: string;
     /** Email when a portal request becomes available (default on). */
     notifyRequestAvailableEmail?: boolean;
     /** In-app bell when a portal request becomes available (default on). */
