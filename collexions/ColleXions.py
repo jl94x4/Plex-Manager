@@ -12,8 +12,8 @@ import copy
 # at import time; patching afterwards requires in-place mutation (see plex_identity).
 from plex_identity import configure_plex_identity
 configure_plex_identity()
-from plexapi.server import PlexServer
 from plexapi.exceptions import NotFound, BadRequest, Unauthorized
+from plex_connect import connect_plex_server
 from datetime import datetime, timedelta
 import argparse # <--- ADDED FOR DRY-RUN ARGUMENT
 from jsonschema import validate, exceptions as jsonschema_exceptions # <--- ADDED FOR CONFIG VALIDATION
@@ -382,9 +382,8 @@ def connect_to_plex(config):
     if not plex_url or not token:
         logging.error("Plex URL/Token missing in config."); return None
     try:
-        configure_plex_identity()
         logging.info(f"Connecting to Plex: {plex_url}...");
-        plex = PlexServer(plex_url, token, timeout=90)
+        plex = connect_plex_server(plex_url, token, timeout=90)
         server_name = plex.friendlyName
         logging.info(f"Connected to Plex server '{server_name}'.");
         return plex

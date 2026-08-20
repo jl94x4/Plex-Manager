@@ -42,6 +42,16 @@ except ImportError as e:
             headers.update(extra)
         return headers
 
+try:
+    from plex_connect import connect_plex_server
+except ImportError as e:
+    logging.error('plex_connect module missing (%s) — falling back to raw PlexServer()', e)
+
+    def connect_plex_server(url, token, timeout=12):
+        from plexapi.server import PlexServer
+        configure_plex_identity()
+        return PlexServer(url, token, timeout=timeout)
+
 app = Flask(__name__)
 CORS(app)
 
@@ -220,14 +230,29 @@ def ensure_dir_exists(file_path):
         logging.info(f"Created directory: {directory}")
 
 def load_config():
+    config = {}
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE, 'r') as f:
-                return json.load(f)
+                loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    config = loaded
         except Exception as e:
             logging.error(f"Error loading config: {e}")
-            return {}
-    return {}
+            config = {}
+    if not str(config.get('plex_url') or '').strip():
+        env_url = (os.environ.get('COLLEXIONS_PLEX_URL') or os.environ.get('PLEX_SERVER_URL') or '').strip()
+        if env_url:
+            config['plex_url'] = env_url
+    if not str(config.get('plex_token') or '').strip():
+        env_token = (os.environ.get('COLLEXIONS_PLEX_TOKEN') or os.environ.get('PLEX_TOKEN') or '').strip()
+        if env_token:
+            config['plex_token'] = env_token
+    if not str(config.get('tmdb_api_key') or '').strip():
+        env_tmdb = (os.environ.get('COLLEXIONS_TMDB_API_KEY') or os.environ.get('TMDB_API_KEY') or '').strip()
+        if env_tmdb:
+            config['tmdb_api_key'] = env_tmdb
+    return config
 
 def save_config(new_data, merge=True):
     """
@@ -278,7 +303,9 @@ def env_flag_enabled(name):
 def config_ready_for_background_process():
     """Avoid noisy autostart failures before onboarding has saved Plex details."""
     config = load_config()
-    missing = [key for key in ('plex_url', 'plex_token') if not config.get(key)]
+    url = config.get('plex_url') or os.environ.get('COLLEXIONS_PLEX_URL') or os.environ.get('PLEX_SERVER_URL')
+    token = config.get('plex_token') or os.environ.get('COLLEXIONS_PLEX_TOKEN') or os.environ.get('PLEX_TOKEN')
+    missing = [key for key, val in (('plex_url', url), ('plex_token', token)) if not val]
     if missing:
         logging.info(
             "Background service autostart skipped; missing config fields: %s",
@@ -1632,6 +1659,64 @@ def _finalize_collection_for_plex_web(coll, library, config=None):
         return []
 
 
+def _parse_year(value):
+    if value is None or value == '':
+        return None
+    if hasattr(value, 'year'):
+        try:
+            year = int(value.year)
+            return year if 1800 <= year <= 2100 else None
+        except Exception:
+            return None
+    text = str(value).strip()
+    if len(text) >= 4 and text[:4].isdigit():
+        year = int(text[:4])
+        return year if 1800 <= year <= 2100 else None
+    try:
+        year = int(float(text))
+        return year if 1800 <= year <= 2100 else None
+    except Exception:
+        return None
+
+
+def _years_compatible(plex_item, ext, tolerance=1):
+    """Reject same-title hits from a different year (e.g. 2026 list vs 1999 library)."""
+    want = _parse_year((ext or {}).get('year') or (ext or {}).get('release_year'))
+    if want is None:
+        return True
+    have = _parse_year(
+        getattr(plex_item, 'year', None) or getattr(plex_item, 'originallyAvailableAt', None)
+    )
+    if have is None:
+        return True
+    return abs(have - want) <= tolerance
+
+
+def _pick_plex_search_hit(results, ext, lib_type):
+    """Pick a library row for an external title. Never grab the first unrelated hit."""
+    title = str((ext or {}).get('title') or '').strip()
+    tmdb_id = str((ext or {}).get('tmdb_id') or (ext or {}).get('id') or '').strip()
+    acceptable = []
+    for row in list(results or [])[:20]:
+        if not _acceptable_collection_member(row, lib_type):
+            continue
+        if not _years_compatible(row, ext):
+            continue
+        acceptable.append(row)
+    if tmdb_id:
+        for row in acceptable:
+            if tmdb_id in _plex_item_tmdb_ids(row):
+                return row
+    if title:
+        for row in acceptable:
+            if (getattr(row, 'title', '') or '').casefold() == title.casefold():
+                return row
+    # Single unambiguous hit only when the source did not include a year.
+    if _parse_year((ext or {}).get('year') or (ext or {}).get('release_year')) is None and len(acceptable) == 1:
+        return acceptable[0]
+    return None
+
+
 def _match_external_to_plex(library, external_items, tmdb_cache=None):
     """Match external {tmdb_id/id, title} items to local Plex items.
 
@@ -1656,31 +1741,12 @@ def _match_external_to_plex(library, external_items, tmdb_cache=None):
             libtype = 'movie' if str(ext.get('type') or 'movie') == 'movie' else 'show'
             if not title and not tmdb_id:
                 continue
-            pick = None
             try:
                 results = library.search(title=title, libtype=libtype) if title else []
             except Exception as e:
                 logging.debug(f"Search failed for '{title}': {e}")
                 results = []
-            if tmdb_id and results:
-                for r in results[:20]:
-                    if not _acceptable_collection_member(r, lib_type):
-                        continue
-                    if tmdb_id in _plex_item_tmdb_ids(r):
-                        pick = r
-                        break
-            if pick is None and title and results:
-                for r in results[:10]:
-                    if not _acceptable_collection_member(r, lib_type):
-                        continue
-                    if (getattr(r, 'title', '') or '').casefold() == title.casefold():
-                        pick = r
-                        break
-            if pick is None and results:
-                for r in results[:10]:
-                    if _acceptable_collection_member(r, lib_type):
-                        pick = r
-                        break
+            pick = _pick_plex_search_hit(results, ext, lib_type)
             if pick is not None:
                 key = getattr(pick, 'ratingKey', None)
                 if key not in seen_keys:
@@ -2531,7 +2597,7 @@ def _delete_plex_collection(library_name, title=None, rating_key=None):
     """
     plex = get_plex_instance()
     if not plex:
-        return False, "Plex connection failed", []
+        return False, _plex_conn_error_message(), []
     if not library_name or (not title and not rating_key):
         return False, "Missing title/library", []
     try:
@@ -2915,7 +2981,7 @@ def create_collection_from_source(library_name, title, source_type, source_id=''
     label = config.get('collexions_label', 'Collexions')
     plex = get_plex_instance()
     if not plex:
-        return {"success": False, "error": "Plex connection failed"}
+        return {"success": False, "error": _plex_conn_error_message()}
 
     # Prefer caller-provided items (Preview already loaded them). Only fetch when
     # empty — and never replace a good payload with a failed/empty re-fetch.
@@ -2950,6 +3016,33 @@ def create_collection_from_source(library_name, title, source_type, source_id=''
             logging.info(f"Matching {len(items)} source items against library '{library_name}'...")
             matched_items = _match_external_to_plex(library, items)
             if not matched_items:
+                # Never create an empty Plex collection (type-99 folder / Collections tab crash).
+                # With auto-sync on, keep a job so the collection is created once titles exist.
+                if auto_sync and source_type:
+                    job_id = _register_managed_job(
+                        library_name,
+                        title,
+                        source_type,
+                        source_id,
+                        sort_order,
+                        auto_sync=True,
+                    )
+                    msg = (
+                        f"No titles from this list are in “{library_name}” yet. "
+                        "Saved an Auto-Sync job — the collection will be created in Plex when "
+                        "matching titles appear (never as an empty collection)."
+                    )
+                    log_action(msg)
+                    return {
+                        "success": True,
+                        "pending": True,
+                        "created": False,
+                        "matched": 0,
+                        "total": len(items),
+                        "job_id": job_id,
+                        "title": title,
+                        "message": msg,
+                    }
                 return {"success": False, "error": "No items matched your local library", "matched": 0, "total": len(items)}
 
             coll, created_fresh, membership_delta = _upsert_plex_collection(
@@ -3076,24 +3169,12 @@ def run_sync_job(job_id=None):
         return
         
     config = load_config()
-    plex_url = config.get('plex_url')
-    plex_token = config.get('plex_token')
-    
-    if not plex_url or not plex_token:
-        log_action("Sync failed: Plex URL or Token missing.")
+    plex = get_plex_instance()
+    if not plex:
+        err = _plex_conn_error_message()
+        log_action(f"Sync failed: {err}")
         if job_id and job_id in managed:
-            _stamp_job_run(managed[job_id], 'failed', 'Plex URL or Token missing')
-            save_managed_collections(managed)
-        return
-
-    from plexapi.server import PlexServer
-    try:
-        configure_plex_identity()
-        plex = PlexServer(plex_url, plex_token)
-    except Exception as e:
-        log_action(f"Sync failed: Plex connection error: {e}")
-        if job_id and job_id in managed:
-            _stamp_job_run(managed[job_id], 'failed', f'Plex connection error: {e}')
+            _stamp_job_run(managed[job_id], 'failed', err)
             save_managed_collections(managed)
         return
 
@@ -3154,13 +3235,10 @@ def run_sync_job(job_id=None):
                     results = library.search(title=itm.get('title'), libtype=search_type)
                     if not results:
                         continue
-                    for candidate in results[:5]:
-                        if not _acceptable_collection_member(candidate, getattr(library, 'type', None)):
-                            continue
-                        if candidate.ratingKey not in matched_keys:
-                            plex_items.append(candidate)
-                            matched_keys.add(candidate.ratingKey)
-                            break
+                    pick = _pick_plex_search_hit(results, itm, getattr(library, 'type', None))
+                    if pick is not None and getattr(pick, 'ratingKey', None) not in matched_keys:
+                        plex_items.append(pick)
+                        matched_keys.add(pick.ratingKey)
 
             plex_items = _sanitize_collection_members(library, plex_items)
             if not plex_items:
@@ -3617,12 +3695,13 @@ def clear_logs():
 @app.route('/api/config', methods=['GET', 'POST'])
 @require_auth
 def config_endpoint():
-    global _plex_cache, GALLERY_CACHE, SUMMARY_CACHE
+    global _plex_cache, _plex_last_error, GALLERY_CACHE, SUMMARY_CACHE
     if request.method == 'POST':
         payload = request.json or {}
         if save_config(payload, merge=True):
             # Config changes (especially plex_url/token) must not keep a stale PlexServer.
             _plex_cache = None
+            _plex_last_error = None
             GALLERY_CACHE['data'] = None
             GALLERY_CACHE['timestamp'] = 0
             SUMMARY_CACHE['data'] = None
@@ -3696,9 +3775,7 @@ def validate_config_endpoint():
     # Live Plex connection + library existence (draft credentials, not saved config)
     if url and token:
         try:
-            configure_plex_identity()
-            from plexapi.server import PlexServer
-            plex = PlexServer(url, token, timeout=10)
+            plex = connect_plex_server(url, token, timeout=10)
             sections = list(plex.library.sections())
             available = [s.title for s in sections]
             available_set = set(available)
@@ -3931,23 +4008,51 @@ def maybe_autostart_background_process():
 
 # --- Plex Helpers ---
 _plex_cache = None
+_plex_last_error = None
 
-def get_plex_instance():
-    global _plex_cache
-    if _plex_cache:
+
+def _plex_conn_error_message():
+    detail = str(_plex_last_error or '').strip()
+    if detail:
+        return f"Plex connection failed: {detail}"
+    return "Plex connection failed"
+
+
+def _is_plex_conn_error(err):
+    return str(err or '').startswith("Plex connection failed")
+
+
+def get_plex_instance(force_refresh=False):
+    global _plex_cache, _plex_last_error
+    if _plex_cache is not None and not force_refresh:
         return _plex_cache
-        
+
     config = load_config()
-    url = config.get('plex_url')
-    token = config.get('plex_token')
+    url = str(
+        config.get('plex_url')
+        or os.environ.get('COLLEXIONS_PLEX_URL')
+        or os.environ.get('PLEX_SERVER_URL')
+        or ''
+    ).strip()
+    token = str(
+        config.get('plex_token')
+        or os.environ.get('COLLEXIONS_PLEX_TOKEN')
+        or os.environ.get('PLEX_TOKEN')
+        or ''
+    ).strip()
     if not url or not token:
+        _plex_last_error = (
+            'Plex URL and token are missing in ColleXions settings. '
+            'Open ColleXions → Config, import portal Plex settings, and Save.'
+        )
         return None
     try:
-        configure_plex_identity()
-        from plexapi.server import PlexServer
-        _plex_cache = PlexServer(url, token)
+        _plex_cache = connect_plex_server(url, token, timeout=12)
+        _plex_last_error = None
         return _plex_cache
     except Exception as e:
+        _plex_cache = None
+        _plex_last_error = str(e)
         logging.error(f"Plex connection error: {e}")
         return None
 
@@ -4290,13 +4395,14 @@ def bulk_pin_collections():
 @require_auth
 def clear_cache():
     """Force-clears all server-side caches so the next request re-fetches fresh data."""
-    global GALLERY_CACHE, IMAGE_CACHE, SUMMARY_CACHE, _plex_cache
+    global GALLERY_CACHE, IMAGE_CACHE, SUMMARY_CACHE, _plex_cache, _plex_last_error
     GALLERY_CACHE['data'] = None
     GALLERY_CACHE['timestamp'] = 0
     SUMMARY_CACHE['data'] = None
     SUMMARY_CACHE['timestamp'] = 0
     IMAGE_CACHE = {}
     _plex_cache = None  # also reset the Plex connection so composite paths reload cleanly
+    _plex_last_error = None
     return jsonify({"success": True, "message": "Gallery, image, and Plex caches cleared."})
 
 
@@ -4306,21 +4412,30 @@ def plex_libraries():
     """Fetches all available library sections from Plex."""
     plex = get_plex_instance()
     if not plex:
-        return jsonify({"error": "Plex connection failed"}), 500
-        
-    try:
-        sections = plex.library.sections()
+        return jsonify({"error": _plex_conn_error_message()}), 500
+
+    def _sections_payload(server):
         libraries = []
-        for s in sections:
+        for s in server.library.sections():
             libraries.append({
                 'name': s.title,
                 'type': s.type,
                 'uuid': getattr(s, 'uuid', s.key)
             })
-        return jsonify(libraries)
+        return libraries
+
+    try:
+        return jsonify(_sections_payload(plex))
     except Exception as e:
         logging.error(f"Failed to fetch Plex libraries: {e}")
-        return jsonify({"error": str(e)}), 500
+        plex = get_plex_instance(force_refresh=True)
+        if not plex:
+            return jsonify({"error": _plex_conn_error_message()}), 500
+        try:
+            return jsonify(_sections_payload(plex))
+        except Exception as e2:
+            logging.error(f"Plex libraries retry failed: {e2}")
+            return jsonify({"error": str(e2)}), 500
 
 
 def _hub_to_dict(hub):
@@ -4352,7 +4467,7 @@ def list_managed_hubs():
         return jsonify({'error': 'Missing library'}), 400
     plex = get_plex_instance()
     if not plex:
-        return jsonify({'error': 'Plex connection failed'}), 500
+        return jsonify({'error': _plex_conn_error_message()}), 500
     try:
         library = plex.library.section(library_name)
         hubs = [_hub_to_dict(h) for h in library.managedHubs()]
@@ -4382,7 +4497,7 @@ def move_managed_hub():
 
     plex = get_plex_instance()
     if not plex:
-        return jsonify({'success': False, 'error': 'Plex connection failed'}), 500
+        return jsonify({'success': False, 'error': _plex_conn_error_message()}), 500
     try:
         library = plex.library.section(library_name)
         hub = _find_managed_hub(library, identifier)
@@ -4414,7 +4529,7 @@ def update_managed_hub_visibility():
 
     plex = get_plex_instance()
     if not plex:
-        return jsonify({'success': False, 'error': 'Plex connection failed'}), 500
+        return jsonify({'success': False, 'error': _plex_conn_error_message()}), 500
     try:
         library = plex.library.section(library_name)
         hub = _find_managed_hub(library, identifier)
@@ -5371,13 +5486,11 @@ def _run_repair_job(lib_names, config):
     errors = []
     results = []
     try:
-        configure_plex_identity()
-        from plexapi.server import PlexServer
         url = str(config.get('plex_url') or '').rstrip('/')
         token = str(config.get('plex_token') or '')
         if not url or not token:
             raise RuntimeError('Plex URL or token is not configured')
-        plex = PlexServer(url, token)
+        plex = connect_plex_server(url, token, timeout=30)
         totals = {'scanned': 0, 'purged': 0, 'pruned': 0, 'converted': 0, 'posters': 0}
         for name in lib_names:
             _repair_state_update(phase=f'Repairing {name}')
@@ -5482,7 +5595,7 @@ def collections_web_health():
     ).strip().lower() in {'1', 'true', 'yes', 'on'}
     plex = get_plex_instance()
     if not plex:
-        return jsonify({"success": False, "error": "Plex connection failed"}), 500
+        return jsonify({"success": False, "error": _plex_conn_error_message()}), 500
     config = load_config()
     url = str(config.get('plex_url') or '').rstrip('/')
     token = str(config.get('plex_token') or '')
@@ -5591,7 +5704,7 @@ def delete_collection():
         rating_key=rating_key or None,
     )
     if not ok:
-        status = 500 if err == "Plex connection failed" else 400
+        status = 500 if _is_plex_conn_error(err) else 400
         return jsonify({"success": False, "error": err or "Delete failed"}), status
 
     GALLERY_CACHE['data'] = None
@@ -5618,7 +5731,7 @@ def fix_collection_art():
 
     plex = get_plex_instance()
     if not plex:
-        return jsonify({"success": False, "error": "Plex connection failed"}), 500
+        return jsonify({"success": False, "error": _plex_conn_error_message()}), 500
 
     config = load_config()
     managed = load_managed_collections()
@@ -5700,7 +5813,7 @@ def create_custom_collection():
     label = config.get('collexions_label', 'Collexions')
     
     if not plex:
-        return jsonify({"success": False, "error": "Plex connection failed"}), 500
+        return jsonify({"success": False, "error": _plex_conn_error_message()}), 500
         
     try:
         with _collection_create_lock(library_name, title):
@@ -6041,7 +6154,7 @@ def create_from_external():
         external_items=external_items,
     )
     status = 200 if result.get('success') else (404 if 'matched' in result else 500)
-    if result.get('error') == 'Plex connection failed':
+    if _is_plex_conn_error(result.get('error')):
         status = 500
     elif result.get('error') == 'No items matched your local library':
         status = 404
@@ -6055,7 +6168,7 @@ def create_from_external():
 def list_templates():
     """Curated one-click collection templates + which API keys are available."""
     config = load_config()
-    has_tmdb = bool(str(config.get('tmdb_api_key') or '').strip())
+    has_tmdb = bool(str(config.get('tmdb_api_key') or os.environ.get('COLLEXIONS_TMDB_API_KEY') or '').strip())
     has_trakt = bool(str(config.get('trakt_client_id') or '').strip())
     templates = []
     for tpl in JOB_TEMPLATES:
@@ -6207,7 +6320,7 @@ def create_from_template():
     if result.get('success'):
         return jsonify(result)
     status = 404 if 'matched' in (result.get('error') or '').lower() or result.get('matched') == 0 else 400
-    if result.get('error') == 'Plex connection failed':
+    if _is_plex_conn_error(result.get('error')):
         status = 500
     return jsonify(result), status
 
@@ -6428,9 +6541,19 @@ def auth_status():
     logging.debug(f"Auth status check: is_setup={is_setup}, has_hash={bool(config.get('admin_password_hash'))}, portal_mode={PORTAL_MODE}")
     
     # Check if Plex config is missing
-    plex_url = config.get('plex_url')
-    plex_token = config.get('plex_token')
-    needs_onboarding = not (plex_url and plex_token)
+    plex_url = (
+        config.get('plex_url')
+        or os.environ.get('COLLEXIONS_PLEX_URL')
+        or os.environ.get('PLEX_SERVER_URL')
+        or ''
+    )
+    plex_token = (
+        config.get('plex_token')
+        or os.environ.get('COLLEXIONS_PLEX_TOKEN')
+        or os.environ.get('PLEX_TOKEN')
+        or ''
+    )
+    needs_onboarding = not (str(plex_url).strip() and str(plex_token).strip())
     
     logging.debug(f"Needs onboarding: {needs_onboarding} (URL: {bool(plex_url)}, Token: {bool(plex_token)})")
     

@@ -24634,6 +24634,8 @@ app.all('/api/collexions/*', requireAdmin, requireCollexions, async (req, res) =
             || suffix === 'config'
             || suffix === 'config/validate'
             || suffix === 'run'
+            || suffix === 'plex/libraries'
+            || suffix.startsWith('plex/')
             || suffix.startsWith('search/external')
             || suffix.startsWith('search/discover')
             || suffix === 'templates/create'

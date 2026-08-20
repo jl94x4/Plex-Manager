@@ -368,7 +368,16 @@ class CollexionsApiService {
         source_id?: string;
         sort_order?: string;
         auto_sync?: boolean;
-    }): Promise<{ success: boolean; matched?: number; total?: number; job_id?: string; title?: string; error?: string }> {
+    }): Promise<{
+        success: boolean;
+        pending?: boolean;
+        message?: string;
+        matched?: number;
+        total?: number;
+        job_id?: string;
+        title?: string;
+        error?: string;
+    }> {
         return withTimeout(
             cx('/templates/create', { method: 'POST', body: JSON.stringify(payload) }),
             COLLEXIONS_LONG_MS,
@@ -552,7 +561,7 @@ class CollexionsApiService {
     }
 
     async getPlexLibraries(): Promise<any[]> {
-        return apiFetch(base('/plex/libraries'));
+        return withTimeout(cx('/plex/libraries'), 25000, 'Plex libraries');
     }
 
     async getManagedHubs(library: string): Promise<{
