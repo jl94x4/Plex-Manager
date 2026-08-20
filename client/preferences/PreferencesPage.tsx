@@ -414,6 +414,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                             className="w-full rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-sm text-text placeholder:text-muted focus:border-plex/40 focus:outline-none"
                         />
                         <p className="mt-1.5 text-[11px] text-muted text-right">{profileBio.length}/280</p>
+                    </DashboardPanel>
 
                     <DashboardPanel title={t('preferencesPage.notificationsTitle')} subtitle={t('preferencesPage.notificationsSubtitle')}>
                         <div className="flex flex-col gap-5">
