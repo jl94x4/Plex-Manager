@@ -1526,16 +1526,52 @@ export const OverlaysDashboard: React.FC = () => {
         })();
     };
 
-    const stampTitleForJob = (
-        actionId: ActionId,
-        title: string,
-        runFn: () => Promise<unknown>,
-    ) => {
-        toast(t('overlays.jobs.testTitle.started', { title }));
-        startBackgroundJob(actionId, runFn);
+    const jobTitleTestDisabled = busy !== null || jobRunning || !workerReady;
+
+    /**
+     * Single "test title" stamp: instead of a separate search/stamp bar on every job card,
+     * one picked title is stamped across every overlay job that's currently enabled. Each
+     * backend job already no-ops for titles it doesn't apply to (e.g. Recently Added on a
+     * title outside its window), so it's safe to fire all active jobs at once and let each
+     * decide for itself.
+     */
+    const stampAllActiveForTitle = (ratingKey: string, title: string) => {
+        const jobs: Array<{ id: ActionId; fn: () => Promise<unknown> }> = [];
+        if (bannersEnabled) {
+            jobs.push({ id: 'run', fn: () => overlaysApi.run({ preview: false, bundle: 'core', onlyRatingKeys: [ratingKey] }) });
+        }
+        if (configDraft.recentlyAddedEnabled === true) {
+            jobs.push({ id: 'runRecently', fn: () => overlaysApi.run({ preview: false, bundle: 'recently', onlyRatingKeys: [ratingKey] }) });
+        }
+        if (kometaEnabled) {
+            jobs.push({
+                id: 'runKometa',
+                fn: () => overlaysApi.run({ preview: false, bundle: 'kometa', scope: 'media', onlyRatingKeys: [ratingKey] }),
+            });
+        }
+        if (collectionsEnabled) {
+            jobs.push({ id: 'runCollections', fn: () => overlaysApi.run({ preview: false, bundle: 'collections', onlyRatingKeys: [ratingKey] }) });
+        }
+
+        if (!jobs.length) {
+            toast(t('overlays.jobs.testTitle.noneActive'), 'error');
+            return;
+        }
+
+        toast(t('overlays.jobs.testTitle.startedAll', { title, count: jobs.length }));
+        jobs.forEach(({ id, fn }) => startBackgroundJob(id, fn));
     };
 
-    const jobTitleTestDisabled = busy !== null || jobRunning || !workerReady;
+    const activeTestTitleJobLabels = [
+        bannersEnabled ? t('overlays.jobs.banners.title') : null,
+        configDraft.recentlyAddedEnabled === true ? t('overlays.jobs.recently.title') : null,
+        kometaEnabled ? t('overlays.jobs.kometa.title') : null,
+        collectionsEnabled ? t('overlays.jobs.collections.title') : null,
+    ].filter((label): label is string => Boolean(label));
+    const testTitleHint = activeTestTitleJobLabels.length
+        ? t('overlays.jobs.testTitle.hintActive', { jobs: activeTestTitleJobLabels.join(', ') })
+        : t('overlays.jobs.testTitle.noneActive');
+    const testTitleBusy = busy === 'run' || busy === 'runRecently' || busy === 'runKometa' || busy === 'runCollections' || jobRunning;
 
     const saveSettings = () => runAction('saveSettings', async () => {
         const draft = configDraftRef.current;
@@ -2482,6 +2518,27 @@ export const OverlaysDashboard: React.FC = () => {
 
             {tab === 'home' && (
                 <div className="space-y-3">
+                    <section className="rounded-xl border border-white/10 bg-black/30 overflow-hidden">
+                        <div className="p-4 space-y-1">
+                            <h3 className="text-base font-semibold text-text">{t('overlays.jobs.testTitle.heading')}</h3>
+                            <p className="text-sm text-muted">{t('overlays.jobs.testTitle.description')}</p>
+                        </div>
+                        <OverlayJobTitleTest
+                            searchLabel={t('overlays.jobs.testTitle.label')}
+                            searchPlaceholder={t('overlays.jobs.testTitle.searchPlaceholder')}
+                            pickLabel={t('overlays.jobs.testTitle.pick')}
+                            stampLabel={t('overlays.jobs.testTitle.stampAll')}
+                            hint={testTitleHint}
+                            emptyPick={t('overlays.jobs.testTitle.empty')}
+                            noResultsLabel={t('overlays.jobs.testTitle.noResults')}
+                            searchingLabel={t('overlays.jobs.testTitle.searching')}
+                            titleFilter="all"
+                            disabled={jobTitleTestDisabled || activeTestTitleJobLabels.length === 0}
+                            busy={testTitleBusy}
+                            onStamp={stampAllActiveForTitle}
+                        />
+                    </section>
+
                     <div className="space-y-2">
                         <OverlayJobCard
                             id="overlay-job-banners"
@@ -2514,26 +2571,6 @@ export const OverlaysDashboard: React.FC = () => {
                             previewBusy={busy === 'preview' || (coreJobActive && runningCommand === 'preview')}
                             runBusy={busy === 'run' || (coreJobActive && runningCommand === 'run')}
                             actionsDisabled={busy !== null || jobRunning || !workerReady}
-                            titleTest={(
-                                <OverlayJobTitleTest
-                                    searchLabel={t('overlays.jobs.testTitle.label')}
-                                    searchPlaceholder={t('overlays.jobs.testTitle.searchPlaceholderShows')}
-                                    pickLabel={t('overlays.jobs.testTitle.pick')}
-                                    stampLabel={t('overlays.jobs.testTitle.stamp')}
-                                    hint={t('overlays.jobs.testTitle.hintShows')}
-                                    emptyPick={t('overlays.jobs.testTitle.empty')}
-                                    noResultsLabel={t('overlays.jobs.testTitle.noResults')}
-                                    searchingLabel={t('overlays.jobs.testTitle.searching')}
-                                    titleFilter="show"
-                                    disabled={jobTitleTestDisabled}
-                                    busy={busy === 'run' || (coreJobActive && runningCommand === 'run')}
-                                    onStamp={(ratingKey, title) => stampTitleForJob(
-                                        'run',
-                                        title,
-                                        () => overlaysApi.run({ preview: false, bundle: 'core', onlyRatingKeys: [ratingKey] }),
-                                    )}
-                                />
-                            )}
                         >
                             <div id="overlay-banners-newSeason" className="mb-3 scroll-mt-4 border-b border-border/40 pb-2">
                                 <span className={fieldLabelClass}>{t('overlays.jobs.banners.groups.newSeason')}</span>
@@ -2769,26 +2806,6 @@ export const OverlaysDashboard: React.FC = () => {
                             previewBusy={busy === 'previewRecently' || (recentlyJobActive && runningCommand === 'preview-recently')}
                             runBusy={busy === 'runRecently' || (recentlyJobActive && runningCommand === 'run-recently')}
                             actionsDisabled={busy !== null || jobRunning || !workerReady}
-                            titleTest={(
-                                <OverlayJobTitleTest
-                                    searchLabel={t('overlays.jobs.testTitle.label')}
-                                    searchPlaceholder={t('overlays.jobs.testTitle.searchPlaceholderShows')}
-                                    pickLabel={t('overlays.jobs.testTitle.pick')}
-                                    stampLabel={t('overlays.jobs.testTitle.stamp')}
-                                    hint={t('overlays.jobs.testTitle.hintShows')}
-                                    emptyPick={t('overlays.jobs.testTitle.empty')}
-                                    noResultsLabel={t('overlays.jobs.testTitle.noResults')}
-                                    searchingLabel={t('overlays.jobs.testTitle.searching')}
-                                    titleFilter="show"
-                                    disabled={jobTitleTestDisabled}
-                                    busy={busy === 'runRecently' || (recentlyJobActive && runningCommand === 'run-recently')}
-                                    onStamp={(ratingKey, title) => stampTitleForJob(
-                                        'runRecently',
-                                        title,
-                                        () => overlaysApi.run({ preview: false, bundle: 'recently', onlyRatingKeys: [ratingKey] }),
-                                    )}
-                                />
-                            )}
                         >
                             {renderPlacementLink('recently')}
                             <SettingsToggleRow
@@ -2902,31 +2919,6 @@ export const OverlaysDashboard: React.FC = () => {
                             previewBusy={busy === 'previewKometa' || (kometaJobActive && runningCommand === 'preview-kometa')}
                             runBusy={busy === 'runKometa' || (kometaJobActive && runningCommand === 'run-kometa')}
                             actionsDisabled={busy !== null || jobRunning || !workerReady}
-                            titleTest={(
-                                <OverlayJobTitleTest
-                                    searchLabel={t('overlays.jobs.testTitle.label')}
-                                    searchPlaceholder={t('overlays.jobs.testTitle.searchPlaceholder')}
-                                    pickLabel={t('overlays.jobs.testTitle.pick')}
-                                    stampLabel={t('overlays.jobs.testTitle.stamp')}
-                                    hint={t('overlays.jobs.testTitle.hintMovies')}
-                                    emptyPick={t('overlays.jobs.testTitle.empty')}
-                                    noResultsLabel={t('overlays.jobs.testTitle.noResults')}
-                                    searchingLabel={t('overlays.jobs.testTitle.searching')}
-                                    titleFilter="all"
-                                    disabled={jobTitleTestDisabled}
-                                    busy={busy === 'runKometa' || (kometaJobActive && runningCommand === 'run-kometa')}
-                                    onStamp={(ratingKey, title) => stampTitleForJob(
-                                        'runKometa',
-                                        title,
-                                        () => overlaysApi.run({
-                                            preview: false,
-                                            bundle: 'kometa',
-                                            scope: 'media',
-                                            onlyRatingKeys: [ratingKey],
-                                        }),
-                                    )}
-                                />
-                            )}
                         >
                             <p className="mb-3 text-[11px] text-muted">{t('overlays.jobs.kometa.settingsHint')}</p>
 
@@ -3595,30 +3587,6 @@ export const OverlaysDashboard: React.FC = () => {
                             previewBusy={busy === 'previewCollections' || (collectionsJobActive && runningCommand === 'preview-collections')}
                             runBusy={busy === 'runCollections' || (collectionsJobActive && runningCommand === 'run-collections')}
                             actionsDisabled={busy !== null || jobRunning || !workerReady}
-                            titleTest={(
-                                <OverlayJobTitleTest
-                                    searchLabel={t('overlays.jobs.testTitle.label')}
-                                    searchPlaceholder={t('overlays.jobs.testTitle.searchPlaceholder')}
-                                    pickLabel={t('overlays.jobs.testTitle.pick')}
-                                    stampLabel={t('overlays.jobs.testTitle.stamp')}
-                                    hint={t('overlays.jobs.testTitle.hintCollections')}
-                                    emptyPick={t('overlays.jobs.testTitle.empty')}
-                                    noResultsLabel={t('overlays.jobs.testTitle.noResults')}
-                                    searchingLabel={t('overlays.jobs.testTitle.searching')}
-                                    titleFilter="all"
-                                    disabled={jobTitleTestDisabled}
-                                    busy={busy === 'runCollections' || (collectionsJobActive && runningCommand === 'run-collections')}
-                                    onStamp={(ratingKey, title) => stampTitleForJob(
-                                        'runCollections',
-                                        title,
-                                        () => overlaysApi.run({
-                                            preview: false,
-                                            bundle: 'collections',
-                                            onlyRatingKeys: [ratingKey],
-                                        }),
-                                    )}
-                                />
-                            )}
                         >
                             <p className="mb-3 text-sm text-muted">{t('overlays.jobs.collections.homeManageHint')}</p>
                             <div className="flex flex-wrap gap-2">
