@@ -173,7 +173,7 @@ export const en = {
         firstBloods: '{count} first unlock',
         firstBloods_plural: '{count} first unlocks',
         lastWatched: 'Last watched',
-        lastWatchedHint: 'Most recent title from watch history.',
+        lastWatchedHint: 'Most recent titles from watch history.',
         watchingNow: 'Watching {title}',
         viewAsUser: 'View as user',
         hours: 'Hours',

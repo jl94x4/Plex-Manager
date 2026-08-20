@@ -285,7 +285,19 @@ export const ProfilePage: React.FC<Props> = ({
     const wrapAnalytics = data?.watch?.wrapUp || null;
     const wrapUpPending = !!data?.watch?.wrapUpPending && !(wrapAnalytics?.topMovie || wrapAnalytics?.topBinge);
     const canOpenWatchStory = !!(wrapAnalytics && (Number(wrapAnalytics.hoursWatched) > 0 || Number(wrapAnalytics.totalPlays) > 0));
-    const lastWatched = Array.isArray(wrapAnalytics?.recentHistory) ? wrapAnalytics.recentHistory[0] : null;
+    const recentWatched = useMemo(() => {
+        const rows = Array.isArray(wrapAnalytics?.recentHistory) ? wrapAnalytics.recentHistory : [];
+        const unique = [];
+        const seen = new Set<string>();
+        for (const item of rows) {
+            const key = String(item?.title || '').trim().toLowerCase();
+            if (!key || seen.has(key)) continue;
+            seen.add(key);
+            unique.push(item);
+            if (unique.length >= 4) break;
+        }
+        return unique;
+    }, [wrapAnalytics]);
     const unlocks = Array.isArray(achievements?.earned) ? achievements.earned.slice(0, 8) : [];
     const story = data?.watch?.taste || {};
     const tasteView = useMemo(() => {
@@ -620,26 +632,33 @@ export const ProfilePage: React.FC<Props> = ({
                         </DashboardPanel>
                     ) : null}
 
-                    {!data.privacy?.locked && lastWatched ? (
+                    {!data.privacy?.locked && recentWatched.length ? (
                         <DashboardPanel title={t('profilePage.lastWatched')} subtitle={t('profilePage.lastWatchedHint')}>
-                            <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/25 p-3">
-                                {lastWatched.thumbUrl ? (
-                                    <img
-                                        src={resolvePortalAssetUrl(lastWatched.thumbUrl)}
-                                        alt=""
-                                        className="w-16 h-24 rounded-lg object-cover border border-white/10 shrink-0"
-                                    />
-                                ) : (
-                                    <span className="inline-flex w-16 h-24 items-center justify-center rounded-lg border border-white/10 bg-black/40 text-plex shrink-0">
-                                        <Play className="w-6 h-6" />
-                                    </span>
-                                )}
-                                <div className="min-w-0">
-                                    <p className="text-sm font-black text-text truncate">{lastWatched.title}</p>
-                                    {lastWatched.episodeTitle ? (
-                                        <p className="text-xs text-muted truncate mt-0.5">{lastWatched.episodeTitle}</p>
-                                    ) : null}
-                                </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                                {recentWatched.map((item: any, index: number) => (
+                                    <div
+                                        key={`${item.title}-${item.viewedAt || index}`}
+                                        className={`${index > 0 ? 'hidden sm:flex' : 'flex'} flex-row sm:flex-col items-center sm:items-stretch gap-3 rounded-2xl border border-white/10 bg-black/25 p-3 min-w-0`}
+                                    >
+                                        {item.thumbUrl ? (
+                                            <img
+                                                src={resolvePortalAssetUrl(item.thumbUrl)}
+                                                alt=""
+                                                className="w-16 h-24 sm:w-full sm:h-auto sm:aspect-[2/3] rounded-lg object-cover border border-white/10 shrink-0"
+                                            />
+                                        ) : (
+                                            <span className="inline-flex w-16 h-24 sm:w-full sm:aspect-[2/3] items-center justify-center rounded-lg border border-white/10 bg-black/40 text-plex shrink-0">
+                                                <Play className="w-6 h-6" />
+                                            </span>
+                                        )}
+                                        <div className="min-w-0 sm:mt-1">
+                                            <p className="text-sm font-black text-text truncate">{item.title}</p>
+                                            {item.episodeTitle ? (
+                                                <p className="text-xs text-muted truncate mt-0.5">{item.episodeTitle}</p>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
                         </DashboardPanel>
                     ) : null}
