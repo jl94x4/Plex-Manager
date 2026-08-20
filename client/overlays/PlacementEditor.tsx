@@ -17,6 +17,8 @@ export type CollectionPlacementRule = {
 type PresetOption = { value: string; label: string };
 
 type Props = {
+    /** Bump (new id + timestamp) to pre-select a target from elsewhere on the page, e.g. a Configure "Position on poster" link. */
+    focusTarget?: { id: string; n: number } | null;
     placement: OverlaysPlacement;
     seasonPresetId: string;
     episodePresetId: string;
@@ -133,6 +135,7 @@ const CompactField: React.FC<{
 );
 
 export const PlacementEditor: React.FC<Props> = ({
+    focusTarget,
     placement,
     seasonPresetId,
     episodePresetId,
@@ -153,6 +156,15 @@ export const PlacementEditor: React.FC<Props> = ({
 }) => {
     const { t } = useDiscoverI18n();
     const [targetId, setTargetId] = useState<string>('show');
+
+    // A "Position on poster" link elsewhere on the page asked us to pre-select a target.
+    useEffect(() => {
+        if (focusTarget?.id) {
+            setTargetId(focusTarget.id);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [focusTarget]);
+
     const [baseFailed, setBaseFailed] = useState(false);
     const [bannerNat, setBannerNat] = useState({ w: 800, h: 200 });
     const stageRef = useRef<HTMLDivElement | null>(null);

@@ -891,6 +891,15 @@ export const OverlaysDashboard: React.FC = () => {
     const [groupOpenSignal, setGroupOpenSignal] = useState<Record<string, number>>({});
     // A plain DOM id (job card or a non-collapsible divider) to scroll to once it exists on screen.
     const [pendingScrollTo, setPendingScrollTo] = useState<{ id: string; n: number } | null>(null);
+    // Bumping this selects a target on the Placement tab (e.g. from a "Position on poster" link in Configure).
+    const [placementFocusTarget, setPlacementFocusTarget] = useState<{ id: string; n: number } | null>(null);
+
+    /** Jump to the Placement tab with a specific target (show/season/episode/media/status/ratings/network/…) pre-selected. */
+    const openPlacement = useCallback((targetId: string) => {
+        setTab('look');
+        setPlacementFocusTarget({ id: targetId, n: Date.now() });
+        setPendingScrollTo({ id: 'overlay-placement-panel', n: Date.now() });
+    }, []);
 
     useEffect(() => {
         if (!pendingScrollTo) return undefined;
@@ -927,6 +936,23 @@ export const OverlaysDashboard: React.FC = () => {
             setPendingScrollTo({ id: cat.sectionId, n: Date.now() });
         }
     }, []);
+
+    /** A small "Position the X on the poster →" link that jumps to the Placement tab with that target pre-selected. */
+    const renderPlacementLink = (kindId: string) => (
+        <button
+            type="button"
+            onClick={() => openPlacement(kindId)}
+            className="mt-1 mb-2 inline-flex items-center gap-1.5 text-[11px] font-semibold text-plex hover:underline"
+        >
+            <Move className="h-3 w-3" />
+            {t('overlays.placement.jumpTo', { name: t(`overlays.placement.kinds.${kindId}`) })}
+        </button>
+    );
+
+    /** Explains, honestly, that a badge doesn't have an adjustable position yet — instead of a link that goes nowhere. */
+    const renderFixedPositionNote = (noteKey: string) => (
+        <p className="mt-1 mb-2 text-[11px] text-muted">{t(noteKey)}</p>
+    );
 
     const seasonPresetOptions = useMemo(
         () => (status?.presets || [])
@@ -2512,6 +2538,7 @@ export const OverlaysDashboard: React.FC = () => {
                             <div id="overlay-banners-newSeason" className="mb-3 scroll-mt-4 border-b border-border/40 pb-2">
                                 <span className={fieldLabelClass}>{t('overlays.jobs.banners.groups.newSeason')}</span>
                             </div>
+                            {renderPlacementLink('show')}
                             <SettingsToggleRow
                                 title={t('overlays.settings.newSeasonEnabled')}
                                 description={t('overlays.settings.newSeasonEnabledHint')}
@@ -2533,6 +2560,7 @@ export const OverlaysDashboard: React.FC = () => {
                             <div id="overlay-banners-newEpisode" className="mb-3 mt-4 scroll-mt-4 border-b border-border/40 pb-2">
                                 <span className={fieldLabelClass}>{t('overlays.jobs.banners.groups.newEpisode')}</span>
                             </div>
+                            {renderPlacementLink('episode')}
                             <SettingsToggleRow
                                 title={t('overlays.settings.newEpisodeEnabled')}
                                 description={t('overlays.settings.newEpisodeEnabledHint')}
@@ -2554,6 +2582,7 @@ export const OverlaysDashboard: React.FC = () => {
                             <div id="overlay-banners-liveTop10" className="mb-3 mt-4 scroll-mt-4 border-b border-border/40 pb-2">
                                 <span className={fieldLabelClass}>{t('overlays.jobs.banners.groups.liveTop10')}</span>
                             </div>
+                            {renderFixedPositionNote('overlays.placement.fixedNoteLiveTop10')}
                             <SettingsToggleRow
                                 title={t('overlays.settings.liveScheduleEnabled')}
                                 description={t('overlays.settings.liveScheduleEnabledHint')}
@@ -2761,6 +2790,7 @@ export const OverlaysDashboard: React.FC = () => {
                                 />
                             )}
                         >
+                            {renderPlacementLink('recently')}
                             <SettingsToggleRow
                                 title={t('overlays.settings.recentlyAddedEnabled')}
                                 description={t('overlays.settings.recentlyAddedEnabledHint')}
@@ -2914,6 +2944,8 @@ export const OverlaysDashboard: React.FC = () => {
                                 ].filter((v) => v === true).length}
                                 totalCount={4}
                             >
+                            {renderPlacementLink('media')}
+                            {renderFixedPositionNote('overlays.placement.fixedNoteQuality')}
                             <SettingsToggleRow
                                 title={t('overlays.settings.mediaInfoEnabled')}
                                 description={t('overlays.settings.mediaInfoEnabledHint')}
@@ -3041,6 +3073,9 @@ export const OverlaysDashboard: React.FC = () => {
                                 ].filter((v) => v === true).length}
                                 totalCount={3}
                             >
+                            {renderPlacementLink('status')}
+                            {renderPlacementLink('network')}
+                            {renderFixedPositionNote('overlays.placement.fixedNoteAvailability')}
                             <SettingsToggleRow
                                 title={t('overlays.settings.statusOverlayEnabled')}
                                 description={t('overlays.settings.statusOverlayEnabledHint')}
@@ -3200,6 +3235,8 @@ export const OverlaysDashboard: React.FC = () => {
                                 ].filter((v) => v === true).length}
                                 totalCount={3}
                             >
+                            {renderPlacementLink('ratings')}
+                            {renderFixedPositionNote('overlays.placement.fixedNoteRatings')}
                             <SettingsToggleRow
                                 title={t('overlays.settings.ratingsOverlayEnabled')}
                                 description={t('overlays.settings.ratingsOverlayEnabledHint')}
@@ -3389,6 +3426,7 @@ export const OverlaysDashboard: React.FC = () => {
                                 ].filter((v) => v === true).length}
                                 totalCount={7}
                             >
+                            {renderFixedPositionNote('overlays.placement.fixedNoteTechnical')}
                             <SettingsToggleRow
                                 title={t('overlays.settings.aspectOverlayEnabled')}
                                 description={t('overlays.settings.aspectOverlayEnabledHint')}
@@ -3472,6 +3510,7 @@ export const OverlaysDashboard: React.FC = () => {
                                 activeCount={configDraft.mediastingerOverlayEnabled === true ? 1 : 0}
                                 totalCount={1}
                             >
+                            {renderFixedPositionNote('overlays.placement.fixedNoteBonus')}
                             <SettingsToggleRow
                                 title={t('overlays.settings.mediastingerOverlayEnabled')}
                                 description={t('overlays.settings.mediastingerOverlayEnabledHint')}
@@ -4715,7 +4754,9 @@ export const OverlaysDashboard: React.FC = () => {
             {tab === 'look' && (
                 <div className="space-y-4">
                     <p className="text-sm text-muted">{t('overlays.look.intro')}</p>
+                    <div id="overlay-placement-panel" className="scroll-mt-4">
                     <PlacementEditor
+                        focusTarget={placementFocusTarget}
                         placement={placementDraft}
                         seasonPresetId={configDraft.overlayPresetId || 'new-season'}
                         episodePresetId={configDraft.episodeOverlayPresetId || 'new-episode'}
@@ -4738,6 +4779,7 @@ export const OverlaysDashboard: React.FC = () => {
                         onSave={() => void savePlacement()}
                         onResetKind={resetPlacementKind}
                     />
+                    </div>
                     <DashboardPanel title={t('overlays.gallery.title')} subtitle={t('overlays.gallery.subtitle')}>
                     <div className="mb-3 flex flex-wrap gap-2">
                         <button
