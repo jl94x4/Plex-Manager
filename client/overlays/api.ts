@@ -159,6 +159,8 @@ export type OverlaysConfig = {
     newSeasonEnabled?: boolean;
     newSeasonDays?: number;
     newSeasonWatchNowStyle?: boolean;
+    /** Stamp the latest season poster as well as the show poster. Default true. */
+    newSeasonStampSeasonPoster?: boolean;
     newEpisodeEnabled?: boolean;
     newEpisodeDays?: number;
     newEpisodeWatchNowStyle?: boolean;

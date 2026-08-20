@@ -127,6 +127,7 @@ const DEFAULT_CONFIG: OverlaysConfig = {
     newSeasonEnabled: true,
     newSeasonDays: 7,
     newSeasonWatchNowStyle: false,
+    newSeasonStampSeasonPoster: true,
     newEpisodeEnabled: true,
     newEpisodeDays: 6,
     newEpisodeWatchNowStyle: false,
@@ -2357,6 +2358,12 @@ export const OverlaysDashboard: React.FC = () => {
                                 description={t('overlays.settings.newSeasonWatchNowStyleHint')}
                                 checked={configDraft.newSeasonWatchNowStyle === true}
                                 onChange={(newSeasonWatchNowStyle) => setConfigDraft((prev) => ({ ...prev, newSeasonWatchNowStyle }))}
+                            />
+                            <SettingsToggleRow
+                                title={t('overlays.settings.newSeasonStampSeasonPoster')}
+                                description={t('overlays.settings.newSeasonStampSeasonPosterHint')}
+                                checked={configDraft.newSeasonStampSeasonPoster !== false}
+                                onChange={(newSeasonStampSeasonPoster) => setConfigDraft((prev) => ({ ...prev, newSeasonStampSeasonPoster }))}
                             />
                             <SettingsToggleRow
                                 title={t('overlays.settings.newEpisodeEnabled')}

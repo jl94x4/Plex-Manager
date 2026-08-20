@@ -1670,6 +1670,36 @@ def _is_season_episode_log_key(key: str) -> bool:
     return str(key or "").startswith("season:")
 
 
+def _new_season_stamp_season_poster(config: dict | None = None) -> bool:
+    """When on (default), New Season stamps the show poster and the latest season poster."""
+    cfg = config or {}
+    return _as_bool(
+        cfg.get("newSeasonStampSeasonPoster", cfg.get("new_season_stamp_season_poster")),
+        True,
+    )
+
+
+def _new_season_overlay_preset_id(config: dict | None = None) -> str:
+    cfg = config or {}
+    preset = str(cfg.get("overlayPresetId") or cfg.get("overlay_preset_id") or "new-season").strip() or "new-season"
+    if _as_bool(cfg.get("newSeasonWatchNowStyle", cfg.get("new_season_watch_now_style")), False):
+        return "new-season-watch-now"
+    return preset
+
+
+def _season_stamp_kept_for_new_season(
+    *,
+    show_key: str,
+    entry: dict | None = None,
+    keep_show_keys: set[str] | None = None,
+) -> bool:
+    key = str(show_key or "").strip()
+    if key and key in (keep_show_keys or set()):
+        return True
+    source = str((entry or {}).get("source") or "").strip().lower()
+    return source == "new-season"
+
+
 def process_show_overlay(
     plex: PlexServer,
     show,
@@ -1679,7 +1709,7 @@ def process_show_overlay(
     progress: ProgressFn | None = None,
     library: str | None = None,
 ) -> dict:
-    """New Season — show poster. Season art uses the same New Season preset when new eps qualify."""
+    """New Season — show poster. Latest season poster is stamped separately when enabled."""
     from layer_stack import apply_banner_layer, drop_conflicting_mode_logs
 
     latest = _latest_season(show)
@@ -1709,7 +1739,7 @@ def process_show_overlay(
         extra_meta={
             "seasonIndex": latest.index,
             "presetId": preset_id,
-            "targets": ["show"],
+            "targets": ["show", "season"] if _new_season_stamp_season_poster(config) else ["show"],
         },
         current_poster=show_poster,
         config=config,
@@ -1790,10 +1820,6 @@ def remove_show_overlay(
     # Fallback when no on-disk backup (e.g. migrated logs from the standalone tool).
     _progress(progress, f"No backup for {show.title} — falling back to Plex poster list")
     ok = _reset_poster(show)
-    # Legacy New Season also stamped season posters — reset latest season if present.
-    latest = _latest_season(show)
-    if latest:
-        _reset_poster(latest)
     if ok and paths is not None and rating_key:
         _sync_banner_overlay_label(
             show,
@@ -1885,11 +1911,7 @@ def process_season_new_episode_overlay(
     progress: ProgressFn | None = None,
     config: dict | None = None,
 ) -> dict:
-    """Stamp latest season poster with the New Season banner when the show has eligible new eps.
-
-    Placement Look target "Season poster" uses overlayPresetId (same asset as show), not the
-    episode thumb preset — episode thumbs alone use episodeOverlayPresetId.
-    """
+    """Stamp the latest season poster with the New Season banner."""
     latest = _latest_season(show)
     if not latest:
         raise ValueError(f"No seasons for {getattr(show, 'title', '')}")
@@ -1998,6 +2020,84 @@ def remove_season_new_episode_overlay(
             progress=progress,
         )
     return restored
+
+
+def _drop_new_season_season_stamp(
+    show,
+    *,
+    paths: dict,
+    config: dict | None,
+    preview_mode: bool,
+    progress: ProgressFn | None,
+    episode_log: dict,
+) -> None:
+    """Restore the latest season poster when New Season no longer owns it."""
+    if not _new_season_stamp_season_poster(config):
+        return
+    show_key = str(getattr(show, "ratingKey", "") or "")
+    if not show_key:
+        return
+    log_key = _season_episode_log_key(show_key)
+    if preview_mode:
+        if log_key in episode_log:
+            del episode_log[log_key]
+        return
+    try:
+        remove_season_new_episode_overlay(show, False, progress, paths=paths, config=config)
+    except Exception as exc:
+        _progress(progress, f"Season New Season restore failed for {show_key}: {exc}")
+    if log_key in episode_log:
+        del episode_log[log_key]
+
+
+def _ensure_new_season_season_stamps(
+    plex: PlexServer,
+    config: dict,
+    paths: dict,
+    preview_mode: bool,
+    progress: ProgressFn | None,
+    show_by_key: dict,
+    should_have: set[str],
+    errors: list[str],
+) -> int:
+    """Stamp the latest season poster for every New Season-eligible show."""
+    if not _new_season_stamp_season_poster(config) or not should_have:
+        return 0
+    episode_log = _load_log(paths["episodeLog"])
+    added = 0
+    want_preset = _new_season_overlay_preset_id(config)
+    for key in sorted(should_have):
+        show = show_by_key.get(key)
+        if show is None:
+            continue
+        log_key = _season_episode_log_key(key)
+        existing = episode_log.get(log_key)
+        existing = existing if isinstance(existing, dict) else None
+        existing_preset = str((existing or {}).get("presetId") or "").strip()
+        needs = (
+            preview_mode
+            or existing is None
+            or bool((existing or {}).get("preview_only"))
+            or existing_preset != want_preset
+            or existing_preset in {"new-episode", "new-episode-watch-now", ""}
+        )
+        if not needs:
+            if existing and existing.get("source") != "new-season":
+                episode_log[log_key] = {**existing, "source": "new-season"}
+            continue
+        try:
+            entry = process_season_new_episode_overlay(
+                plex, show, paths, preview_mode, progress, config=config
+            )
+            entry["source"] = "new-season"
+            episode_log[log_key] = {**(existing or {}), **entry}
+            added += 1
+        except Exception as exc:
+            title = getattr(show, "title", key)
+            errors.append(f"season {title}: {exc}")
+            _progress(progress, f"Error on season New Season stamp {key}: {exc}")
+    _save_log(paths["episodeLog"], episode_log)
+    return added
 
 
 def _episode_backup_dir(paths: dict, rating_key: str) -> Path:
@@ -2472,7 +2572,13 @@ def run_new_episode_overlays(
     preview_mode: bool,
     progress: ProgressFn | None = None,
     resolver=None,
+    keep_season_show_keys: set[str] | None = None,
 ) -> dict:
+    keep_season_show_keys = {
+        str(k).strip() for k in (keep_season_show_keys or set()) if str(k or "").strip()
+    }
+    stamp_ns_season = _new_season_stamp_season_poster(config)
+    new_season_on = _as_bool(config.get("newSeasonEnabled", config.get("new_season_enabled")), True)
     if not _as_bool(config.get("newEpisodeEnabled", config.get("new_episode_enabled")), True):
         only_keys = _only_rating_keys(config)
         if only_keys:
@@ -2504,6 +2610,12 @@ def run_new_episode_overlays(
                     continue
                 if _is_season_episode_log_key(key):
                     show_key = str(key).split(":", 1)[-1]
+                    if stamp_ns_season and new_season_on and _season_stamp_kept_for_new_season(
+                        show_key=show_key,
+                        entry=entry if isinstance(entry, dict) else None,
+                        keep_show_keys=keep_season_show_keys,
+                    ):
+                        continue
                     try:
                         show = plex.fetchItem(f"/library/metadata/{show_key}")
                     except Exception:
@@ -2663,6 +2775,8 @@ def run_new_episode_overlays(
             entry = process_season_new_episode_overlay(
                 plex, show, paths, False, progress, config=config
             )
+            if not (isinstance(existing, dict) and existing.get("source") == "new-season"):
+                entry["source"] = "new-episode"
             season_added += 1
             log[log_key] = {**(existing or {}), **entry} if isinstance(existing, dict) else entry
         except Exception as exc:
@@ -2679,6 +2793,12 @@ def run_new_episode_overlays(
             try:
                 if _is_season_episode_log_key(key):
                     show_key = key.split(":", 1)[-1]
+                    if stamp_ns_season and new_season_on and _season_stamp_kept_for_new_season(
+                        show_key=show_key,
+                        entry=entry if isinstance(entry, dict) else None,
+                        keep_show_keys=keep_season_show_keys,
+                    ):
+                        continue
                     title = entry.get("title") or show_key
                     if preview_mode:
                         if bool(entry.get("preview_only")):
@@ -2929,6 +3049,7 @@ def run_overlays(
                 plex, config, cutoff, skip_kometa, progress, resolver=resolver
             )
         should_have = {k for k in should_have if k not in reserved}
+        episode_log = _load_log(paths["episodeLog"])
 
         for key in sorted(should_have):
             show = show_by_key[key]
@@ -2964,6 +3085,15 @@ def run_overlays(
                         else:
                             del log[key]
                             removed += 1
+                        _drop_new_season_season_stamp(
+                            show,
+                            paths=paths,
+                            config=config,
+                            preview_mode=False,
+                            progress=progress,
+                            episode_log=episode_log,
+                        )
+                        should_have.discard(key)
                         continue
                     if library and isinstance(existing, dict) and not existing.get("library"):
                         log[key] = {**existing, "library": library}
@@ -3001,6 +3131,21 @@ def run_overlays(
                         else:
                             _progress(progress, f"[Preview] Would remove live overlay: {title}")
                             removed += 1
+                        show = show_by_key.get(key)
+                        if show is None:
+                            try:
+                                show = plex.fetchItem(f"/library/metadata/{key}")
+                            except Exception:
+                                show = None
+                        if show is not None:
+                            _drop_new_season_season_stamp(
+                                show,
+                                paths=paths,
+                                config=config,
+                                preview_mode=True,
+                                progress=progress,
+                                episode_log=episode_log,
+                            )
                         continue
                     show = show_by_key.get(key)
                     if show is None:
@@ -3020,10 +3165,25 @@ def run_overlays(
                         if paths is not None:
                             _clear_backup_dir(paths, key)
                         removed += 1
+                    _drop_new_season_season_stamp(
+                        show,
+                        paths=paths,
+                        config=config,
+                        preview_mode=False,
+                        progress=progress,
+                        episode_log=episode_log,
+                    )
                 except Exception as exc:
                     errors.append(f"remove {key}: {exc}")
+        _save_log(paths["episodeLog"], episode_log)
+        season_stamps = _ensure_new_season_season_stamps(
+            plex, config, paths, preview_mode, progress, show_by_key, should_have, errors
+        )
+        if season_stamps:
+            _progress(progress, f"Stamped New Season on {season_stamps} latest season poster(s)")
     elif not scoped_run:
         _progress(progress, "New Season overlays disabled — pruning tracked show stamps…")
+        episode_log = _load_log(paths["episodeLog"])
         for key in list(log.keys()):
             entry = log.get(key) or {}
             title = entry.get("title") or key
@@ -3040,10 +3200,19 @@ def run_overlays(
                     removed += 1
                     continue
                 remove_show_overlay(show, False, progress, paths=paths, config=config)
+                _drop_new_season_season_stamp(
+                    show,
+                    paths=paths,
+                    config=config,
+                    preview_mode=False,
+                    progress=progress,
+                    episode_log=episode_log,
+                )
                 del log[key]
                 removed += 1
             except Exception as exc:
                 errors.append(f"disable-remove {key}: {exc}")
+        _save_log(paths["episodeLog"], episode_log)
     elif scoped_run and not new_season_on:
         _progress(progress, "New Season overlays disabled — scoped pass leaves tracked stamps alone")
 
@@ -3084,7 +3253,15 @@ def run_overlays(
             summary["errors"] = [*(summary.get("errors") or []), *kometa_summary["kometaErrors"]]
 
     episode_summary = run_new_episode_overlays(
-        plex, config, paths, preview_mode, progress, resolver=resolver
+        plex,
+        config,
+        paths,
+        preview_mode,
+        progress,
+        resolver=resolver,
+        keep_season_show_keys=(
+            should_have if (new_season_on and _new_season_stamp_season_poster(config)) else set()
+        ),
     )
     summary.update(episode_summary)
     if episode_summary.get("episodeErrors"):
@@ -3239,6 +3416,21 @@ def promote_preview_to_live(config: dict, progress: ProgressFn | None = None) ->
             )
             show_log[key] = {**existing, **entry, "preview_only": False}
             shows_promoted += 1
+            if _new_season_stamp_season_poster(config):
+                try:
+                    season_entry = process_season_new_episode_overlay(
+                        plex, show, paths, False, progress, config=config
+                    )
+                    season_entry["source"] = "new-season"
+                    season_key = _season_episode_log_key(key)
+                    prev_season = episode_log.get(season_key)
+                    prev_season = prev_season if isinstance(prev_season, dict) else {}
+                    episode_log[season_key] = {**prev_season, **season_entry, "preview_only": False}
+                    seasons_promoted += 1
+                    season_keys = [k for k in season_keys if k != season_key]
+                except Exception as season_exc:
+                    errors.append(f"season {existing.get('title') or key}: {season_exc}")
+                    _progress(progress, f"Promote failed for season stamp {existing.get('title') or key}: {season_exc}")
         except Exception as exc:
             title = existing.get("title") or key
             errors.append(f"show {title}: {exc}")

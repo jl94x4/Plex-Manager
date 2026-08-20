@@ -24,10 +24,10 @@ Expand each card for that job’s toggles, windows, filters, and schedule. Hero 
 
 ## Stamp rules (Phase 3)
 
-- **Show poster:** New Season only
-- **Season poster:** New Episode when the show has eligible new episodes (same window + binge skip)
+- **Show poster:** New Season for season 2+ premieres
+- **Season poster:** New Season on the latest season when **Stamp New Season on show and season posters** is on (default). Otherwise New Episode still stamps the latest season when the show has eligible new episodes.
 - **Episode thumbs:** New Episode (default 6-day window)
-- `skipNewEpisodeOnBinge` (default on): if 3+ episodes of the same season share an air date, skip episode + season New Episode stamps
+- `skipNewEpisodeOnBinge` (default on): if 3+ episodes of the same season share an air date, skip episode thumbs (the New Season banners still apply when that option is on)
 
 ## Badge modes (each has a per-job toggle on Overview cards)
 

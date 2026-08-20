@@ -98,6 +98,30 @@ class OverlayEligibilityTests(unittest.TestCase):
         self.assertFalse(ok)
         self.assertEqual(meta.get("reason"), "aged_out")
 
+    def test_new_season_stamps_season_poster_by_default(self):
+        from core import _new_season_stamp_season_poster, _season_stamp_kept_for_new_season
+
+        self.assertTrue(_new_season_stamp_season_poster({}))
+        self.assertTrue(_new_season_stamp_season_poster({"newSeasonStampSeasonPoster": True}))
+        self.assertFalse(_new_season_stamp_season_poster({"newSeasonStampSeasonPoster": False}))
+        self.assertTrue(
+            _season_stamp_kept_for_new_season(show_key="10", keep_show_keys={"10"}),
+        )
+        self.assertTrue(
+            _season_stamp_kept_for_new_season(
+                show_key="11",
+                entry={"source": "new-season"},
+                keep_show_keys=set(),
+            ),
+        )
+        self.assertFalse(
+            _season_stamp_kept_for_new_season(
+                show_key="12",
+                entry={"source": "new-episode"},
+                keep_show_keys=set(),
+            ),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

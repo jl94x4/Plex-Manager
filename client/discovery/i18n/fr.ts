@@ -1089,6 +1089,8 @@ export const fr: DeepPartial<EnCatalog> = {
             newSeasonEnabledHint: 'Tamponne les affiches lorsqu’une saison 2+ commence dans la fenêtre. La saison 1 n’est jamais éligible.',
             newSeasonWatchNowStyle: 'Style New Season « Watch Now » (split)',
             newSeasonWatchNowStyleHint: 'Utilise le badge rouge|blanc New Season | Watch Now à la place de la pastille simple.',
+            newSeasonStampSeasonPoster: 'Tamponner New Season sur l’affiche série et saison',
+            newSeasonStampSeasonPosterHint: 'Applique aussi la bannière New Season sur l’affiche de la dernière saison (page de la série), pas seulement l’affiche principale. La saison 1 n’est jamais éligible. Activé par défaut.',
             newEpisodeWatchNowStyle: 'Style New Episode « Watch Now » (split)',
             newEpisodeWatchNowStyleHint: 'Utilise le badge rouge|blanc New Episode | Watch Now à la place de la pastille simple.',
             skipNewEpisodeOnBinge: 'Ignorer New Episode pour les sorties binge',
