@@ -48,6 +48,7 @@ const BREAKDOWN_META: Record<string, { icon: LucideIcon; statKey?: string; tipKe
     activeDays: { icon: Calendar, tipKey: 'xp.tip.activeDays', statKey: 'activeDays' },
     longestStreak: { icon: Flame, tipKey: 'xp.tip.longestStreak', statKey: 'longestStreak' },
     weekendPlays: { icon: Sparkles, tipKey: 'xp.tip.weekendPlays', statKey: 'weekendPlays' },
+    minutesWatched: { icon: Clock, tipKey: 'xp.tip.minutesWatched', statKey: 'minutesWatched' },
     hoursWatched: { icon: Clock, tipKey: 'xp.tip.hoursWatched', statKey: 'hoursWatched' },
 };
 

@@ -165,7 +165,8 @@ export const AchievementsSettings: React.FC<Props> = ({
         const current = Object.keys(achievementsXpWeights || {});
         return current.length ? current : [
             'uniqueMovies', 'uniqueShows', 'uniqueMusic', 'moviePlays', 'episodePlays',
-            'trackPlays', 'totalPlays', 'activeDays', 'longestStreak', 'weekendPlays', 'hoursWatched',
+            'trackPlays', 'totalPlays', 'activeDays', 'longestStreak', 'weekendPlays',
+            'minutesWatched', 'hoursWatched',
         ];
     }, [defaultWeights, achievementsXpWeights]);
 

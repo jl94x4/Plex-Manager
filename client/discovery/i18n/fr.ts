@@ -1327,7 +1327,7 @@ export const fr: DeepPartial<EnCatalog> = {
             mostCommon: 'Les plus courants',
             noData: 'Aucune donnée pour le moment.',
             xpWeights: 'Poids d’XP',
-            xpWeightsHint: 'Points accordés par statistique. Le total des lectures vaut 0 par défaut, car il compte deux fois les lectures de films, d’épisodes et de pistes.',
+            xpWeightsHint: 'Points accordés par statistique. Le temps de visionnage vaut 1 XP par minute par défaut. Les heures regardées restent à 0 pour ne pas compter deux fois les minutes. Le total des lectures vaut 0 par défaut, car il compte deux fois les lectures de films, d’épisodes et de pistes. Reconstruisez les instantanés d’XP après un changement de poids.',
             resetToDefaults: 'Réinitialiser par défaut',
             disableBadges: 'Désactiver des badges',
             disableBadgesHint: 'Les badges masqués restent verrouillés pour tout le monde et n’apparaissent pas dans la progression ni dans le temple de la renommée.',
