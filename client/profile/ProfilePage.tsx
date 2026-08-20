@@ -26,6 +26,7 @@ import {
     requestDiscoveryPath,
     requestPoster,
     resolveAvatar,
+    titleDiscoveryPath,
     trophyRarityClass,
 } from './helpers';
 import { DossierArena } from './DossierArena';
@@ -346,6 +347,28 @@ export const ProfilePage: React.FC<Props> = ({
         return () => { cancelled = true; };
     }, [selectedBadgeId, isSelf]);
 
+    const openTitleInDiscover = (item: any, fallbackType?: string) => {
+        const path = titleDiscoveryPath({
+            ...item,
+            title: item?.grandparentTitle || item?.title,
+            type: item?.type || item?.kind || fallbackType,
+            mediaType: item?.mediaType || item?.kind || item?.type || fallbackType,
+        });
+        if (path) onNavigate('discovery', { path });
+    };
+
+    const handleWrapUpCardClick = (metric: string) => {
+        if (metric === 'Top Movie' && wrapAnalytics?.topMovie?.title) {
+            openTitleInDiscover(wrapAnalytics.topMovie, 'movie');
+            return;
+        }
+        if (metric === 'Top Binge' && wrapAnalytics?.topBinge?.title) {
+            openTitleInDiscover(wrapAnalytics.topBinge, 'show');
+            return;
+        }
+        setSelectedMetric(metric);
+    };
+
     const reloadProfile = () => {
         const path = accountId
             ? `/api/profile/${encodeURIComponent(accountId)}`
@@ -552,31 +575,54 @@ export const ProfilePage: React.FC<Props> = ({
 
                     {!data.privacy?.locked && nowPlaying ? (
                         <DashboardPanel title={t('profilePage.currentlyWatching')} subtitle={t('profilePage.currentlyWatchingHint')}>
-                            <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/25 p-3">
-                                {nowPlaying.thumb ? (
-                                    <img
-                                        src={resolveAvatar(nowPlaying.thumb, 120)}
-                                        alt=""
-                                        className="w-16 h-24 rounded-lg object-cover border border-white/10 shrink-0"
-                                    />
+                            {(() => {
+                                const watchingTitle = nowPlaying.grandparentTitle || nowPlaying.title;
+                                const watchingPath = titleDiscoveryPath({
+                                    title: watchingTitle,
+                                    type: nowPlaying.type,
+                                    tmdbId: nowPlaying.tmdbId,
+                                    mbid: nowPlaying.mbid,
+                                });
+                                const body = (
+                                    <>
+                                        {nowPlaying.thumb ? (
+                                            <img
+                                                src={resolveAvatar(nowPlaying.thumb, 120)}
+                                                alt=""
+                                                className="w-16 h-24 rounded-lg object-cover border border-white/10 shrink-0"
+                                            />
+                                        ) : (
+                                            <span className="inline-flex w-16 h-24 items-center justify-center rounded-lg border border-white/10 bg-black/40 text-plex shrink-0">
+                                                <Play className="w-6 h-6" />
+                                            </span>
+                                        )}
+                                        <div className="min-w-0">
+                                            <p className="text-sm font-black text-text truncate">
+                                                {watchingTitle}
+                                            </p>
+                                            {nowPlaying.grandparentTitle && nowPlaying.title ? (
+                                                <p className="text-xs text-muted truncate mt-0.5">{nowPlaying.title}</p>
+                                            ) : null}
+                                            <p className="text-[11px] text-muted mt-1 capitalize">
+                                                {nowPlaying.state || 'playing'}
+                                                {Number(nowPlaying.progress) > 0 ? ` · ${Math.round(Number(nowPlaying.progress))}%` : ''}
+                                            </p>
+                                        </div>
+                                    </>
+                                );
+                                const watchingClass = 'flex items-center gap-3 rounded-2xl border border-white/10 bg-black/25 p-3 w-full text-left';
+                                return watchingPath ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => onNavigate('discovery', { path: watchingPath })}
+                                        className={`${watchingClass} hover:border-plex/40 hover:opacity-90`}
+                                    >
+                                        {body}
+                                    </button>
                                 ) : (
-                                    <span className="inline-flex w-16 h-24 items-center justify-center rounded-lg border border-white/10 bg-black/40 text-plex shrink-0">
-                                        <Play className="w-6 h-6" />
-                                    </span>
-                                )}
-                                <div className="min-w-0">
-                                    <p className="text-sm font-black text-text truncate">
-                                        {nowPlaying.grandparentTitle || nowPlaying.title}
-                                    </p>
-                                    {nowPlaying.grandparentTitle && nowPlaying.title ? (
-                                        <p className="text-xs text-muted truncate mt-0.5">{nowPlaying.title}</p>
-                                    ) : null}
-                                    <p className="text-[11px] text-muted mt-1 capitalize">
-                                        {nowPlaying.state || 'playing'}
-                                        {Number(nowPlaying.progress) > 0 ? ` · ${Math.round(Number(nowPlaying.progress))}%` : ''}
-                                    </p>
-                                </div>
-                            </div>
+                                    <div className={watchingClass}>{body}</div>
+                                );
+                            })()}
                         </DashboardPanel>
                     ) : null}
 
@@ -635,30 +681,48 @@ export const ProfilePage: React.FC<Props> = ({
                     {!data.privacy?.locked && recentWatched.length ? (
                         <DashboardPanel title={t('profilePage.lastWatched')} subtitle={t('profilePage.lastWatchedHint')}>
                             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                                {recentWatched.map((item: any, index: number) => (
-                                    <div
-                                        key={`${item.title}-${item.viewedAt || index}`}
-                                        className={`${index > 0 ? 'hidden sm:flex' : 'flex'} flex-row sm:flex-col items-center sm:items-stretch gap-3 rounded-2xl border border-white/10 bg-black/25 p-3 min-w-0`}
-                                    >
-                                        {item.thumbUrl ? (
-                                            <img
-                                                src={resolvePortalAssetUrl(item.thumbUrl)}
-                                                alt=""
-                                                className="w-16 h-24 sm:w-full sm:h-auto sm:aspect-[2/3] rounded-lg object-cover border border-white/10 shrink-0"
-                                            />
-                                        ) : (
-                                            <span className="inline-flex w-16 h-24 sm:w-full sm:aspect-[2/3] items-center justify-center rounded-lg border border-white/10 bg-black/40 text-plex shrink-0">
-                                                <Play className="w-6 h-6" />
-                                            </span>
-                                        )}
-                                        <div className="min-w-0 sm:mt-1">
-                                            <p className="text-sm font-black text-text truncate">{item.title}</p>
-                                            {item.episodeTitle ? (
-                                                <p className="text-xs text-muted truncate mt-0.5">{item.episodeTitle}</p>
-                                            ) : null}
+                                {recentWatched.map((item: any, index: number) => {
+                                    const discoveryPath = titleDiscoveryPath(item);
+                                    const cardClass = `${index > 0 ? 'hidden sm:flex' : 'flex'} flex-row sm:flex-col items-center sm:items-stretch gap-3 rounded-2xl border border-white/10 bg-black/25 p-3 min-w-0`;
+                                    const body = (
+                                        <>
+                                            {item.thumbUrl ? (
+                                                <img
+                                                    src={resolvePortalAssetUrl(item.thumbUrl)}
+                                                    alt=""
+                                                    className="w-16 h-24 sm:w-full sm:h-auto sm:aspect-[2/3] rounded-lg object-cover border border-white/10 shrink-0"
+                                                />
+                                            ) : (
+                                                <span className="inline-flex w-16 h-24 sm:w-full sm:aspect-[2/3] items-center justify-center rounded-lg border border-white/10 bg-black/40 text-plex shrink-0">
+                                                    <Play className="w-6 h-6" />
+                                                </span>
+                                            )}
+                                            <div className="min-w-0 sm:mt-1">
+                                                <p className="text-sm font-black text-text truncate">{item.title}</p>
+                                                {item.episodeTitle ? (
+                                                    <p className="text-xs text-muted truncate mt-0.5">{item.episodeTitle}</p>
+                                                ) : null}
+                                            </div>
+                                        </>
+                                    );
+                                    return discoveryPath ? (
+                                        <button
+                                            key={`${item.title}-${item.viewedAt || index}`}
+                                            type="button"
+                                            onClick={() => onNavigate('discovery', { path: discoveryPath })}
+                                            className={`${cardClass} text-left hover:border-plex/40 hover:opacity-90`}
+                                        >
+                                            {body}
+                                        </button>
+                                    ) : (
+                                        <div
+                                            key={`${item.title}-${item.viewedAt || index}`}
+                                            className={cardClass}
+                                        >
+                                            {body}
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </DashboardPanel>
                     ) : null}
@@ -724,24 +788,42 @@ export const ProfilePage: React.FC<Props> = ({
                                         {t('profilePage.sharedWatched')}
                                     </p>
                                     <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-                                        {data.compare.sharedWatched.map((item: any) => (
-                                            <div
-                                                key={`${item.kind}-${item.title}`}
-                                                className="w-20 shrink-0"
-                                                title={item.title}
-                                            >
-                                                {item.thumbUrl ? (
-                                                    <img
-                                                        src={resolvePortalAssetUrl(item.thumbUrl)}
-                                                        alt=""
-                                                        className="w-20 h-[7.5rem] rounded-lg object-cover border border-white/10"
-                                                    />
-                                                ) : (
-                                                    <div className="w-20 h-[7.5rem] rounded-lg border border-white/10 bg-black/40" />
-                                                )}
-                                                <p className="mt-1 text-[11px] font-bold text-text truncate">{item.title}</p>
-                                            </div>
-                                        ))}
+                                        {data.compare.sharedWatched.map((item: any) => {
+                                            const discoveryPath = titleDiscoveryPath(item);
+                                            const body = (
+                                                <>
+                                                    {item.thumbUrl ? (
+                                                        <img
+                                                            src={resolvePortalAssetUrl(item.thumbUrl)}
+                                                            alt=""
+                                                            className="w-20 h-[7.5rem] rounded-lg object-cover border border-white/10"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-20 h-[7.5rem] rounded-lg border border-white/10 bg-black/40" />
+                                                    )}
+                                                    <p className="mt-1 text-[11px] font-bold text-text truncate">{item.title}</p>
+                                                </>
+                                            );
+                                            return discoveryPath ? (
+                                                <button
+                                                    key={`${item.kind}-${item.title}`}
+                                                    type="button"
+                                                    title={item.title}
+                                                    onClick={() => onNavigate('discovery', { path: discoveryPath })}
+                                                    className="w-20 shrink-0 text-left hover:opacity-90"
+                                                >
+                                                    {body}
+                                                </button>
+                                            ) : (
+                                                <div
+                                                    key={`${item.kind}-${item.title}`}
+                                                    className="w-20 shrink-0"
+                                                    title={item.title}
+                                                >
+                                                    {body}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             ) : null}
@@ -841,7 +923,7 @@ export const ProfilePage: React.FC<Props> = ({
                                     analytics={wrapAnalytics}
                                     desktopMaxCards={10}
                                     interactive
-                                    onCardClick={setSelectedMetric}
+                                    onCardClick={handleWrapUpCardClick}
                                 />
                             )}
                         </DashboardPanel>

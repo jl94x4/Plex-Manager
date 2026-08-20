@@ -58,6 +58,15 @@ const writeHiddenDiscoverKeys = (keys: Set<string>) => {
     }
 };
 
+const readDiscoverSearchQuery = () => {
+    if (typeof window === 'undefined') return '';
+    try {
+        return String(new URLSearchParams(window.location.search).get('q') || '').trim();
+    } catch {
+        return '';
+    }
+};
+
 type DiscoverQuickAction = {
     id: string;
     label: string;
@@ -89,11 +98,11 @@ const DiscoveryDashboardInner: React.FC<{
         return '/discovery';
     });
 
-    const [query, setQuery] = useState('');
+    const [query, setQuery] = useState(readDiscoverSearchQuery);
     const [searchResults, setSearchResults] = useState<any[]>([]);
     const [searchLoading, setSearchLoading] = useState(false);
     const [searchError, setSearchError] = useState<string | null>(null);
-    const [searchOpen, setSearchOpen] = useState(false);
+    const [searchOpen, setSearchOpen] = useState(() => readDiscoverSearchQuery().length >= 2);
     const [searchRetryToken, setSearchRetryToken] = useState(0);
     const searchInputRef = useRef<HTMLInputElement | null>(null);
     const searchAbortRef = useRef<AbortController | null>(null);
@@ -109,9 +118,18 @@ const DiscoveryDashboardInner: React.FC<{
             ? 'Emby'
             : 'Plex';
 
+    const applyDiscoverSearchFromLocation = useCallback(() => {
+        const q = readDiscoverSearchQuery();
+        if (q.length >= 2) {
+            setQuery(q);
+            setSearchOpen(true);
+        }
+    }, []);
+
     const refreshPath = useCallback(() => {
         setPath(window.location.pathname);
-    }, []);
+        applyDiscoverSearchFromLocation();
+    }, [applyDiscoverSearchFromLocation]);
 
     useEffect(() => {
         const handlePopState = () => refreshPath();
@@ -149,7 +167,13 @@ const DiscoveryDashboardInner: React.FC<{
         const target = `${portalUrl(pathname)}${search}`;
         window.history.pushState({}, '', target);
         setPath(window.location.pathname);
-        setSearchOpen(false);
+        const seeded = String(new URLSearchParams(search.startsWith('?') ? search.slice(1) : search).get('q') || '').trim();
+        if (seeded.length >= 2) {
+            setQuery(seeded);
+            setSearchOpen(true);
+        } else {
+            setSearchOpen(false);
+        }
         window.dispatchEvent(new Event('portal-discovery-navigate'));
     }, []);
 
@@ -427,6 +451,16 @@ const DiscoveryDashboardInner: React.FC<{
             setSearchOpen(false);
             setSearchResults([]);
             setSearchError(null);
+            try {
+                const url = new URL(window.location.href);
+                if (url.searchParams.has('q')) {
+                    url.searchParams.delete('q');
+                    const nextSearch = url.searchParams.toString();
+                    window.history.replaceState({}, '', `${url.pathname}${nextSearch ? `?${nextSearch}` : ''}${url.hash}`);
+                }
+            } catch {
+                /* ignore */
+            }
         },
         onQueryChange: setQuery,
         onFocus: () => query.trim().length >= 2 && setSearchOpen(true),

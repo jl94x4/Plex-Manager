@@ -61,22 +61,10 @@ export const profileKeyForRequester = (requestedBy?: {
     return plex || name;
 };
 
-export const requestDiscoveryPath = (item: {
-    mediaType?: string | null;
-    type?: string | null;
-    tmdbId?: number | string | null;
-    mbid?: string | null;
-}) => {
-    const type = String(item?.mediaType || item?.type || '').toLowerCase();
-    if (type === 'music' || type === 'artist' || type === 'album' || type === 'track') {
-        const mbid = String(item?.mbid || '').trim();
-        return mbid ? `/discovery/music/artist/${encodeURIComponent(mbid)}` : null;
-    }
-    const tmdbId = Number(item?.tmdbId);
-    if (!Number.isFinite(tmdbId) || tmdbId <= 0) return null;
-    const kind = type === 'show' || type === 'tv' || type === 'series' ? 'tv' : 'movie';
-    return `/discovery/${kind}/${tmdbId}`;
-};
+export {
+    requestDiscoveryPath,
+    titleDiscoveryPath,
+} from '../../lib/profile/titleDiscoveryPath.js';
 
 export const requestPoster = (item: { posterUrl?: string | null }) => {
     const raw = String(item?.posterUrl || '').trim();
