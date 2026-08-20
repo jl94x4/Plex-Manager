@@ -11,7 +11,8 @@ import { discoverRowCardWidthClass } from '../shared/portalLayout';
 import { ShareWrapUpModal } from '../shared/ShareWrapUp';
 import { pushToast, ToastContainer, type ToastMessage } from '../shared/toast';
 import { WrapUpCardGrid } from '../shared/WrapUpCards';
-import { WrapUpModal } from '../screens';
+import { WrapUpCardsSkeleton } from '../shared/skeletons';
+import { WrapUpModal } from '../shared/WrapUpModal';
 import { ProfileBadgeRack } from '../achievements/AchievementsDashboard';
 import { BadgeDetailDrawer } from '../achievements/BadgeDetailDrawer';
 import { useDiscoverI18n } from '../discovery/i18n';
@@ -27,7 +28,6 @@ import {
     resolveAvatar,
     trophyRarityClass,
 } from './helpers';
-import { mapJellyfinHomeAnalytics, mergeProfileWrapUp } from './wrapUp';
 import { DossierArena } from './DossierArena';
 
 const TASTE_GLOW: Record<string, string> = {
@@ -137,7 +137,6 @@ export const ProfilePage: React.FC<Props> = ({
     const [copiedLink, setCopiedLink] = useState(false);
     const [shareWrapUpOpen, setShareWrapUpOpen] = useState(false);
     const [toasts, setToasts] = useState<ToastMessage[]>([]);
-    const [personalWrapUp, setPersonalWrapUp] = useState<any>(null);
     const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
     const [selectedBadgeId, setSelectedBadgeId] = useState<string | null>(null);
     const [pinnedIds, setPinnedIds] = useState<string[]>([]);
@@ -173,45 +172,12 @@ export const ProfilePage: React.FC<Props> = ({
     }, [accountId, t]);
 
     useEffect(() => {
-        setPersonalWrapUp(null);
         setSelectedMetric(null);
         setSelectedBadgeId(null);
         setCopiedLink(false);
         setShareWrapUpOpen(false);
         setNowPlaying(null);
-        if (!data?.viewer?.isSelf) return undefined;
-        let cancelled = false;
-        const wrapUpSubjectId = String(
-            sessionInfo?.impersonation?.targetUserId
-            || sessionInfo?.account?.id
-            || sessionInfo?.session?.id
-            || sessionInfo?.session?.username
-            || 'anon',
-        );
-        if (!isJellyfinPortal) {
-            try {
-                const raw = sessionStorage.getItem(`smp.wrapup.analytics.v2:${wrapUpSubjectId}:all`);
-                const parsed = raw ? JSON.parse(raw) : null;
-                if (parsed?.payload && typeof parsed.at === 'number' && Date.now() - parsed.at < 6 * 60 * 60 * 1000) {
-                    setPersonalWrapUp(parsed.payload);
-                }
-            } catch {
-                /* ignore */
-            }
-        }
-        const load = async () => {
-            try {
-                const payload = isJellyfinPortal
-                    ? mapJellyfinHomeAnalytics(await apiFetch('/api/jellystat/analytics?days=all'))
-                    : await apiFetch('/api/plex/analytics/me?days=all');
-                if (!cancelled) setPersonalWrapUp(payload);
-            } catch {
-                if (!cancelled) setPersonalWrapUp((prev: any) => prev);
-            }
-        };
-        void load();
-        return () => { cancelled = true; };
-    }, [accountId, data?.viewer?.isSelf, isJellyfinPortal, sessionInfo?.account?.id, sessionInfo?.impersonation?.targetUserId, sessionInfo?.session?.id, sessionInfo?.session?.username]);
+    }, [accountId, data?.identity?.accountId]);
 
     useEffect(() => {
         if (!data || data.privacy?.locked) {
@@ -316,14 +282,10 @@ export const ProfilePage: React.FC<Props> = ({
         }
     };
 
-    const wrapAnalytics = useMemo(
-        () => mergeProfileWrapUp(data?.watch?.wrapUp || null, personalWrapUp, Number(identity.xp) || undefined),
-        [data?.watch?.wrapUp, personalWrapUp, identity.xp],
-    );
+    const wrapAnalytics = data?.watch?.wrapUp || null;
+    const wrapUpPending = !!data?.watch?.wrapUpPending && !(wrapAnalytics?.topMovie || wrapAnalytics?.topBinge);
     const canOpenWatchStory = !!(wrapAnalytics && (Number(wrapAnalytics.hoursWatched) > 0 || Number(wrapAnalytics.totalPlays) > 0));
-    const lastWatched = isSelf && Array.isArray(personalWrapUp?.recentHistory)
-        ? personalWrapUp.recentHistory[0]
-        : null;
+    const lastWatched = Array.isArray(wrapAnalytics?.recentHistory) ? wrapAnalytics.recentHistory[0] : null;
     const unlocks = Array.isArray(achievements?.earned) ? achievements.earned.slice(0, 8) : [];
     const story = data?.watch?.taste || {};
     const tasteView = useMemo(() => {
@@ -838,11 +800,11 @@ export const ProfilePage: React.FC<Props> = ({
                         </DashboardPanel>
                     ) : null}
 
-                    {!data.privacy?.locked && wrapAnalytics && (Number(wrapAnalytics.totalPlays) > 0 || Number(wrapAnalytics.hoursWatched) > 0 || wrapAnalytics.leaderboardRank) ? (
+                    {!data.privacy?.locked && (wrapUpPending || (wrapAnalytics && (Number(wrapAnalytics.totalPlays) > 0 || Number(wrapAnalytics.hoursWatched) > 0 || wrapAnalytics.leaderboardRank))) ? (
                         <DashboardPanel
                             title={t('profilePage.watchStory')}
                             subtitle={t('profilePage.watchStoryHint')}
-                            controls={
+                            controls={isSelf && wrapAnalytics ? (
                                 <button
                                     type="button"
                                     onClick={() => setShareWrapUpOpen(true)}
@@ -851,14 +813,18 @@ export const ProfilePage: React.FC<Props> = ({
                                     <Share2 className="w-4 h-4" />
                                     {t('profilePage.shareWrapUp')}
                                 </button>
-                            }
+                            ) : undefined}
                         >
-                            <WrapUpCardGrid
-                                analytics={wrapAnalytics}
-                                desktopMaxCards={10}
-                                interactive
-                                onCardClick={setSelectedMetric}
-                            />
+                            {wrapUpPending ? (
+                                <WrapUpCardsSkeleton />
+                            ) : (
+                                <WrapUpCardGrid
+                                    analytics={wrapAnalytics}
+                                    desktopMaxCards={10}
+                                    interactive
+                                    onCardClick={setSelectedMetric}
+                                />
+                            )}
                         </DashboardPanel>
                     ) : null}
 

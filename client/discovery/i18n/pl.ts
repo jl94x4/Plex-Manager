@@ -430,7 +430,7 @@ Object.assign(pl, { profilePage: {
     steady: 'Bez zmian',
     xpProgress: 'XP do następnego poziomu',
     watchStory: 'Historia oglądania',
-    watchStoryHint: 'Najważniejsze statystyki z tej biblioteki.',
+    watchStoryHint: 'Najważniejsze statystyki z ostatnich 365 dni na tym serwerze.',
     trophyCase: 'Gablota trofeów',
     trophyHint: 'Najpierw przypięte odznaki, potem najrzadsze.',
     pinned: 'Przypięte',

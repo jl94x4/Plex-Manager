@@ -830,7 +830,7 @@ Object.assign(de, { profilePage: {
     steady: 'Platz gehalten',
     xpProgress: 'XP bis zum nächsten Level',
     watchStory: 'Watch-Story',
-    watchStoryHint: 'Allzeit-Highlights aus dieser Bibliothek.',
+    watchStoryHint: 'Allzeit-Highlights der letzten 365 Tage auf diesem Server.',
     trophyCase: 'Trophäenschrank',
     trophyHint: 'Angeheftete Badges zuerst, dann die seltensten.',
     pinned: 'Angeheftet',

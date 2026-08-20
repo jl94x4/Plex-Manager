@@ -88,7 +88,7 @@ export const en = {
         steady: 'Holding place',
         xpProgress: 'XP to next level',
         watchStory: 'Watch story',
-        watchStoryHint: 'All-time highlights from this library.',
+        watchStoryHint: 'Highlights from the last 365 days of watch history on this server.',
         trophyCase: 'Trophy case',
         trophyHint: 'Pinned badges first, then highest rarities.',
         pinned: 'Pinned',

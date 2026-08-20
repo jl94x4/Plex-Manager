@@ -78,6 +78,8 @@ import { isTautulliWatchHistorySource, buildAchievementsHomeRankContext, summari
 import { loadAchievementsState, setLeaderboardOptOut } from './lib/achievements/store.js';
 import { resolveAchievementsAccountId } from './lib/profile/assemble.js';
 import { sanitizeProfileBio } from './lib/profile/social.js';
+import { wrapUpFromHistoryItems } from './lib/profile/wrapUp.js';
+import { mapJellyfinPlayedItemsToHistory } from './lib/achievements/jellyfinMap.js';
 import {
     applyMemberNamePrivacyToRows,
     applyStreamPrivacy,
@@ -17409,6 +17411,29 @@ const startPersonalAnalyticsWarmBackgroundTask = () => {
     setInterval(() => { void runPersonalAnalyticsWarmJob('scheduled'); }, PERSONAL_ANALYTICS_WARM_INTERVAL_MS);
 };
 
+const fetchJellyfinPlayedItems = async (config, accountId) => {
+    const baseUrl = resolveIntegrationUrlForFetch(config.jellyfinUrl);
+    if (!baseUrl || !config.jellyfinApiKey || !accountId) return [];
+    const params = new URLSearchParams({
+        Recursive: 'true',
+        Filters: 'IsPlayed',
+        IncludeItemTypes: 'Movie,Episode,Audio',
+        Fields: 'DatePlayed,RunTimeTicks,UserData,SeriesId,SeriesName,AlbumId,Album,ParentId,Genres,GenreItems',
+        SortBy: 'DatePlayed',
+        SortOrder: 'Descending',
+        Limit: '5000',
+        EnableUserData: 'true',
+    });
+    const response = await fetchWithTimeout(
+        `${baseUrl}/Users/${encodeURIComponent(accountId)}/Items?${params.toString()}`,
+        { headers: jellyfinHeaders(config.jellyfinApiKey) },
+        20000,
+    );
+    if (!response?.ok) return [];
+    const payload = await response.json().catch(() => null);
+    return Array.isArray(payload?.Items) ? payload.Items : [];
+};
+
 achievementsHttp = registerAchievementsRoutes(app, {
     requireAuth,
     requireMember,
@@ -17479,28 +17504,7 @@ achievementsHttp = registerAchievementsRoutes(app, {
         }
         return req.user?.jellyfinId || req.user?.id || null;
     },
-    fetchJellyfinPlayedItems: async (config, accountId) => {
-        const baseUrl = resolveIntegrationUrlForFetch(config.jellyfinUrl);
-        if (!baseUrl || !config.jellyfinApiKey || !accountId) return [];
-        const params = new URLSearchParams({
-            Recursive: 'true',
-            Filters: 'IsPlayed',
-            IncludeItemTypes: 'Movie,Episode,Audio',
-            Fields: 'DatePlayed,RunTimeTicks,UserData,SeriesId,SeriesName,AlbumId,Album,ParentId,Genres,GenreItems',
-            SortBy: 'DatePlayed',
-            SortOrder: 'Descending',
-            Limit: '5000',
-            EnableUserData: 'true',
-        });
-        const response = await fetchWithTimeout(
-            `${baseUrl}/Users/${encodeURIComponent(accountId)}/Items?${params.toString()}`,
-            { headers: jellyfinHeaders(config.jellyfinApiKey) },
-            20000,
-        );
-        if (!response?.ok) return [];
-        const payload = await response.json().catch(() => null);
-        return Array.isArray(payload?.Items) ? payload.Items : [];
-    },
+    fetchJellyfinPlayedItems,
 });
 
 registerProfileRoutes(app, {
@@ -17581,6 +17585,44 @@ registerProfileRoutes(app, {
     },
     saveFile,
     blockIfImpersonating,
+    loadSubjectWrapUp: async ({ config, subjectAccountId, subjectUser, daysKey = 'all' }) => {
+        const mediaServerType = String(config?.mediaServerType || 'plex').toLowerCase();
+        if (mediaServerType === 'jellyfin' || mediaServerType === 'emby') {
+            const rawId = String(subjectUser?.jellyfinId || subjectAccountId || '').trim();
+            const accountId = rawId.startsWith('jellyfin:') ? rawId.slice('jellyfin:'.length) : rawId;
+            if (!accountId) return null;
+            const items = await fetchJellyfinPlayedItems(config, accountId);
+            return wrapUpFromHistoryItems(mapJellyfinPlayedItemsToHistory(items));
+        }
+        if (!config?.plexToken) return null;
+        const accountID = String(subjectAccountId || subjectUser?.plexAccountId || '').trim();
+        if (!accountID) return null;
+        const uri = await getPlexConnectionUri(config);
+        if (!uri) return null;
+        const cacheKey = `v5:${accountID}:${daysKey}`;
+        const cached = personalAnalyticsCache.get(cacheKey);
+        if (cached?.payload) return cached.payload;
+        // Cache the raw subject payload (real neighbourhood names). Profile HTTP
+        // trims/obfuscates per viewer so an admin hit cannot leak names to peers.
+        const fakeReq = {
+            user: {
+                username: subjectUser?.username,
+                email: subjectUser?.email,
+                isAdmin: true,
+                plexAccountId: accountID,
+            },
+            query: { days: daysKey },
+        };
+        const payload = await buildPersonalWrapUpAnalyticsPayload({
+            req: fakeReq,
+            config,
+            uri,
+            accountID,
+            daysKey,
+        });
+        personalAnalyticsCache.set(cacheKey, { at: Date.now(), payload });
+        return payload;
+    },
     log,
 });
 

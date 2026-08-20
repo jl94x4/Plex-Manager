@@ -430,7 +430,7 @@ Object.assign(ja, { profilePage: {
     steady: '順位キープ',
     xpProgress: '次のレベルまでの XP',
     watchStory: '視聴ストーリー',
-    watchStoryHint: 'このライブラリの通算ハイライトです。',
+    watchStoryHint: 'このサーバーでの直近365日の視聴ハイライトです。',
     trophyCase: 'トロフィーケース',
     trophyHint: 'ピン留めしたバッジが先、続いて最高レア。',
     pinned: 'ピン留め',

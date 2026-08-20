@@ -826,7 +826,7 @@ Object.assign(es, { profilePage: {
     steady: 'Mantiene el puesto',
     xpProgress: 'XP para el siguiente nivel',
     watchStory: 'Historia de visionado',
-    watchStoryHint: 'Destacados de todos los tiempos de esta biblioteca.',
+    watchStoryHint: 'Destacados de los últimos 365 días en este servidor.',
     trophyCase: 'Vitrina de trofeos',
     trophyHint: 'Primero las rarezas fijadas, luego las más raras.',
     pinned: 'Fijado',

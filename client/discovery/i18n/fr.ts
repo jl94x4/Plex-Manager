@@ -2225,7 +2225,7 @@ Object.assign(fr, { profilePage: {
     steady: 'Place maintenue',
     xpProgress: 'XP vers le niveau suivant',
     watchStory: 'Parcours de visionnage',
-    watchStoryHint: 'Points forts de tous les temps sur cette bibliothèque.',
+    watchStoryHint: 'Points forts des 365 derniers jours d’historique sur ce serveur.',
     trophyCase: 'Vitrine de trophées',
     trophyHint: 'Raretés épinglées d’abord, puis les plus rares.',
     pinned: 'Épinglé',

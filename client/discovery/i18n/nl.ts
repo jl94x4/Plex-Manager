@@ -430,7 +430,7 @@ Object.assign(nl, { profilePage: {
     steady: 'Positie behouden',
     xpProgress: 'XP tot het volgende niveau',
     watchStory: 'Kijkverhaal',
-    watchStoryHint: 'Aller tijden hoogtepunten uit deze bibliotheek.',
+    watchStoryHint: 'Hoogtepunten van de laatste 365 dagen op deze server.',
     trophyCase: 'Trofeeënkast',
     trophyHint: 'Eerst vastgezette badges, daarna de zeldzaamste.',
     pinned: 'Vastgezet',
