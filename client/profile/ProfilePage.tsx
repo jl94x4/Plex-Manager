@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-    ArrowDownRight, ArrowUpRight, Check, Clock, Copy, Crown, Link2, Lock, LogOut, Mail, Minus, Play, Share2,
-    Shield, SlidersHorizontal, Sparkles, Swords, Trophy, User,
+    ArrowDownRight, ArrowUpRight, Check, ChevronRight, Clock, Copy, Crown, Film, Link2, Lock, LogOut, Mail,
+    Minus, Music, Play, Share2, Shield, SlidersHorizontal, Sparkles, Swords, Trophy, Tv, User,
 } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { logoUrl, resolvePortalAssetUrl } from '../shared/basePath';
@@ -29,6 +29,90 @@ import {
 } from './helpers';
 import { mapJellyfinHomeAnalytics, mergeProfileWrapUp } from './wrapUp';
 import { DossierArena } from './DossierArena';
+
+const TASTE_GLOW: Record<string, string> = {
+    sky: 'bg-[radial-gradient(circle_at_100%_0%,rgb(56_189_248_/_0.28),transparent_72%)]',
+    emerald: 'bg-[radial-gradient(circle_at_100%_0%,rgb(52_211_153_/_0.28),transparent_72%)]',
+    violet: 'bg-[radial-gradient(circle_at_100%_0%,rgb(167_139_250_/_0.28),transparent_72%)]',
+    plex: 'bg-[radial-gradient(circle_at_100%_0%,rgb(var(--color-plex)_/_0.32),transparent_72%)]',
+};
+
+const TasteStatCard: React.FC<{
+    label: string;
+    value: React.ReactNode;
+    hint?: React.ReactNode;
+    icon: React.ReactNode;
+    glow?: keyof typeof TASTE_GLOW;
+    onClick?: () => void;
+}> = ({ label, value, hint, icon, glow = 'plex', onClick }) => {
+    const body = (
+        <>
+            <div className={`pointer-events-none absolute inset-0 rounded-[inherit] ${TASTE_GLOW[glow] || TASTE_GLOW.plex}`} />
+            {onClick ? (
+                <div className="pointer-events-none absolute inset-0 rounded-[inherit] opacity-0 transition-opacity duration-300 group-hover:opacity-100 bg-[radial-gradient(circle_at_0%_100%,rgb(var(--color-plex)_/_0.18),transparent_58%)]" />
+            ) : null}
+            <div className="relative px-3.5 py-3.5">
+                <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                        <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted">{label}</p>
+                        <p className="mt-1.5 text-2xl font-black tabular-nums tracking-tight text-text">{value}</p>
+                        {hint ? <p className="mt-1 text-[11px] text-muted">{hint}</p> : null}
+                    </div>
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/30 text-text/80">
+                        {icon}
+                    </div>
+                </div>
+                {onClick ? (
+                    <span className="relative mt-2.5 inline-flex items-center gap-0.5 text-[10px] font-bold uppercase tracking-widest text-plex">
+                        Open
+                        <ChevronRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
+                    </span>
+                ) : null}
+            </div>
+        </>
+    );
+    const className = `relative isolate overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-black/45 shadow-lg ${
+        onClick ? 'group w-full text-left transition-all hover:border-plex/40 hover:shadow-[0_0_24px_rgb(var(--color-plex)_/_0.18)]' : ''
+    }`;
+    if (onClick) {
+        return (
+            <button type="button" onClick={onClick} className={className}>
+                {body}
+            </button>
+        );
+    }
+    return <div className={className}>{body}</div>;
+};
+
+const TasteGenreRow: React.FC<{
+    label: string;
+    icon: React.ReactNode;
+    genres: Array<{ id?: string; label?: string; count?: number }>;
+    tone: 'sky' | 'emerald';
+}> = ({ label, icon, genres, tone }) => {
+    if (!Array.isArray(genres) || !genres.length) return null;
+    const chip = tone === 'sky'
+        ? 'border-sky-400/20 bg-sky-500/10 text-sky-100'
+        : 'border-emerald-400/20 bg-emerald-500/10 text-emerald-100';
+    return (
+        <div>
+            <div className="mb-1.5 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-muted">
+                <span className={tone === 'sky' ? 'text-sky-300' : 'text-emerald-300'}>{icon}</span>
+                {label}
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+                {genres.map((genre) => (
+                    <span
+                        key={genre.id || genre.label}
+                        className={`inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-bold capitalize ${chip}`}
+                    >
+                        {genre.label} · {Number(genre.count) || 0}
+                    </span>
+                ))}
+            </div>
+        </div>
+    );
+};
 
 type Props = {
     sessionInfo?: any;
@@ -216,11 +300,28 @@ export const ProfilePage: React.FC<Props> = ({
         () => mergeProfileWrapUp(data?.watch?.wrapUp || null, personalWrapUp, Number(identity.xp) || undefined),
         [data?.watch?.wrapUp, personalWrapUp, identity.xp],
     );
+    const canOpenWatchStory = !!(wrapAnalytics && (Number(wrapAnalytics.hoursWatched) > 0 || Number(wrapAnalytics.totalPlays) > 0));
     const lastWatched = isSelf && Array.isArray(personalWrapUp?.recentHistory)
         ? personalWrapUp.recentHistory[0]
         : null;
     const unlocks = Array.isArray(achievements?.earned) ? achievements.earned.slice(0, 8) : [];
     const story = data?.watch?.taste || {};
+    const tasteView = useMemo(() => {
+        const mix = story.mix || {};
+        const mixTotal = Number(mix.total) || 0;
+        const pct = (value: number) => (mixTotal > 0 ? Math.round((Number(value) / mixTotal) * 100) : 0);
+        const genres = Array.isArray(story.genres) ? story.genres : [];
+        return {
+            mix,
+            mixTotal,
+            moviePct: pct(mix.movies),
+            showPct: pct(mix.shows),
+            musicPct: pct(mix.music),
+            hours: Math.round(Number(story.hoursWatched) || 0),
+            movieGenres: Array.isArray(story.movieGenres) ? story.movieGenres : genres.filter((genre: any) => genre?.kind === 'movie'),
+            showGenres: Array.isArray(story.showGenres) ? story.showGenres : genres.filter((genre: any) => genre?.kind === 'show'),
+        };
+    }, [story]);
 
     useEffect(() => {
         if (Array.isArray(data?.achievements?.pinnedBadgeIds)) {
@@ -551,31 +652,72 @@ export const ProfilePage: React.FC<Props> = ({
 
                     {!data.privacy?.locked && data.watch?.taste && (Number(data.watch.taste.hoursWatched) > 0 || Number(data.watch.taste.mix?.total) > 0) ? (
                         <DashboardPanel title={t('profilePage.taste')} subtitle={t('profilePage.tasteHint')}>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                                {[
-                                    { label: t('mediaType.movie'), value: data.watch.taste.mix?.movies },
-                                    { label: t('mediaType.tv'), value: data.watch.taste.mix?.shows },
-                                    { label: t('mediaType.music'), value: data.watch.taste.mix?.music },
-                                    { label: t('profilePage.hours'), value: Math.round(Number(data.watch.taste.hoursWatched) || 0) },
-                                ].map((row) => (
-                                    <div key={row.label} className="rounded-xl border border-white/10 bg-black/25 px-3 py-2.5">
-                                        <p className="text-[10px] uppercase tracking-widest font-bold text-muted">{row.label}</p>
-                                        <p className="mt-1 text-lg font-black text-text">{Number(row.value) || 0}</p>
+                            <div className="pointer-events-none absolute inset-0 rounded-[inherit] bg-[radial-gradient(circle_at_100%_0%,rgb(var(--color-plex)_/_0.12),transparent_46%)]" />
+                            <div className="relative space-y-4">
+                                {tasteView.mixTotal > 0 ? (
+                                    <div>
+                                        <div className="flex h-2 overflow-hidden rounded-full border border-white/10 bg-black/40">
+                                            {tasteView.moviePct > 0 ? <div className="h-full bg-gradient-to-r from-sky-500 to-sky-300" style={{ width: `${tasteView.moviePct}%` }} /> : null}
+                                            {tasteView.showPct > 0 ? <div className="h-full bg-gradient-to-r from-emerald-500 to-emerald-300" style={{ width: `${tasteView.showPct}%` }} /> : null}
+                                            {tasteView.musicPct > 0 ? <div className="h-full bg-gradient-to-r from-violet-500 to-violet-300" style={{ width: `${tasteView.musicPct}%` }} /> : null}
+                                        </div>
+                                        <p className="mt-1.5 text-[11px] text-muted">
+                                            {[
+                                                tasteView.moviePct > 0 ? `${t('mediaType.movies')} ${tasteView.moviePct}%` : null,
+                                                tasteView.showPct > 0 ? `${t('mediaType.series')} ${tasteView.showPct}%` : null,
+                                                tasteView.musicPct > 0 ? `${t('mediaType.music')} ${tasteView.musicPct}%` : null,
+                                            ].filter(Boolean).join(' · ')}
+                                        </p>
                                     </div>
-                                ))}
-                            </div>
-                            {Array.isArray(data.watch.taste.genres) && data.watch.taste.genres.length ? (
-                                <div className="mt-3 flex flex-wrap gap-1.5">
-                                    {data.watch.taste.genres.map((genre: any) => (
-                                        <span
-                                            key={genre.id}
-                                            className="inline-flex items-center rounded-full border border-white/10 bg-black/25 px-2.5 py-1 text-[11px] font-bold capitalize"
-                                        >
-                                            {genre.label} · {genre.count}
-                                        </span>
-                                    ))}
+                                ) : null}
+                                <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5">
+                                    <TasteStatCard
+                                        label={t('mediaType.movie')}
+                                        value={Number(tasteView.mix.movies) || 0}
+                                        hint={tasteView.mixTotal > 0 ? t('profilePage.tasteMixPct', { pct: tasteView.moviePct }) : undefined}
+                                        icon={<Film className="h-4 w-4 text-sky-300" />}
+                                        glow="sky"
+                                    />
+                                    <TasteStatCard
+                                        label={t('mediaType.tv')}
+                                        value={Number(tasteView.mix.shows) || 0}
+                                        hint={tasteView.mixTotal > 0 ? t('profilePage.tasteMixPct', { pct: tasteView.showPct }) : undefined}
+                                        icon={<Tv className="h-4 w-4 text-emerald-300" />}
+                                        glow="emerald"
+                                    />
+                                    <TasteStatCard
+                                        label={t('mediaType.music')}
+                                        value={Number(tasteView.mix.music) || 0}
+                                        hint={tasteView.mixTotal > 0 ? t('profilePage.tasteMixPct', { pct: tasteView.musicPct }) : undefined}
+                                        icon={<Music className="h-4 w-4 text-violet-300" />}
+                                        glow="violet"
+                                    />
+                                    <TasteStatCard
+                                        label={t('profilePage.tasteWatchStory')}
+                                        value={tasteView.hours}
+                                        hint={canOpenWatchStory ? t('profilePage.tasteWatchStoryHint') : t('profilePage.hours')}
+                                        icon={<Clock className="h-4 w-4 text-plex" />}
+                                        glow="plex"
+                                        onClick={canOpenWatchStory ? () => setSelectedMetric('Achievements Hours') : undefined}
+                                    />
                                 </div>
-                            ) : null}
+                                {(tasteView.movieGenres.length || tasteView.showGenres.length) ? (
+                                    <div className="space-y-3">
+                                        <TasteGenreRow
+                                            label={t('profilePage.tasteMovies')}
+                                            icon={<Film className="h-3.5 w-3.5" />}
+                                            genres={tasteView.movieGenres}
+                                            tone="sky"
+                                        />
+                                        <TasteGenreRow
+                                            label={t('profilePage.tasteShows')}
+                                            icon={<Tv className="h-3.5 w-3.5" />}
+                                            genres={tasteView.showGenres}
+                                            tone="emerald"
+                                        />
+                                    </div>
+                                ) : null}
+                            </div>
                         </DashboardPanel>
                     ) : null}
 

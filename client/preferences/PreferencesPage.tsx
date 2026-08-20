@@ -3,7 +3,7 @@ import { MonitorSmartphone, SlidersHorizontal } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { portalUrl } from '../shared/basePath';
 import { DashboardHero, DashboardPageShell, DashboardPanel } from '../shared/dashboard/DashboardChrome';
-import { Toast, type ToastMessage } from '../shared/toast';
+import { pushToast, ToastContainer, type ToastMessage } from '../shared/toast';
 import { subscribeWebPush, unsubscribeWebPush, webPushSupported, getIosWebPushBlockReason } from '../shared/webPushSubscribe';
 import { useDiscoverI18n } from '../discovery/i18n';
 import { DiscoverLocaleSelect } from '../discovery/i18n/DiscoverLocaleSelect';
@@ -45,8 +45,9 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
     const { t } = useDiscoverI18n();
     const user = sessionInfo?.account;
     const isAdmin = !!(sessionInfo?.session?.isAdmin || user?.isAdmin);
-    const [toast, setToast] = useState<ToastMessage | null>(null);
+    const [toasts, setToasts] = useState<ToastMessage[]>([]);
     const [busy, setBusy] = useState(false);
+    const [dirty, setDirty] = useState(false);
     const [isInstalledApp, setIsInstalledApp] = useState(() => (
         typeof window !== 'undefined'
         && (window.matchMedia?.('(display-mode: standalone)').matches
@@ -98,6 +99,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
     const iosPushBlock = typeof window !== 'undefined' ? getIosWebPushBlockReason() : null;
 
     useEffect(() => {
+        if (dirty) return;
         setNotifyRequestAvailableEmail(user?.notifyRequestAvailableEmail !== false);
         setNotifyRequestAvailableInApp(user?.notifyRequestAvailableInApp !== false);
         setNotifyRequestAvailableWebPush(user?.notifyRequestAvailableWebPush !== false);
@@ -169,6 +171,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
         user?.privacyShowPlayer,
         user?.privacyShowAchievements,
         user?.privacyShowProfile,
+        dirty,
     ]);
 
     useEffect(() => {
@@ -206,42 +209,82 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
     const adminAllowsNames = String(publicConfig?.hideStreamUsers || 'false') === 'false';
     const achievementsEnabled = !!(sessionInfo?.navFeatures?.achievements || publicConfig?.achievementsEnabled);
 
-    const savePref = async (body: Record<string, boolean>, apply: () => void, success: string) => {
+    const flip = (setter: React.Dispatch<React.SetStateAction<boolean>>) => () => {
+        setter((value) => !value);
+        setDirty(true);
+    };
+
+    const saveAll = async () => {
+        if (busy) return;
         setBusy(true);
         try {
             await apiFetch('/api/users/preferences', {
                 method: 'POST',
-                body: JSON.stringify(body),
+                body: JSON.stringify({
+                    optOutNewsletter,
+                    privacyShowName,
+                    privacyShowPlayer,
+                    privacyShowAchievements,
+                    privacyShowProfile,
+                    notifyRequestAvailableEmail,
+                    notifyRequestAvailableInApp,
+                    notifyRequestAvailableWebPush,
+                    notifyRequestAvailableDiscord,
+                    notifyRequestApprovedEmail: notifyRequestApproved,
+                    notifyRequestApprovedInApp: notifyRequestApproved,
+                    notifyRequestApprovedWebPush: notifyRequestApproved,
+                    notifyRequestDeclinedEmail: notifyRequestDeclined,
+                    notifyRequestDeclinedInApp: notifyRequestDeclined,
+                    notifyRequestDeclinedWebPush: notifyRequestDeclined,
+                    notifySeasonAvailableEmail: notifySeasonAvailable,
+                    notifySeasonAvailableInApp: notifySeasonAvailable,
+                    notifySeasonAvailableWebPush: notifySeasonAvailable,
+                    notifyNewEpisodeEmail: notifyNewEpisode,
+                    notifyNewEpisodeInApp: notifyNewEpisode,
+                    notifyNewEpisodeWebPush: notifyNewEpisode,
+                    notifyCollexionsFailed,
+                    notifyScannerFailed,
+                    notifyScannerDeleted,
+                    notifyScannerUpgrade,
+                    notifyScannerImport,
+                    notifyStatusDown,
+                    notifyStatusUp,
+                    notifyMediaJobFailed,
+                    notifyMediaJobCompleted,
+                    notifyWebPush,
+                }),
             });
-            apply();
-            setToast({ id: Date.now(), message: success, type: 'success' });
-            refreshSession();
+            await Promise.resolve(refreshSession());
+            setDirty(false);
+            setToasts((prev) => pushToast(prev, t('preferencesPage.saved'), 'success'));
         } catch (e: any) {
-            setToast({ id: Date.now(), message: e.message || t('preferencesPage.saveFailed'), type: 'error' });
+            setToasts((prev) => pushToast(prev, e.message || t('preferencesPage.saveFailed'), 'error'));
         } finally {
             setBusy(false);
         }
     };
 
-    const toggleLifecycle = (
-        enabled: boolean,
-        keys: string[],
-        setLocal: (v: boolean) => void,
-    ) => {
-        const body: Record<string, boolean> = {};
-        for (const key of keys) body[key] = enabled;
-        void savePref(body, () => setLocal(enabled), t('preferencesPage.notificationsUpdated'));
-    };
+    const renderSaveButton = () => (
+        <button
+            type="button"
+            disabled={busy}
+            onClick={() => { void saveAll(); }}
+            className="inline-flex items-center justify-center rounded-xl bg-plex px-4 py-2.5 text-sm font-bold text-background hover:bg-plex-hover disabled:opacity-50"
+        >
+            {busy ? t('preferencesPage.saving') : t('preferencesPage.save')}
+        </button>
+    );
 
     return (
         <DashboardPageShell>
-            {toast ? <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} /> : null}
+            <ToastContainer toasts={toasts} setToasts={setToasts} />
             <DashboardHero
                 accent="plex"
                 eyebrow={t('preferencesPage.eyebrow')}
                 title={t('preferencesPage.title')}
                 description={t('preferencesPage.subtitle')}
                 icon={<SlidersHorizontal className="h-3.5 w-3.5" />}
+                actions={renderSaveButton()}
             />
 
             {!user && !sessionInfo?.session?.isAdmin ? (
@@ -280,14 +323,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                             title={t('homeDashboard.weeklyNewsletter')}
                             hint={t('homeDashboard.weeklyNewsletterHint')}
                             on={!optOutNewsletter}
-                            onToggle={() => {
-                                const next = !optOutNewsletter;
-                                void savePref(
-                                    { optOutNewsletter: next },
-                                    () => setOptOutNewsletter(next),
-                                    t('preferencesPage.newsletterUpdated'),
-                                );
-                            }}
+                            onToggle={flip(setOptOutNewsletter)}
                             ariaLabel={t('homeDashboard.toggleNewsletterAria')}
                             disabled={busy}
                         />
@@ -304,14 +340,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                 title={t('preferencesPage.privacyShowName')}
                                 hint={t('preferencesPage.privacyShowNameHint')}
                                 on={privacyShowName}
-                                onToggle={() => {
-                                    const next = !privacyShowName;
-                                    void savePref(
-                                        { privacyShowName: next },
-                                        () => setPrivacyShowName(next),
-                                        t('preferencesPage.privacyUpdated'),
-                                    );
-                                }}
+                                onToggle={flip(setPrivacyShowName)}
                                 ariaLabel={t('preferencesPage.privacyShowName')}
                                 disabled={busy || !adminAllowsNames}
                             />
@@ -319,14 +348,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                 title={t('preferencesPage.privacyShowPlayer')}
                                 hint={t('preferencesPage.privacyShowPlayerHint')}
                                 on={privacyShowPlayer}
-                                onToggle={() => {
-                                    const next = !privacyShowPlayer;
-                                    void savePref(
-                                        { privacyShowPlayer: next },
-                                        () => setPrivacyShowPlayer(next),
-                                        t('preferencesPage.privacyUpdated'),
-                                    );
-                                }}
+                                onToggle={flip(setPrivacyShowPlayer)}
                                 ariaLabel={t('preferencesPage.privacyShowPlayer')}
                                 disabled={busy || !adminAllowsNames}
                             />
@@ -335,14 +357,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                     title={t('preferencesPage.privacyShowAchievements')}
                                     hint={t('preferencesPage.privacyShowAchievementsHint')}
                                     on={privacyShowAchievements}
-                                    onToggle={() => {
-                                        const next = !privacyShowAchievements;
-                                        void savePref(
-                                            { privacyShowAchievements: next },
-                                            () => setPrivacyShowAchievements(next),
-                                            t('preferencesPage.privacyUpdated'),
-                                        );
-                                    }}
+                                    onToggle={flip(setPrivacyShowAchievements)}
                                     ariaLabel={t('preferencesPage.privacyShowAchievements')}
                                     disabled={busy}
                                 />
@@ -351,14 +366,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                 title={t('preferencesPage.privacyShowProfile')}
                                 hint={t('preferencesPage.privacyShowProfileHint')}
                                 on={privacyShowProfile}
-                                onToggle={() => {
-                                    const next = !privacyShowProfile;
-                                    void savePref(
-                                        { privacyShowProfile: next },
-                                        () => setPrivacyShowProfile(next),
-                                        t('preferencesPage.privacyUpdated'),
-                                    );
-                                }}
+                                onToggle={flip(setPrivacyShowProfile)}
                                 ariaLabel={t('preferencesPage.privacyShowProfile')}
                                 disabled={busy}
                             />
@@ -371,14 +379,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                 title={t('homeDashboard.requestAvailableEmail')}
                                 hint={t('homeDashboard.requestAvailableEmailHint')}
                                 on={notifyRequestAvailableEmail}
-                                onToggle={() => {
-                                    const next = !notifyRequestAvailableEmail;
-                                    void savePref(
-                                        { notifyRequestAvailableEmail: next },
-                                        () => setNotifyRequestAvailableEmail(next),
-                                        t('preferencesPage.notificationsUpdated'),
-                                    );
-                                }}
+                                onToggle={flip(setNotifyRequestAvailableEmail)}
                                 ariaLabel={t('homeDashboard.toggleRequestAvailableEmailAria')}
                                 disabled={busy}
                             />
@@ -386,14 +387,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                 title={t('homeDashboard.requestAvailableInApp')}
                                 hint={t('homeDashboard.requestAvailableInAppHint')}
                                 on={notifyRequestAvailableInApp}
-                                onToggle={() => {
-                                    const next = !notifyRequestAvailableInApp;
-                                    void savePref(
-                                        { notifyRequestAvailableInApp: next },
-                                        () => setNotifyRequestAvailableInApp(next),
-                                        t('preferencesPage.notificationsUpdated'),
-                                    );
-                                }}
+                                onToggle={flip(setNotifyRequestAvailableInApp)}
                                 ariaLabel={t('homeDashboard.toggleRequestAvailableInAppAria')}
                                 disabled={busy}
                             />
@@ -401,14 +395,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                 title={t('homeDashboard.requestAvailablePush')}
                                 hint={t('homeDashboard.requestAvailablePushHint')}
                                 on={notifyRequestAvailableWebPush}
-                                onToggle={() => {
-                                    const next = !notifyRequestAvailableWebPush;
-                                    void savePref(
-                                        { notifyRequestAvailableWebPush: next },
-                                        () => setNotifyRequestAvailableWebPush(next),
-                                        t('preferencesPage.notificationsUpdated'),
-                                    );
-                                }}
+                                onToggle={flip(setNotifyRequestAvailableWebPush)}
                                 ariaLabel={t('homeDashboard.toggleRequestAvailableWebPushAria')}
                                 disabled={busy}
                             />
@@ -416,14 +403,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                 title={t('homeDashboard.requestAvailableDiscord')}
                                 hint={t('homeDashboard.requestAvailableDiscordHint')}
                                 on={notifyRequestAvailableDiscord}
-                                onToggle={() => {
-                                    const next = !notifyRequestAvailableDiscord;
-                                    void savePref(
-                                        { notifyRequestAvailableDiscord: next },
-                                        () => setNotifyRequestAvailableDiscord(next),
-                                        t('preferencesPage.notificationsUpdated'),
-                                    );
-                                }}
+                                onToggle={flip(setNotifyRequestAvailableDiscord)}
                                 ariaLabel={t('homeDashboard.toggleRequestAvailableDiscordAria')}
                                 disabled={busy}
                             />
@@ -431,11 +411,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                 title={t('homeDashboard.requestApprovedAlerts')}
                                 hint={t('homeDashboard.requestApprovedAlertsHint')}
                                 on={notifyRequestApproved}
-                                onToggle={() => toggleLifecycle(
-                                    !notifyRequestApproved,
-                                    ['notifyRequestApprovedEmail', 'notifyRequestApprovedInApp', 'notifyRequestApprovedWebPush'],
-                                    setNotifyRequestApproved,
-                                )}
+                                onToggle={flip(setNotifyRequestApproved)}
                                 ariaLabel={t('homeDashboard.toggleRequestApprovedAria')}
                                 disabled={busy}
                             />
@@ -443,11 +419,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                 title={t('homeDashboard.requestDeclinedAlerts')}
                                 hint={t('homeDashboard.requestDeclinedAlertsHint')}
                                 on={notifyRequestDeclined}
-                                onToggle={() => toggleLifecycle(
-                                    !notifyRequestDeclined,
-                                    ['notifyRequestDeclinedEmail', 'notifyRequestDeclinedInApp', 'notifyRequestDeclinedWebPush'],
-                                    setNotifyRequestDeclined,
-                                )}
+                                onToggle={flip(setNotifyRequestDeclined)}
                                 ariaLabel={t('homeDashboard.toggleRequestDeclinedAria')}
                                 disabled={busy}
                             />
@@ -455,11 +427,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                 title={t('homeDashboard.seasonAvailableAlerts')}
                                 hint={t('homeDashboard.seasonAvailableAlertsHint')}
                                 on={notifySeasonAvailable}
-                                onToggle={() => toggleLifecycle(
-                                    !notifySeasonAvailable,
-                                    ['notifySeasonAvailableEmail', 'notifySeasonAvailableInApp', 'notifySeasonAvailableWebPush'],
-                                    setNotifySeasonAvailable,
-                                )}
+                                onToggle={flip(setNotifySeasonAvailable)}
                                 ariaLabel={t('homeDashboard.toggleSeasonAvailableAria')}
                                 disabled={busy}
                             />
@@ -467,11 +435,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                 title={t('homeDashboard.newEpisodeAlerts')}
                                 hint={t('homeDashboard.newEpisodeAlertsHint')}
                                 on={notifyNewEpisode}
-                                onToggle={() => toggleLifecycle(
-                                    !notifyNewEpisode,
-                                    ['notifyNewEpisodeEmail', 'notifyNewEpisodeInApp', 'notifyNewEpisodeWebPush'],
-                                    setNotifyNewEpisode,
-                                )}
+                                onToggle={flip(setNotifyNewEpisode)}
                                 ariaLabel={t('homeDashboard.toggleNewEpisodeAria')}
                                 disabled={busy}
                             />
@@ -479,14 +443,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                 title={t('homeDashboard.browserPushAllAlerts')}
                                 hint={t('homeDashboard.browserPushAllAlertsHint')}
                                 on={notifyWebPush}
-                                onToggle={() => {
-                                    const next = !notifyWebPush;
-                                    void savePref(
-                                        { notifyWebPush: next },
-                                        () => setNotifyWebPush(next),
-                                        t('preferencesPage.notificationsUpdated'),
-                                    );
-                                }}
+                                onToggle={flip(setNotifyWebPush)}
                                 ariaLabel={t('homeDashboard.toggleBrowserPushAria')}
                                 disabled={busy}
                             />
@@ -519,7 +476,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                                         try {
                                                             await subscribeWebPush();
                                                             setBrowserPushReady(true);
-                                                            setToast({ id: Date.now(), message: t('preferencesPage.pushEnabled'), type: 'success' });
+                                                            setToasts((prev) => pushToast(prev, t('preferencesPage.pushEnabled'), 'success'));
                                                         } catch (e: any) {
                                                             const code = e?.code;
                                                             const message = code === 'ios-not-standalone'
@@ -527,7 +484,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                                                 : code === 'ios-version'
                                                                     ? t('homeDashboard.iosPushNeeds164')
                                                                     : (e.message || t('preferencesPage.pushFailed'));
-                                                            setToast({ id: Date.now(), message, type: 'error' });
+                                                            setToasts((prev) => pushToast(prev, message, 'error'));
                                                         } finally {
                                                             setBusy(false);
                                                         }
@@ -548,9 +505,9 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                                         try {
                                                             await unsubscribeWebPush();
                                                             setBrowserPushReady(false);
-                                                            setToast({ id: Date.now(), message: t('preferencesPage.pushDisabled'), type: 'success' });
+                                                            setToasts((prev) => pushToast(prev, t('preferencesPage.pushDisabled'), 'success'));
                                                         } catch (e: any) {
-                                                            setToast({ id: Date.now(), message: e.message || t('preferencesPage.pushFailed'), type: 'error' });
+                                                            setToasts((prev) => pushToast(prev, e.message || t('preferencesPage.pushFailed'), 'error'));
                                                         } finally {
                                                             setBusy(false);
                                                         }
@@ -573,14 +530,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                     title={t('homeDashboard.collexionsFailedAlerts')}
                                     hint={t('homeDashboard.collexionsFailedAlertsHint')}
                                     on={notifyCollexionsFailed}
-                                    onToggle={() => {
-                                        const next = !notifyCollexionsFailed;
-                                        void savePref(
-                                            { notifyCollexionsFailed: next },
-                                            () => setNotifyCollexionsFailed(next),
-                                            t('preferencesPage.notificationsUpdated'),
-                                        );
-                                    }}
+                                    onToggle={flip(setNotifyCollexionsFailed)}
                                     ariaLabel={t('homeDashboard.toggleCollexionsFailedAria')}
                                     disabled={busy}
                                 />
@@ -588,14 +538,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                     title={t('homeDashboard.scannerFailedAlerts')}
                                     hint={t('homeDashboard.scannerFailedAlertsHint')}
                                     on={notifyScannerFailed}
-                                    onToggle={() => {
-                                        const next = !notifyScannerFailed;
-                                        void savePref(
-                                            { notifyScannerFailed: next },
-                                            () => setNotifyScannerFailed(next),
-                                            t('preferencesPage.notificationsUpdated'),
-                                        );
-                                    }}
+                                    onToggle={flip(setNotifyScannerFailed)}
                                     ariaLabel={t('homeDashboard.toggleScannerFailedAria')}
                                     disabled={busy}
                                 />
@@ -603,14 +546,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                     title={t('homeDashboard.scannerDeletedAlerts')}
                                     hint={t('homeDashboard.scannerDeletedAlertsHint')}
                                     on={notifyScannerDeleted}
-                                    onToggle={() => {
-                                        const next = !notifyScannerDeleted;
-                                        void savePref(
-                                            { notifyScannerDeleted: next },
-                                            () => setNotifyScannerDeleted(next),
-                                            t('preferencesPage.notificationsUpdated'),
-                                        );
-                                    }}
+                                    onToggle={flip(setNotifyScannerDeleted)}
                                     ariaLabel={t('homeDashboard.toggleScannerDeletedAria')}
                                     disabled={busy}
                                 />
@@ -618,14 +554,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                     title={t('homeDashboard.scannerUpgradeAlerts')}
                                     hint={t('homeDashboard.scannerUpgradeAlertsHint')}
                                     on={notifyScannerUpgrade}
-                                    onToggle={() => {
-                                        const next = !notifyScannerUpgrade;
-                                        void savePref(
-                                            { notifyScannerUpgrade: next },
-                                            () => setNotifyScannerUpgrade(next),
-                                            t('preferencesPage.notificationsUpdated'),
-                                        );
-                                    }}
+                                    onToggle={flip(setNotifyScannerUpgrade)}
                                     ariaLabel={t('homeDashboard.toggleScannerUpgradeAria')}
                                     disabled={busy}
                                 />
@@ -633,14 +562,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                     title={t('homeDashboard.scannerImportAlerts')}
                                     hint={t('homeDashboard.scannerImportAlertsHint')}
                                     on={notifyScannerImport}
-                                    onToggle={() => {
-                                        const next = !notifyScannerImport;
-                                        void savePref(
-                                            { notifyScannerImport: next },
-                                            () => setNotifyScannerImport(next),
-                                            t('preferencesPage.notificationsUpdated'),
-                                        );
-                                    }}
+                                    onToggle={flip(setNotifyScannerImport)}
                                     ariaLabel={t('homeDashboard.toggleScannerImportAria')}
                                     disabled={busy}
                                 />
@@ -648,14 +570,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                     title={t('homeDashboard.statusDownAlerts')}
                                     hint={t('homeDashboard.statusDownAlertsHint')}
                                     on={notifyStatusDown}
-                                    onToggle={() => {
-                                        const next = !notifyStatusDown;
-                                        void savePref(
-                                            { notifyStatusDown: next },
-                                            () => setNotifyStatusDown(next),
-                                            t('preferencesPage.notificationsUpdated'),
-                                        );
-                                    }}
+                                    onToggle={flip(setNotifyStatusDown)}
                                     ariaLabel={t('homeDashboard.toggleStatusDownAria')}
                                     disabled={busy}
                                 />
@@ -663,14 +578,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                     title={t('homeDashboard.statusUpAlerts')}
                                     hint={t('homeDashboard.statusUpAlertsHint')}
                                     on={notifyStatusUp}
-                                    onToggle={() => {
-                                        const next = !notifyStatusUp;
-                                        void savePref(
-                                            { notifyStatusUp: next },
-                                            () => setNotifyStatusUp(next),
-                                            t('preferencesPage.notificationsUpdated'),
-                                        );
-                                    }}
+                                    onToggle={flip(setNotifyStatusUp)}
                                     ariaLabel={t('homeDashboard.toggleStatusUpAria')}
                                     disabled={busy}
                                 />
@@ -678,14 +586,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                     title={t('homeDashboard.mediaJobFailedAlerts')}
                                     hint={t('homeDashboard.mediaJobFailedAlertsHint')}
                                     on={notifyMediaJobFailed}
-                                    onToggle={() => {
-                                        const next = !notifyMediaJobFailed;
-                                        void savePref(
-                                            { notifyMediaJobFailed: next },
-                                            () => setNotifyMediaJobFailed(next),
-                                            t('preferencesPage.notificationsUpdated'),
-                                        );
-                                    }}
+                                    onToggle={flip(setNotifyMediaJobFailed)}
                                     ariaLabel={t('homeDashboard.toggleMediaJobFailedAria')}
                                     disabled={busy}
                                 />
@@ -693,20 +594,19 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                     title={t('homeDashboard.mediaJobCompletedAlerts')}
                                     hint={t('homeDashboard.mediaJobCompletedAlertsHint')}
                                     on={notifyMediaJobCompleted}
-                                    onToggle={() => {
-                                        const next = !notifyMediaJobCompleted;
-                                        void savePref(
-                                            { notifyMediaJobCompleted: next },
-                                            () => setNotifyMediaJobCompleted(next),
-                                            t('preferencesPage.notificationsUpdated'),
-                                        );
-                                    }}
+                                    onToggle={flip(setNotifyMediaJobCompleted)}
                                     ariaLabel={t('homeDashboard.toggleMediaJobCompletedAria')}
                                     disabled={busy}
                                 />
                             </div>
                         </DashboardPanel>
                     )}
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-white/10 bg-black/25 px-4 py-3">
+                        <p className="text-sm text-muted">
+                            {dirty ? t('preferencesPage.unsaved') : t('preferencesPage.saveHint')}
+                        </p>
+                        {renderSaveButton()}
+                    </div>
                 </div>
             )}
         </DashboardPageShell>
