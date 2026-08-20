@@ -986,16 +986,57 @@ def run_network_overlays(plex, config, paths, preview_mode, progress=None):
     )
 
 
+# Sample Winners for the 14 Phase-3 families that render via the real per-family
+# pipeline (kometa_render.render_winner) instead of the legacy render_*_badge
+# helpers above. Values are representative, not user data — same idea as the
+# "4K HDR / ATMOS" / "RETURNING" / "8.4" / "HBO" samples used for the legacy 4.
+def _placement_preview_winners() -> dict[str, Any]:
+    from kometa_detect import Winner
+
+    return {
+        "edition": Winner(family="edition", name="Extended-Edition", key="extended",
+                           weight=190, image_rel="edition/extended.png"),
+        "audio_codec": Winner(family="audio_codec", name="Dolby-Atmos", key="atmos",
+                               weight=130, image_rel=None),
+        "video_format": Winner(family="video_format", name="REMUX", key="remux",
+                                weight=60, text="REMUX"),
+        "streaming": Winner(family="streaming", name="Netflix", key="netflix",
+                             weight=160, image_rel="streaming/color/Netflix.png"),
+        "ribbon": Winner(family="ribbon", name="Academy Awards Best Picture Winner",
+                          key="oscars", weight=190, image_rel="ribbon/yellow/oscars.png"),
+        "aspect": Winner(family="aspect", name="2.35", key="2.35", weight=70, text="2.35"),
+        "versions": Winner(family="versions", name="2 Versions", key="versions",
+                            weight=2, image_rel="versions.png"),
+        "language_count": Winner(family="language_count", name="Multi-Audio", key="multi",
+                                  weight=20, image_rel="multi_audio.png"),
+        "languages": Winner(family="languages", name="EN+FR", key="languages", weight=2,
+                             extra={"flags": [{"lang": "en", "country": "us"},
+                                              {"lang": "fr", "country": "fr"}]}),
+        "runtimes": Winner(family="runtimes", name="Runtime: 2h 15m", key="runtimes",
+                            weight=135, text="Runtime: 2h 15m"),
+        "direct_play": Winner(family="direct_play", name="Direct Play Only",
+                               key="direct_play", weight=10, image_rel="Direct-Play.png"),
+        "content_rating": Winner(family="content_rating", name="PG-13", key="uspg-13",
+                                  weight=10, image_rel="cr/uspg-13.png"),
+        "mediastinger": Winner(family="mediastinger", name="MediaStinger",
+                                key="mediastinger", weight=10, image_rel="Mediastinger.png"),
+        "episode_info": Winner(family="episode_info", name="S01E05", key="episode_info",
+                                weight=10, text="S01E05"),
+    }
+
+
 def ensure_placement_preview_badges(assets_dir: Path, paths: dict | None = None) -> None:
     """Write sample badges for the Placement editor (create missing only; no network spam)."""
     assets_dir = Path(assets_dir)
     assets_dir.mkdir(parents=True, exist_ok=True)
-    names = (
+    legacy_names = (
         "placement-media.png",
         "placement-status.png",
         "placement-ratings.png",
         "placement-network.png",
     )
+    family_names = tuple(f"placement-{family}.png" for family in _placement_preview_winners())
+    names = legacy_names + family_names
     if all((assets_dir / name).exists() for name in names):
         return
 
@@ -1019,6 +1060,29 @@ def ensure_placement_preview_badges(assets_dir: Path, paths: dict | None = None)
             img.save(path)
         except Exception:
             pass
+
+    # Phase-3 families — rendered via the real per-family pipeline so the
+    # Placement preview matches exactly what Preview/Run will stamp.
+    from kometa_render import render_winner
+
+    missing_families = {
+        family: winner
+        for family, winner in _placement_preview_winners().items()
+        if not (assets_dir / f"placement-{family}.png").exists()
+    }
+    if missing_families:
+        for family, winner in missing_families.items():
+            path = assets_dir / f"placement-{family}.png"
+            try:
+                img = render_winner(winner, config={}, paths=cache_paths)
+            except Exception:
+                continue
+            if img is None:
+                continue
+            try:
+                img.save(path)
+            except Exception:
+                pass
 
 
 def run_all_kometa_style(plex, config, paths, preview_mode, progress=None) -> dict:

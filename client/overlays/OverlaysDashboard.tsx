@@ -2945,7 +2945,6 @@ export const OverlaysDashboard: React.FC = () => {
                                 totalCount={4}
                             >
                             {renderPlacementLink('media')}
-                            {renderFixedPositionNote('overlays.placement.fixedNoteQuality')}
                             <SettingsToggleRow
                                 title={t('overlays.settings.mediaInfoEnabled')}
                                 description={t('overlays.settings.mediaInfoEnabledHint')}
@@ -3030,6 +3029,7 @@ export const OverlaysDashboard: React.FC = () => {
                                 checked={configDraft.editionOverlayEnabled === true}
                                 onChange={(editionOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, editionOverlayEnabled }))}
                             />
+                            {renderPlacementLink('edition')}
                             <SettingsToggleRow
                                 title={t('overlays.settings.audioCodecEnabled')}
                                 description={t('overlays.settings.audioCodecEnabledHint')}
@@ -3053,12 +3053,14 @@ export const OverlaysDashboard: React.FC = () => {
                                     />
                                 </label>
                             )}
+                            {renderPlacementLink('audio_codec')}
                             <SettingsToggleRow
                                 title={t('overlays.settings.videoFormatEnabled')}
                                 description={t('overlays.settings.videoFormatEnabledHint')}
                                 checked={configDraft.videoFormatEnabled === true}
                                 onChange={(videoFormatEnabled) => setConfigDraft((prev) => ({ ...prev, videoFormatEnabled }))}
                             />
+                            {renderPlacementLink('video_format')}
                             </OverlaySettingsGroup>
 
                             <OverlaySettingsGroup
@@ -3075,7 +3077,6 @@ export const OverlaysDashboard: React.FC = () => {
                             >
                             {renderPlacementLink('status')}
                             {renderPlacementLink('network')}
-                            {renderFixedPositionNote('overlays.placement.fixedNoteAvailability')}
                             <SettingsToggleRow
                                 title={t('overlays.settings.statusOverlayEnabled')}
                                 description={t('overlays.settings.statusOverlayEnabledHint')}
@@ -3221,6 +3222,7 @@ export const OverlaysDashboard: React.FC = () => {
                                     </div>
                                 </div>
                             )}
+                            {renderPlacementLink('streaming')}
                             </OverlaySettingsGroup>
 
                             <OverlaySettingsGroup
@@ -3236,7 +3238,6 @@ export const OverlaysDashboard: React.FC = () => {
                                 totalCount={3}
                             >
                             {renderPlacementLink('ratings')}
-                            {renderFixedPositionNote('overlays.placement.fixedNoteRatings')}
                             <SettingsToggleRow
                                 title={t('overlays.settings.ratingsOverlayEnabled')}
                                 description={t('overlays.settings.ratingsOverlayEnabledHint')}
@@ -3343,6 +3344,7 @@ export const OverlaysDashboard: React.FC = () => {
                                     />
                                 </label>
                             )}
+                            {renderPlacementLink('content_rating')}
                             <SettingsToggleRow
                                 title={t('overlays.settings.ribbonOverlayEnabled')}
                                 description={t('overlays.settings.ribbonOverlayEnabledHint')}
@@ -3408,6 +3410,7 @@ export const OverlaysDashboard: React.FC = () => {
                                     </div>
                                 </div>
                             )}
+                            {renderPlacementLink('ribbon')}
                             </OverlaySettingsGroup>
 
                             <OverlaySettingsGroup
@@ -3426,25 +3429,27 @@ export const OverlaysDashboard: React.FC = () => {
                                 ].filter((v) => v === true).length}
                                 totalCount={7}
                             >
-                            {renderFixedPositionNote('overlays.placement.fixedNoteTechnical')}
                             <SettingsToggleRow
                                 title={t('overlays.settings.aspectOverlayEnabled')}
                                 description={t('overlays.settings.aspectOverlayEnabledHint')}
                                 checked={configDraft.aspectOverlayEnabled === true}
                                 onChange={(aspectOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, aspectOverlayEnabled }))}
                             />
+                            {renderPlacementLink('aspect')}
                             <SettingsToggleRow
                                 title={t('overlays.settings.versionsOverlayEnabled')}
                                 description={t('overlays.settings.versionsOverlayEnabledHint')}
                                 checked={configDraft.versionsOverlayEnabled === true}
                                 onChange={(versionsOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, versionsOverlayEnabled }))}
                             />
+                            {renderPlacementLink('versions')}
                             <SettingsToggleRow
                                 title={t('overlays.settings.languageCountEnabled')}
                                 description={t('overlays.settings.languageCountEnabledHint')}
                                 checked={configDraft.languageCountEnabled === true}
                                 onChange={(languageCountEnabled) => setConfigDraft((prev) => ({ ...prev, languageCountEnabled }))}
                             />
+                            {renderPlacementLink('language_count')}
                             <SettingsToggleRow
                                 title={t('overlays.settings.languagesOverlayEnabled')}
                                 description={t('overlays.settings.languagesOverlayEnabledHint')}
@@ -3482,24 +3487,28 @@ export const OverlaysDashboard: React.FC = () => {
                                     </label>
                                 </div>
                             )}
+                            {renderPlacementLink('languages')}
                             <SettingsToggleRow
                                 title={t('overlays.settings.runtimesOverlayEnabled')}
                                 description={t('overlays.settings.runtimesOverlayEnabledHint')}
                                 checked={configDraft.runtimesOverlayEnabled === true}
                                 onChange={(runtimesOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, runtimesOverlayEnabled }))}
                             />
+                            {renderPlacementLink('runtimes')}
                             <SettingsToggleRow
                                 title={t('overlays.settings.directPlayOverlayEnabled')}
                                 description={t('overlays.settings.directPlayOverlayEnabledHint')}
                                 checked={configDraft.directPlayOverlayEnabled === true}
                                 onChange={(directPlayOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, directPlayOverlayEnabled }))}
                             />
+                            {renderPlacementLink('direct_play')}
                             <SettingsToggleRow
                                 title={t('overlays.settings.episodeInfoOverlayEnabled')}
                                 description={t('overlays.settings.episodeInfoOverlayEnabledHint')}
                                 checked={configDraft.episodeInfoOverlayEnabled === true}
                                 onChange={(episodeInfoOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, episodeInfoOverlayEnabled }))}
                             />
+                            {renderPlacementLink('episode_info')}
                             </OverlaySettingsGroup>
 
                             <OverlaySettingsGroup
@@ -3510,13 +3519,13 @@ export const OverlaysDashboard: React.FC = () => {
                                 activeCount={configDraft.mediastingerOverlayEnabled === true ? 1 : 0}
                                 totalCount={1}
                             >
-                            {renderFixedPositionNote('overlays.placement.fixedNoteBonus')}
                             <SettingsToggleRow
                                 title={t('overlays.settings.mediastingerOverlayEnabled')}
                                 description={t('overlays.settings.mediastingerOverlayEnabledHint')}
                                 checked={configDraft.mediastingerOverlayEnabled === true}
                                 onChange={(mediastingerOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, mediastingerOverlayEnabled }))}
                             />
+                            {renderPlacementLink('mediastinger')}
                             </OverlaySettingsGroup>
 
                             <div className="mb-4 mt-4 border-b border-border/40 pb-2">

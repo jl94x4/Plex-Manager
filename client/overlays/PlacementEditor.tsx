@@ -6,7 +6,15 @@ import { CustomSelect } from '../shared/ui';
 import type { OverlayPlacementKind, OverlaysPlacement } from './api';
 import { DEFAULT_OVERLAY_PLACEMENT } from './api';
 
-export type PlacementKind = 'show' | 'season' | 'episode' | 'recently' | 'media' | 'status' | 'ratings' | 'network' | 'custom_collection';
+export type PlacementKind =
+    | 'show' | 'season' | 'episode' | 'recently'
+    | 'media' | 'status' | 'ratings' | 'network'
+    | 'edition' | 'audio_codec' | 'video_format'
+    | 'streaming'
+    | 'content_rating' | 'ribbon'
+    | 'aspect' | 'versions' | 'language_count' | 'languages' | 'runtimes' | 'direct_play' | 'episode_info'
+    | 'mediastinger'
+    | 'custom_collection';
 
 export type CollectionPlacementRule = {
     id: string;
@@ -44,7 +52,21 @@ const fieldInputClass = 'mt-1 w-full rounded-lg border border-white/10 bg-black/
 const fieldLabelClass = 'text-[10px] font-bold uppercase tracking-[0.14em] text-muted';
 
 const BANNER_KINDS: PlacementKind[] = ['show', 'season', 'episode', 'recently'];
-const CORE_KOMETA_KINDS: PlacementKind[] = ['media', 'status', 'ratings', 'network'];
+
+/** Mirrors the Configure tab's Layer taxonomy (Quality & Format / Availability / Ratings & Reviews / Technical & Language / Bonus Content). */
+const KOMETA_GROUPS: { id: string; titleKey: string; kinds: PlacementKind[] }[] = [
+    { id: 'quality', titleKey: 'overlays.jobs.kometa.groups.media', kinds: ['media', 'edition', 'audio_codec', 'video_format'] },
+    { id: 'availability', titleKey: 'overlays.jobs.kometa.groups.showMeta', kinds: ['status', 'network', 'streaming'] },
+    { id: 'ratings', titleKey: 'overlays.jobs.kometa.groups.ratings', kinds: ['ratings', 'content_rating', 'ribbon'] },
+    { id: 'technical', titleKey: 'overlays.jobs.kometa.groups.misc', kinds: ['aspect', 'versions', 'language_count', 'languages', 'runtimes', 'direct_play', 'episode_info'] },
+    { id: 'bonus', titleKey: 'overlays.jobs.kometa.groups.bonus', kinds: ['mediastinger'] },
+];
+const CORE_KOMETA_KINDS: PlacementKind[] = KOMETA_GROUPS.flatMap((g) => g.kinds);
+
+/** Families rendered via the real per-family Kometa pipeline (kometa_render.render_winner) —
+ * their preview PNG is always `placement-<kind>.png`, generated server-side by
+ * ensure_placement_preview_badges(). */
+const KOMETA_FAMILY_KINDS = new Set<PlacementKind>(CORE_KOMETA_KINDS);
 
 const collectionTargetId = (ruleId: string) => `cc:${ruleId}`;
 
@@ -70,7 +92,7 @@ const kindBannerUrl = (
         const id = collectionImageId || 'placement-custom_collection';
         return `/api/overlays/preset-file?id=${encodeURIComponent(id)}&kind=season&t=${encodeURIComponent(String(bust))}`;
     }
-    if (kind === 'media' || kind === 'status' || kind === 'ratings' || kind === 'network') {
+    if (KOMETA_FAMILY_KINDS.has(kind)) {
         return `/api/overlays/preset-file?id=${encodeURIComponent(`placement-${kind}`)}&kind=season&t=${encodeURIComponent(String(bust))}`;
     }
     if (kind === 'recently') {
@@ -424,10 +446,10 @@ export const PlacementEditor: React.FC<Props> = ({
             value: k,
             label: `${t('overlays.placement.groupBanners')}: ${kindLabel(k)}`,
         })),
-        ...CORE_KOMETA_KINDS.map((k) => ({
+        ...KOMETA_GROUPS.flatMap((group) => group.kinds.map((k) => ({
             value: k,
-            label: `${t('overlays.placement.groupKometa')}: ${kindLabel(k)}`,
-        })),
+            label: `${t(group.titleKey)}: ${kindLabel(k)}`,
+        }))),
         ...collectionTargets.map((c) => ({
             value: c.id,
             label: `${t('overlays.placement.groupCollections')}: ${c.label}`,
@@ -467,11 +489,15 @@ export const PlacementEditor: React.FC<Props> = ({
                         <div className="flex flex-col">
                             {BANNER_KINDS.map((k) => renderTargetButton(k, kindLabel(k)))}
                         </div>
-                        <div className="my-2 border-t border-white/10" />
-                        <p className={`${fieldLabelClass} px-2.5 pb-1.5 pt-1`}>{t('overlays.placement.groupKometa')}</p>
-                        <div className="flex flex-col">
-                            {CORE_KOMETA_KINDS.map((k) => renderTargetButton(k, kindLabel(k)))}
-                        </div>
+                        {KOMETA_GROUPS.map((group) => (
+                            <React.Fragment key={group.id}>
+                                <div className="my-2 border-t border-white/10" />
+                                <p className={`${fieldLabelClass} px-2.5 pb-1.5 pt-1`}>{t(group.titleKey)}</p>
+                                <div className="flex flex-col">
+                                    {group.kinds.map((k) => renderTargetButton(k, kindLabel(k)))}
+                                </div>
+                            </React.Fragment>
+                        ))}
                         <div className="my-2 border-t border-white/10" />
                         <p className={`${fieldLabelClass} px-2.5 pb-1.5 pt-1`}>{t('overlays.placement.groupCollections')}</p>
                         <div className="flex flex-col">

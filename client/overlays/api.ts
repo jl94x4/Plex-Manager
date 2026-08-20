@@ -38,6 +38,23 @@ export type OverlaysPlacement = {
     network?: OverlayPlacementKind;
     recently?: OverlayPlacementKind;
     custom_collection?: OverlayPlacementKind;
+    // Phase 3 — Kometa-parity families that previously rendered at a fixed,
+    // non-adjustable position. Defaults below mirror KOMETA_SLOTS in
+    // overlays/kometa_render.py exactly.
+    edition?: OverlayPlacementKind;
+    audio_codec?: OverlayPlacementKind;
+    video_format?: OverlayPlacementKind;
+    streaming?: OverlayPlacementKind;
+    ribbon?: OverlayPlacementKind;
+    aspect?: OverlayPlacementKind;
+    versions?: OverlayPlacementKind;
+    language_count?: OverlayPlacementKind;
+    languages?: OverlayPlacementKind;
+    runtimes?: OverlayPlacementKind;
+    direct_play?: OverlayPlacementKind;
+    content_rating?: OverlayPlacementKind;
+    mediastinger?: OverlayPlacementKind;
+    episode_info?: OverlayPlacementKind;
 };
 
 export type OverlayPlacement = OverlaysPlacement;
@@ -138,6 +155,132 @@ export const DEFAULT_OVERLAY_PLACEMENT: OverlaysPlacement = {
         width: 0.12,
         maxHeight: 0.09,
         anchorX: 'right',
+        anchorY: 'top',
+        bottomClip: 0,
+    },
+    edition: {
+        x: 0.015,
+        y: 0.09,
+        width: 0.305,
+        maxHeight: 0.07,
+        anchorX: 'left',
+        anchorY: 'top',
+        bottomClip: 0,
+    },
+    audio_codec: {
+        x: 0.5,
+        y: 0.01,
+        width: 0.305,
+        maxHeight: 0.07,
+        anchorX: 'center',
+        anchorY: 'top',
+        bottomClip: 0,
+    },
+    video_format: {
+        x: 0.015,
+        y: 0.98,
+        width: 0.305,
+        maxHeight: 0.07,
+        anchorX: 'left',
+        anchorY: 'bottom',
+        bottomClip: 0,
+    },
+    streaming: {
+        x: 0.015,
+        y: 0.74,
+        width: 0.305,
+        maxHeight: 0.07,
+        anchorX: 'left',
+        anchorY: 'bottom',
+        bottomClip: 0,
+    },
+    ribbon: {
+        x: 1.0,
+        y: 1.0,
+        width: 0.25,
+        maxHeight: 0.25,
+        anchorX: 'right',
+        anchorY: 'bottom',
+        bottomClip: 0,
+    },
+    aspect: {
+        x: 0.5,
+        y: 0.90,
+        width: 0.305,
+        maxHeight: 0.07,
+        anchorX: 'center',
+        anchorY: 'bottom',
+        bottomClip: 0,
+    },
+    versions: {
+        x: 0.985,
+        y: 0.223,
+        width: 0.105,
+        maxHeight: 0.07,
+        anchorX: 'right',
+        anchorY: 'top',
+        bottomClip: 0,
+    },
+    language_count: {
+        x: 0.5,
+        y: 0.98,
+        width: 0.188,
+        maxHeight: 0.07,
+        anchorX: 'center',
+        anchorY: 'bottom',
+        bottomClip: 0,
+    },
+    languages: {
+        x: 0.015,
+        y: 0.30,
+        width: 0.09,
+        maxHeight: 0.28,
+        anchorX: 'left',
+        anchorY: 'top',
+        bottomClip: 0,
+    },
+    runtimes: {
+        x: 0.985,
+        y: 0.98,
+        width: 0.45,
+        maxHeight: 0.07,
+        anchorX: 'right',
+        anchorY: 'bottom',
+        bottomClip: 0,
+    },
+    direct_play: {
+        x: 0.5,
+        y: 0.90,
+        width: 0.305,
+        maxHeight: 0.113,
+        anchorX: 'center',
+        anchorY: 'bottom',
+        bottomClip: 0,
+    },
+    content_rating: {
+        x: 0.015,
+        y: 0.82,
+        width: 0.305,
+        maxHeight: 0.07,
+        anchorX: 'left',
+        anchorY: 'bottom',
+        bottomClip: 0,
+    },
+    mediastinger: {
+        x: 0.80,
+        y: 0.01,
+        width: 0.105,
+        maxHeight: 0.07,
+        anchorX: 'right',
+        anchorY: 'top',
+        bottomClip: 0,
+    },
+    episode_info: {
+        x: 0.015,
+        y: 0.02,
+        width: 0.305,
+        maxHeight: 0.12,
+        anchorX: 'left',
         anchorY: 'top',
         bottomClip: 0,
     },
