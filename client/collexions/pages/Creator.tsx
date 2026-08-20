@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Card } from '../components/ui/Card';
 import { usePoll } from '../../shared/usePoll';
-import { Plus, Search, ListMusic, Globe, Loader2, List, Trash2, Sparkles, Filter, ExternalLink, Compass, Clock, LayoutTemplate, Check, AlertCircle } from 'lucide-react';
+import { Plus, Search, ListMusic, Globe, Loader2, List, Trash2, Sparkles, Filter, ExternalLink, Compass, Clock, LayoutTemplate, Check } from 'lucide-react';
 import { api, collexionsImageUrl } from '../api';
 import { CustomSelect } from '../components/ui/Inputs';
 import { AppConfig } from '../types';
@@ -212,48 +212,12 @@ const Creator: React.FC = () => {
     const [sortOrder, setSortOrder] = useState<'custom' | 'random' | 'release'>('custom');
     const [autoSync, setAutoSync] = useState(true);
     const [creating, setCreating] = useState(false);
-    const [plexError, setPlexError] = useState('');
     const [busyOverlay, setBusyOverlay] = useState<BusyOverlay | null>(null);
     const [busyStep, setBusyStep] = useState(0);
 
     const showToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
         setToast({ message, type });
         setTimeout(() => setToast(null), 5000);
-    };
-
-    const toastCreateResult = (
-        res: {
-            success?: boolean;
-            pending?: boolean;
-            message?: string;
-            title?: string;
-            matched?: number;
-            total?: number;
-            error?: string;
-        },
-        fallbackTitle: string,
-    ) => {
-        if (res?.pending) {
-            showToast(
-                res.message
-                    || `Saved “${res.title || fallbackTitle}” as an Auto-Sync job. It will be created in Plex when matching titles are in your library.`,
-                'success',
-            );
-            return;
-        }
-        if (res?.success) {
-            showToast(
-                `Created '${res.title || fallbackTitle}' — matched ${res.matched ?? 0}/${res.total ?? 0} titles.${autoSync ? ' Auto-sync job registered.' : ''}`,
-                'success',
-            );
-            return;
-        }
-        showToast(res?.error || 'Failed to create collection.', 'error');
-    };
-
-    const toastCreateError = (e: unknown, fallback = 'Failed to create collection.') => {
-        const msg = e && typeof e === 'object' && 'message' in e ? String((e as { message?: string }).message || '') : '';
-        showToast(msg || fallback, 'error');
     };
 
     const startBusy = (overlay: BusyOverlay) => {
@@ -331,10 +295,7 @@ const Creator: React.FC = () => {
                 api.getConfig(),
                 api.getTrending().catch(() => []),
                 api.getTemplates().catch(() => ({ templates: [], categories: [], keys: { tmdb: false, trakt: false } })),
-                api.getPlexLibraries().catch((e: any) => {
-                    setPlexError(e?.message || 'Plex connection failed');
-                    return [];
-                }),
+                api.getPlexLibraries().catch(() => []),
             ]);
             setConfig(cfg);
             setTrendingPresets(presets);
@@ -346,7 +307,6 @@ const Creator: React.FC = () => {
                     ? libs.map((l: any) => ({ name: String(l.name || ''), type: String(l.type || '') })).filter((l) => l.name)
                     : [],
             );
-            if (Array.isArray(libs) && libs.length) setPlexError('');
             const libNames = cfg?.library_names?.length
                 ? cfg.library_names
                 : (Array.isArray(libs)
@@ -445,13 +405,16 @@ const Creator: React.FC = () => {
                 sort_order: sortOrder || tpl.default_sort,
                 auto_sync: autoSync,
             });
-            if (res.success || res.pending) {
-                toastCreateResult(res, tpl.name);
+            if (res.success) {
+                showToast(
+                    `Created '${res.title || tpl.name}' — matched ${res.matched}/${res.total} titles.${autoSync ? ' Auto-sync job registered.' : ''}`,
+                    'success',
+                );
             } else {
                 showToast(res.error || 'Failed to create collection.', 'error');
             }
         } catch (e: any) {
-            toastCreateError(e);
+            showToast(e?.message || 'Failed to create collection.', 'error');
         } finally {
             stopBusy();
             setCreating(false);
@@ -507,13 +470,16 @@ const Creator: React.FC = () => {
                 sort_order: sortOrder === 'custom' ? 'release' : sortOrder,
                 auto_sync: autoSync,
             });
-            if (res.success || res.pending) {
-                toastCreateResult(res, franchise.name);
+            if (res.success) {
+                showToast(
+                    `Created '${res.title || franchise.name}' — matched ${res.matched}/${res.total} titles.`,
+                    'success',
+                );
             } else {
                 showToast(res.error || 'Failed to create franchise collection.', 'error');
             }
         } catch (e: any) {
-            toastCreateError(e, 'Failed to create franchise collection.');
+            showToast(e?.message || 'Failed to create franchise collection.', 'error');
         } finally {
             stopBusy();
             setCreating(false);
@@ -570,12 +536,12 @@ const Creator: React.FC = () => {
             );
 
             setSelectionPool([]);
-            if (res.success || res.pending) {
-                toastCreateResult(res, preset.name);
+            if (res.success) {
+                showToast(`Successfully created '${preset.name}'! Matched ${res.matched}/${res.total} items.`, "success");
                 setViewingPreset(null);
             } else showToast("Error: " + res.error, "error");
         } catch (e) {
-            toastCreateError(e);
+            showToast("Failed to create collection.", "error");
         } finally {
             stopBusy();
             setCreating(false);
@@ -885,15 +851,15 @@ const Creator: React.FC = () => {
                 'trakt_list',
                 list.url,
             );
-            if (res.success || res.pending) {
-                toastCreateResult(res, list.name);
+            if (res.success) {
+                showToast(`Created '${list.name}' — matched ${res.matched}/${res.total} titles.`, 'success');
                 setImportedItems([]);
                 setCollectionTitle('');
             } else {
                 showToast(res.error || 'Failed to create collection.', 'error');
             }
         } catch (e: any) {
-            toastCreateError(e, 'Failed to create collection from Trakt list.');
+            showToast(e?.message || 'Failed to create collection from Trakt list.', 'error');
         } finally {
             stopBusy();
             setCreating(false);
@@ -982,7 +948,7 @@ const Creator: React.FC = () => {
                 setActiveSubTab('trending');
             } else showToast("Error: " + res.error, "error");
         } catch (e) {
-            toastCreateError(e);
+            showToast("Failed to create collection.", "error");
         } finally {
             stopBusy();
             setCreating(false);
@@ -1025,8 +991,8 @@ const Creator: React.FC = () => {
                 sourceType,
                 sourceId
             );
-            if (res.success || res.pending) {
-                toastCreateResult(res, collectionTitle);
+            if (res.success) {
+                showToast(`Success! Matched ${res.matched}/${res.total} items.`, "success");
                 // Clear form state for this flow but stay on the current tab
                 // (Import List / Discover) so users can create another collection.
                 if (isDiscover) {
@@ -1040,7 +1006,7 @@ const Creator: React.FC = () => {
                 setExternalResults([]);
             } else showToast("Error: " + res.error, "error");
         } catch (e) {
-            toastCreateError(e);
+            showToast("Failed to create collection.", "error");
         } finally {
             stopBusy();
             setCreating(false);
@@ -1209,20 +1175,6 @@ const Creator: React.FC = () => {
                     </p>
                 </div>
             </div>
-
-            {plexError ? (
-                <div className="flex items-start gap-3 rounded-2xl border border-rose-500/40 bg-rose-950/40 px-4 py-3 text-sm text-rose-100">
-                    <AlertCircle className="w-5 h-5 shrink-0 mt-0.5 text-rose-300" />
-                    <div>
-                        <p className="font-bold">Plex is not reachable from ColleXions</p>
-                        <p className="text-rose-100/80 mt-1">{plexError}</p>
-                        <p className="text-rose-100/70 mt-1">
-                            Open ColleXions → Config, import portal Plex settings, and Save.
-                            In Docker, use your host IP or host.docker.internal instead of localhost.
-                        </p>
-                    </div>
-                </div>
-            ) : null}
 
             {/* Global Creation Settings — stay in document flow (sticky overlapped cards on scroll) */}
             <section className="bg-card/60 border border-border p-4 md:p-6 rounded-2xl flex flex-col xl:flex-row xl:items-center justify-between gap-4 md:gap-6 shadow-xl relative z-10">
