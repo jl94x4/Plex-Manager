@@ -34,7 +34,7 @@ import { pushToast, ToastContainer, type ToastMessage } from '../shared/toast';
 import { useDiscoverI18n } from '../discovery/i18n';
 import { overlaysApi, DEFAULT_OVERLAY_PLACEMENT, type OverlaysConfig, type OverlaysPlacement, type CustomCollectionOverlayRule } from './api';
 import { PlacementEditor } from './PlacementEditor';
-import { OverlayJobCard, OverlayJobTitleTest } from './OverlayJobCard';
+import { OverlayJobCard, OverlayJobTitleTest, OverlaySettingsGroup } from './OverlayJobCard';
 import { formatRunSummaryDetail, formatRunSummaryWhen, inferRunBundle, parseRunSummary } from './runSummary';
 import { api as collexionsApi } from '../collexions/api';
 
@@ -638,6 +638,96 @@ export const OverlaysDashboard: React.FC = () => {
     const collectionsEnabled = configDraft.customCollectionOverlaysEnabled === true
         && collectionRules.length > 0;
 
+    /** "At a glance" category rollup shown above the tabs, independent of which tab is open. */
+    const categorySummary = useMemo(() => {
+        const anyOn = (...vals: Array<boolean | undefined>) => vals.some((v) => v === true);
+        return [
+            {
+                id: 'newReturning',
+                label: t('overlays.categories.newReturning'),
+                enabled: configDraft.newSeasonEnabled !== false || configDraft.newEpisodeEnabled !== false,
+                jobCard: 'banners' as JobCardId,
+                tabId: 'home' as TabId,
+            },
+            {
+                id: 'recentlyAdded',
+                label: t('overlays.categories.recentlyAdded'),
+                enabled: configDraft.recentlyAddedEnabled === true,
+                jobCard: 'recently' as JobCardId,
+                tabId: 'home' as TabId,
+            },
+            {
+                id: 'live',
+                label: t('overlays.categories.live'),
+                enabled: configDraft.liveScheduleEnabled === true,
+                jobCard: 'banners' as JobCardId,
+                tabId: 'home' as TabId,
+            },
+            {
+                id: 'top10',
+                label: t('overlays.categories.top10'),
+                enabled: configDraft.top10Enabled === true,
+                jobCard: 'banners' as JobCardId,
+                tabId: 'home' as TabId,
+            },
+            {
+                id: 'qualityFormat',
+                label: t('overlays.categories.qualityFormat'),
+                enabled: anyOn(
+                    configDraft.mediaInfoEnabled,
+                    configDraft.editionOverlayEnabled,
+                    configDraft.audioCodecEnabled,
+                    configDraft.videoFormatEnabled,
+                    configDraft.aspectOverlayEnabled,
+                    configDraft.versionsOverlayEnabled,
+                    configDraft.directPlayOverlayEnabled,
+                ),
+                jobCard: 'kometa' as JobCardId,
+                tabId: 'home' as TabId,
+            },
+            {
+                id: 'availability',
+                label: t('overlays.categories.availability'),
+                enabled: anyOn(configDraft.statusOverlayEnabled, configDraft.networkOverlayEnabled, configDraft.streamingOverlayEnabled),
+                jobCard: 'kometa' as JobCardId,
+                tabId: 'home' as TabId,
+            },
+            {
+                id: 'ratingsReviews',
+                label: t('overlays.categories.ratingsReviews'),
+                enabled: anyOn(configDraft.ratingsOverlayEnabled, configDraft.contentRatingEnabled, configDraft.ribbonOverlayEnabled),
+                jobCard: 'kometa' as JobCardId,
+                tabId: 'home' as TabId,
+            },
+            {
+                id: 'languageRuntime',
+                label: t('overlays.categories.languageRuntime'),
+                enabled: anyOn(
+                    configDraft.languageCountEnabled,
+                    configDraft.languagesOverlayEnabled,
+                    configDraft.runtimesOverlayEnabled,
+                    configDraft.episodeInfoOverlayEnabled,
+                ),
+                jobCard: 'kometa' as JobCardId,
+                tabId: 'home' as TabId,
+            },
+            {
+                id: 'bonusContent',
+                label: t('overlays.categories.bonusContent'),
+                enabled: configDraft.mediastingerOverlayEnabled === true,
+                jobCard: 'kometa' as JobCardId,
+                tabId: 'home' as TabId,
+            },
+            {
+                id: 'collectionBadges',
+                label: t('overlays.categories.collectionBadges'),
+                enabled: collectionsEnabled,
+                jobCard: 'collections' as JobCardId,
+                tabId: 'badges' as TabId,
+            },
+        ];
+    }, [configDraft, collectionsEnabled, t]);
+
     const formatKometaFamilies = useCallback((row: any) => {
         if (row?.orphanBackup) return t('overlays.kometa.orphanBackup');
         if (!row?.families || typeof row.families !== 'object') return '—';
@@ -786,6 +876,12 @@ export const OverlaysDashboard: React.FC = () => {
 
     const toggleJobCard = useCallback((id: JobCardId) => {
         setJobCardExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
+    }, []);
+
+    /** Jump from an "at a glance" category chip straight to its settings, expanded and in view. */
+    const openCategory = useCallback((jobCard: JobCardId, tabId: TabId) => {
+        setJobCardExpanded((prev) => ({ ...prev, [jobCard]: true }));
+        setTab(tabId);
     }, []);
 
     const seasonPresetOptions = useMemo(
@@ -2256,6 +2352,27 @@ export const OverlaysDashboard: React.FC = () => {
                 />
             </div>
 
+            <div className="rounded-xl border border-white/10 bg-black/15 p-3">
+                <p className={`${fieldLabelClass} mb-2`}>{t('overlays.overview.atAGlance')}</p>
+                <div className="flex flex-wrap gap-1.5">
+                    {categorySummary.map((cat) => (
+                        <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => openCategory(cat.jobCard, cat.tabId)}
+                            className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
+                                cat.enabled
+                                    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/20'
+                                    : 'border-white/10 bg-white/5 text-muted hover:bg-white/10'
+                            }`}
+                        >
+                            <span className={`h-1.5 w-1.5 rounded-full ${cat.enabled ? 'bg-emerald-400' : 'bg-white/25'}`} />
+                            {cat.label}
+                        </button>
+                    ))}
+                </div>
+            </div>
+
             {!workerReady && (
                 <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-100">
                     <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
@@ -2347,6 +2464,9 @@ export const OverlaysDashboard: React.FC = () => {
                                 />
                             )}
                         >
+                            <div className="mb-3 border-b border-border/40 pb-2">
+                                <span className={fieldLabelClass}>{t('overlays.jobs.banners.groups.newSeason')}</span>
+                            </div>
                             <SettingsToggleRow
                                 title={t('overlays.settings.newSeasonEnabled')}
                                 description={t('overlays.settings.newSeasonEnabledHint')}
@@ -2365,6 +2485,9 @@ export const OverlaysDashboard: React.FC = () => {
                                 checked={configDraft.newSeasonStampSeasonPoster !== false}
                                 onChange={(newSeasonStampSeasonPoster) => setConfigDraft((prev) => ({ ...prev, newSeasonStampSeasonPoster }))}
                             />
+                            <div className="mb-3 mt-4 border-b border-border/40 pb-2">
+                                <span className={fieldLabelClass}>{t('overlays.jobs.banners.groups.newEpisode')}</span>
+                            </div>
                             <SettingsToggleRow
                                 title={t('overlays.settings.newEpisodeEnabled')}
                                 description={t('overlays.settings.newEpisodeEnabledHint')}
@@ -2383,6 +2506,9 @@ export const OverlaysDashboard: React.FC = () => {
                                 checked={configDraft.skipNewEpisodeOnBinge !== false}
                                 onChange={(skipNewEpisodeOnBinge) => setConfigDraft((prev) => ({ ...prev, skipNewEpisodeOnBinge }))}
                             />
+                            <div className="mb-3 mt-4 border-b border-border/40 pb-2">
+                                <span className={fieldLabelClass}>{t('overlays.jobs.banners.groups.liveTop10')}</span>
+                            </div>
                             <SettingsToggleRow
                                 title={t('overlays.settings.liveScheduleEnabled')}
                                 description={t('overlays.settings.liveScheduleEnabledHint')}
@@ -2727,9 +2853,19 @@ export const OverlaysDashboard: React.FC = () => {
                         >
                             <p className="mb-3 text-[11px] text-muted">{t('overlays.jobs.kometa.settingsHint')}</p>
 
-                            <div className="mb-4 border-b border-border/40 pb-2">
-                                <span className={fieldLabelClass}>{t('overlays.jobs.kometa.groups.media')}</span>
-                            </div>
+                            <OverlaySettingsGroup
+                                id="kometa.quality"
+                                title={t('overlays.jobs.kometa.groups.media')}
+                                description={t('overlays.jobs.kometa.groups.mediaHint')}
+                                defaultOpen
+                                activeCount={[
+                                    configDraft.mediaInfoEnabled,
+                                    configDraft.editionOverlayEnabled,
+                                    configDraft.audioCodecEnabled,
+                                    configDraft.videoFormatEnabled,
+                                ].filter((v) => v === true).length}
+                                totalCount={4}
+                            >
                             <SettingsToggleRow
                                 title={t('overlays.settings.mediaInfoEnabled')}
                                 description={t('overlays.settings.mediaInfoEnabledHint')}
@@ -2843,10 +2979,19 @@ export const OverlaysDashboard: React.FC = () => {
                                 checked={configDraft.videoFormatEnabled === true}
                                 onChange={(videoFormatEnabled) => setConfigDraft((prev) => ({ ...prev, videoFormatEnabled }))}
                             />
+                            </OverlaySettingsGroup>
 
-                            <div className="mb-4 mt-4 border-b border-border/40 pb-2">
-                                <span className={fieldLabelClass}>{t('overlays.jobs.kometa.groups.showMeta')}</span>
-                            </div>
+                            <OverlaySettingsGroup
+                                id="kometa.availability"
+                                title={t('overlays.jobs.kometa.groups.showMeta')}
+                                description={t('overlays.jobs.kometa.groups.showMetaHint')}
+                                activeCount={[
+                                    configDraft.statusOverlayEnabled,
+                                    configDraft.networkOverlayEnabled,
+                                    configDraft.streamingOverlayEnabled,
+                                ].filter((v) => v === true).length}
+                                totalCount={3}
+                            >
                             <SettingsToggleRow
                                 title={t('overlays.settings.statusOverlayEnabled')}
                                 description={t('overlays.settings.statusOverlayEnabledHint')}
@@ -2992,10 +3137,19 @@ export const OverlaysDashboard: React.FC = () => {
                                     </div>
                                 </div>
                             )}
+                            </OverlaySettingsGroup>
 
-                            <div className="mb-4 mt-4 border-b border-border/40 pb-2">
-                                <span className={fieldLabelClass}>{t('overlays.jobs.kometa.groups.ratings')}</span>
-                            </div>
+                            <OverlaySettingsGroup
+                                id="kometa.ratings"
+                                title={t('overlays.jobs.kometa.groups.ratings')}
+                                description={t('overlays.jobs.kometa.groups.ratingsHint')}
+                                activeCount={[
+                                    configDraft.ratingsOverlayEnabled,
+                                    configDraft.contentRatingEnabled,
+                                    configDraft.ribbonOverlayEnabled,
+                                ].filter((v) => v === true).length}
+                                totalCount={3}
+                            >
                             <SettingsToggleRow
                                 title={t('overlays.settings.ratingsOverlayEnabled')}
                                 description={t('overlays.settings.ratingsOverlayEnabledHint')}
@@ -3167,10 +3321,23 @@ export const OverlaysDashboard: React.FC = () => {
                                     </div>
                                 </div>
                             )}
+                            </OverlaySettingsGroup>
 
-                            <div className="mb-4 mt-4 border-b border-border/40 pb-2">
-                                <span className={fieldLabelClass}>{t('overlays.jobs.kometa.groups.misc')}</span>
-                            </div>
+                            <OverlaySettingsGroup
+                                id="kometa.technical"
+                                title={t('overlays.jobs.kometa.groups.misc')}
+                                description={t('overlays.jobs.kometa.groups.miscHint')}
+                                activeCount={[
+                                    configDraft.aspectOverlayEnabled,
+                                    configDraft.versionsOverlayEnabled,
+                                    configDraft.languageCountEnabled,
+                                    configDraft.languagesOverlayEnabled,
+                                    configDraft.runtimesOverlayEnabled,
+                                    configDraft.directPlayOverlayEnabled,
+                                    configDraft.episodeInfoOverlayEnabled,
+                                ].filter((v) => v === true).length}
+                                totalCount={7}
+                            >
                             <SettingsToggleRow
                                 title={t('overlays.settings.aspectOverlayEnabled')}
                                 description={t('overlays.settings.aspectOverlayEnabledHint')}
@@ -3244,12 +3411,22 @@ export const OverlaysDashboard: React.FC = () => {
                                 checked={configDraft.episodeInfoOverlayEnabled === true}
                                 onChange={(episodeInfoOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, episodeInfoOverlayEnabled }))}
                             />
+                            </OverlaySettingsGroup>
+
+                            <OverlaySettingsGroup
+                                id="kometa.bonus"
+                                title={t('overlays.jobs.kometa.groups.bonus')}
+                                description={t('overlays.jobs.kometa.groups.bonusHint')}
+                                activeCount={configDraft.mediastingerOverlayEnabled === true ? 1 : 0}
+                                totalCount={1}
+                            >
                             <SettingsToggleRow
                                 title={t('overlays.settings.mediastingerOverlayEnabled')}
                                 description={t('overlays.settings.mediastingerOverlayEnabledHint')}
                                 checked={configDraft.mediastingerOverlayEnabled === true}
                                 onChange={(mediastingerOverlayEnabled) => setConfigDraft((prev) => ({ ...prev, mediastingerOverlayEnabled }))}
                             />
+                            </OverlaySettingsGroup>
 
                             <div className="mb-4 mt-4 border-b border-border/40 pb-2">
                                 <span className={fieldLabelClass}>{t('overlays.jobs.kometa.groups.run')}</span>

@@ -258,3 +258,95 @@ export const OverlayJobCard: React.FC<OverlayJobCardProps> = ({
         </section>
     );
 };
+
+export type OverlaySettingsGroupProps = {
+    /** Stable id used only for the localStorage persistence key, e.g. "kometa.quality". */
+    id: string;
+    title: string;
+    description?: string;
+    /** How many toggles in this group are currently on, for the "3/7 on" badge. Omit to hide the badge. */
+    activeCount?: number;
+    totalCount?: number;
+    /** Open by default the first time a viewer sees this group (their choice is remembered after that). */
+    defaultOpen?: boolean;
+    children?: React.ReactNode;
+};
+
+/**
+ * A collapsible sub-section used to break a long list of related toggles into named groups,
+ * so a job card shows a handful of headings instead of twenty toggles at once. Collapse state
+ * is remembered per-browser via localStorage, keyed by `id`.
+ */
+export const OverlaySettingsGroup: React.FC<OverlaySettingsGroupProps> = ({
+    id,
+    title,
+    description,
+    activeCount,
+    totalCount,
+    defaultOpen = false,
+    children,
+}) => {
+    const storageKey = `overlays.settingsGroup.${id}`;
+    const [collapsed, setCollapsed] = useState<boolean>(() => {
+        try {
+            const raw = window.localStorage.getItem(storageKey);
+            if (raw === '1') return true;
+            if (raw === '0') return false;
+        } catch {
+            // localStorage unavailable — fall through to the default.
+        }
+        return !defaultOpen;
+    });
+
+    const toggle = () => {
+        setCollapsed((prev) => {
+            const next = !prev;
+            try {
+                window.localStorage.setItem(storageKey, next ? '1' : '0');
+            } catch {
+                // ignore — the section still toggles for this render, it just won't persist.
+            }
+            return next;
+        });
+    };
+
+    const hasBadge = typeof activeCount === 'number';
+    const hasActive = hasBadge && (activeCount as number) > 0;
+
+    return (
+        <div className="mb-3 rounded-lg border border-white/10 bg-black/15 overflow-hidden">
+            <button
+                type="button"
+                onClick={toggle}
+                aria-expanded={!collapsed}
+                className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left hover:bg-white/5"
+            >
+                <span className="flex min-w-0 items-start gap-2">
+                    <ChevronDown className={`mt-0.5 h-3.5 w-3.5 shrink-0 text-muted transition-transform ${collapsed ? '-rotate-90' : ''}`} />
+                    <span className="min-w-0">
+                        <span className="block text-xs font-bold uppercase tracking-[0.14em] text-text">{title}</span>
+                        {description ? (
+                            <span className="mt-0.5 block text-[11px] font-normal normal-case tracking-normal text-muted">{description}</span>
+                        ) : null}
+                    </span>
+                </span>
+                {hasBadge ? (
+                    <span
+                        className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold whitespace-nowrap ${
+                            hasActive
+                                ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100'
+                                : 'border-white/10 bg-white/5 text-muted'
+                        }`}
+                    >
+                        {activeCount}/{totalCount} on
+                    </span>
+                ) : null}
+            </button>
+            {!collapsed ? (
+                <div className="space-y-3 border-t border-white/5 px-3 pb-3 pt-3">
+                    {children}
+                </div>
+            ) : null}
+        </div>
+    );
+};
