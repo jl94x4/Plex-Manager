@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Loader2, Play, Stamp } from 'lucide-react';
 import { overlaysApi } from './api';
 
@@ -157,6 +157,8 @@ export const OverlayJobTitleTest: React.FC<OverlayJobTitleTestProps> = ({
 };
 
 export type OverlayJobCardProps = {
+    /** DOM id on the root section, so other UI (e.g. the "at a glance" chips) can scroll to this card. */
+    id?: string;
     title: string;
     hint: string;
     statusLabel: string;
@@ -178,6 +180,7 @@ export type OverlayJobCardProps = {
 };
 
 export const OverlayJobCard: React.FC<OverlayJobCardProps> = ({
+    id,
     title,
     hint,
     statusLabel,
@@ -204,7 +207,7 @@ export const OverlayJobCard: React.FC<OverlayJobCardProps> = ({
             : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100';
 
     return (
-        <section className="rounded-xl border border-white/10 bg-black/30 overflow-hidden">
+        <section id={id} className="rounded-xl border border-white/10 bg-black/30 overflow-hidden scroll-mt-4">
             <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -260,7 +263,7 @@ export const OverlayJobCard: React.FC<OverlayJobCardProps> = ({
 };
 
 export type OverlaySettingsGroupProps = {
-    /** Stable id used only for the localStorage persistence key, e.g. "kometa.quality". */
+    /** Stable id used for the localStorage persistence key AND (prefixed) the DOM id used to scroll here, e.g. "kometa.quality". */
     id: string;
     title: string;
     description?: string;
@@ -269,6 +272,8 @@ export type OverlaySettingsGroupProps = {
     totalCount?: number;
     /** Open by default the first time a viewer sees this group (their choice is remembered after that). */
     defaultOpen?: boolean;
+    /** Bump this (e.g. Date.now()) to force this group open and scroll it into view, regardless of current state. */
+    openSignal?: number;
     children?: React.ReactNode;
 };
 
@@ -284,9 +289,12 @@ export const OverlaySettingsGroup: React.FC<OverlaySettingsGroupProps> = ({
     activeCount,
     totalCount,
     defaultOpen = false,
+    openSignal,
     children,
 }) => {
     const storageKey = `overlays.settingsGroup.${id}`;
+    const domId = `overlay-group-${id}`;
+    const rootRef = useRef<HTMLDivElement | null>(null);
     const [collapsed, setCollapsed] = useState<boolean>(() => {
         try {
             const raw = window.localStorage.getItem(storageKey);
@@ -310,11 +318,28 @@ export const OverlaySettingsGroup: React.FC<OverlaySettingsGroupProps> = ({
         });
     };
 
+    // An "at a glance" chip elsewhere on the page asked to jump straight to this group: force it
+    // open (even if the viewer had it collapsed) and scroll it into view once it has rendered open.
+    useEffect(() => {
+        if (!openSignal) return;
+        setCollapsed(false);
+        try {
+            window.localStorage.setItem(storageKey, '0');
+        } catch {
+            // ignore
+        }
+        const timer = window.setTimeout(() => {
+            rootRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }, 60);
+        return () => window.clearTimeout(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [openSignal]);
+
     const hasBadge = typeof activeCount === 'number';
     const hasActive = hasBadge && (activeCount as number) > 0;
 
     return (
-        <div className="mb-3 rounded-lg border border-white/10 bg-black/15 overflow-hidden">
+        <div id={domId} ref={rootRef} className="mb-3 scroll-mt-4 rounded-lg border border-white/10 bg-black/15 overflow-hidden">
             <button
                 type="button"
                 onClick={toggle}

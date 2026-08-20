@@ -648,6 +648,7 @@ export const OverlaysDashboard: React.FC = () => {
                 enabled: configDraft.newSeasonEnabled !== false || configDraft.newEpisodeEnabled !== false,
                 jobCard: 'banners' as JobCardId,
                 tabId: 'home' as TabId,
+                sectionId: 'overlay-banners-newSeason',
             },
             {
                 id: 'recentlyAdded',
@@ -655,6 +656,7 @@ export const OverlaysDashboard: React.FC = () => {
                 enabled: configDraft.recentlyAddedEnabled === true,
                 jobCard: 'recently' as JobCardId,
                 tabId: 'home' as TabId,
+                sectionId: 'overlay-job-recently',
             },
             {
                 id: 'live',
@@ -662,6 +664,7 @@ export const OverlaysDashboard: React.FC = () => {
                 enabled: configDraft.liveScheduleEnabled === true,
                 jobCard: 'banners' as JobCardId,
                 tabId: 'home' as TabId,
+                sectionId: 'overlay-banners-liveTop10',
             },
             {
                 id: 'top10',
@@ -669,6 +672,7 @@ export const OverlaysDashboard: React.FC = () => {
                 enabled: configDraft.top10Enabled === true,
                 jobCard: 'banners' as JobCardId,
                 tabId: 'home' as TabId,
+                sectionId: 'overlay-banners-liveTop10',
             },
             {
                 id: 'qualityFormat',
@@ -684,6 +688,7 @@ export const OverlaysDashboard: React.FC = () => {
                 ),
                 jobCard: 'kometa' as JobCardId,
                 tabId: 'home' as TabId,
+                groupId: 'kometa.quality',
             },
             {
                 id: 'availability',
@@ -691,6 +696,7 @@ export const OverlaysDashboard: React.FC = () => {
                 enabled: anyOn(configDraft.statusOverlayEnabled, configDraft.networkOverlayEnabled, configDraft.streamingOverlayEnabled),
                 jobCard: 'kometa' as JobCardId,
                 tabId: 'home' as TabId,
+                groupId: 'kometa.availability',
             },
             {
                 id: 'ratingsReviews',
@@ -698,6 +704,7 @@ export const OverlaysDashboard: React.FC = () => {
                 enabled: anyOn(configDraft.ratingsOverlayEnabled, configDraft.contentRatingEnabled, configDraft.ribbonOverlayEnabled),
                 jobCard: 'kometa' as JobCardId,
                 tabId: 'home' as TabId,
+                groupId: 'kometa.ratings',
             },
             {
                 id: 'languageRuntime',
@@ -710,6 +717,7 @@ export const OverlaysDashboard: React.FC = () => {
                 ),
                 jobCard: 'kometa' as JobCardId,
                 tabId: 'home' as TabId,
+                groupId: 'kometa.technical',
             },
             {
                 id: 'bonusContent',
@@ -717,6 +725,7 @@ export const OverlaysDashboard: React.FC = () => {
                 enabled: configDraft.mediastingerOverlayEnabled === true,
                 jobCard: 'kometa' as JobCardId,
                 tabId: 'home' as TabId,
+                groupId: 'kometa.bonus',
             },
             {
                 id: 'collectionBadges',
@@ -878,10 +887,45 @@ export const OverlaysDashboard: React.FC = () => {
         setJobCardExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
     }, []);
 
+    // Bumping a key here forces the matching OverlaySettingsGroup open and scrolls to itself.
+    const [groupOpenSignal, setGroupOpenSignal] = useState<Record<string, number>>({});
+    // A plain DOM id (job card or a non-collapsible divider) to scroll to once it exists on screen.
+    const [pendingScrollTo, setPendingScrollTo] = useState<{ id: string; n: number } | null>(null);
+
+    useEffect(() => {
+        if (!pendingScrollTo) return undefined;
+        let cancelled = false;
+        let attempts = 0;
+        const tryScroll = () => {
+            if (cancelled) return;
+            const el = document.getElementById(pendingScrollTo.id);
+            if (el) {
+                el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            } else if (attempts < 15) {
+                attempts += 1;
+                window.setTimeout(tryScroll, 60);
+            }
+        };
+        tryScroll();
+        return () => {
+            cancelled = true;
+        };
+    }, [pendingScrollTo]);
+
     /** Jump from an "at a glance" category chip straight to its settings, expanded and in view. */
-    const openCategory = useCallback((jobCard: JobCardId, tabId: TabId) => {
-        setJobCardExpanded((prev) => ({ ...prev, [jobCard]: true }));
-        setTab(tabId);
+    const openCategory = useCallback((cat: {
+        jobCard: JobCardId;
+        tabId: TabId;
+        groupId?: string;
+        sectionId?: string;
+    }) => {
+        setJobCardExpanded((prev) => ({ ...prev, [cat.jobCard]: true }));
+        setTab(cat.tabId);
+        if (cat.groupId) {
+            setGroupOpenSignal((prev) => ({ ...prev, [cat.groupId as string]: Date.now() }));
+        } else if (cat.sectionId) {
+            setPendingScrollTo({ id: cat.sectionId, n: Date.now() });
+        }
     }, []);
 
     const seasonPresetOptions = useMemo(
@@ -2359,7 +2403,7 @@ export const OverlaysDashboard: React.FC = () => {
                         <button
                             key={cat.id}
                             type="button"
-                            onClick={() => openCategory(cat.jobCard, cat.tabId)}
+                            onClick={() => openCategory(cat)}
                             className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition-colors ${
                                 cat.enabled
                                     ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/20'
@@ -2414,6 +2458,7 @@ export const OverlaysDashboard: React.FC = () => {
                 <div className="space-y-3">
                     <div className="space-y-2">
                         <OverlayJobCard
+                            id="overlay-job-banners"
                             title={t('overlays.jobs.banners.title')}
                             hint={t('overlays.jobs.banners.hint')}
                             statusLabel={coreJobActive
@@ -2464,7 +2509,7 @@ export const OverlaysDashboard: React.FC = () => {
                                 />
                             )}
                         >
-                            <div className="mb-3 border-b border-border/40 pb-2">
+                            <div id="overlay-banners-newSeason" className="mb-3 scroll-mt-4 border-b border-border/40 pb-2">
                                 <span className={fieldLabelClass}>{t('overlays.jobs.banners.groups.newSeason')}</span>
                             </div>
                             <SettingsToggleRow
@@ -2485,7 +2530,7 @@ export const OverlaysDashboard: React.FC = () => {
                                 checked={configDraft.newSeasonStampSeasonPoster !== false}
                                 onChange={(newSeasonStampSeasonPoster) => setConfigDraft((prev) => ({ ...prev, newSeasonStampSeasonPoster }))}
                             />
-                            <div className="mb-3 mt-4 border-b border-border/40 pb-2">
+                            <div id="overlay-banners-newEpisode" className="mb-3 mt-4 scroll-mt-4 border-b border-border/40 pb-2">
                                 <span className={fieldLabelClass}>{t('overlays.jobs.banners.groups.newEpisode')}</span>
                             </div>
                             <SettingsToggleRow
@@ -2506,7 +2551,7 @@ export const OverlaysDashboard: React.FC = () => {
                                 checked={configDraft.skipNewEpisodeOnBinge !== false}
                                 onChange={(skipNewEpisodeOnBinge) => setConfigDraft((prev) => ({ ...prev, skipNewEpisodeOnBinge }))}
                             />
-                            <div className="mb-3 mt-4 border-b border-border/40 pb-2">
+                            <div id="overlay-banners-liveTop10" className="mb-3 mt-4 scroll-mt-4 border-b border-border/40 pb-2">
                                 <span className={fieldLabelClass}>{t('overlays.jobs.banners.groups.liveTop10')}</span>
                             </div>
                             <SettingsToggleRow
@@ -2668,6 +2713,7 @@ export const OverlaysDashboard: React.FC = () => {
                         </OverlayJobCard>
 
                         <OverlayJobCard
+                            id="overlay-job-recently"
                             title={t('overlays.jobs.recently.title')}
                             hint={t('overlays.jobs.recently.hint')}
                             statusLabel={recentlyJobActive
@@ -2788,6 +2834,7 @@ export const OverlaysDashboard: React.FC = () => {
                         </OverlayJobCard>
 
                         <OverlayJobCard
+                            id="overlay-job-kometa"
                             title={t('overlays.jobs.kometa.title')}
                             hint={t('overlays.jobs.kometa.hint')}
                             statusLabel={kometaJobActive
@@ -2857,6 +2904,7 @@ export const OverlaysDashboard: React.FC = () => {
                                 id="kometa.quality"
                                 title={t('overlays.jobs.kometa.groups.media')}
                                 description={t('overlays.jobs.kometa.groups.mediaHint')}
+                                openSignal={groupOpenSignal['kometa.quality']}
                                 defaultOpen
                                 activeCount={[
                                     configDraft.mediaInfoEnabled,
@@ -2985,6 +3033,7 @@ export const OverlaysDashboard: React.FC = () => {
                                 id="kometa.availability"
                                 title={t('overlays.jobs.kometa.groups.showMeta')}
                                 description={t('overlays.jobs.kometa.groups.showMetaHint')}
+                                openSignal={groupOpenSignal['kometa.availability']}
                                 activeCount={[
                                     configDraft.statusOverlayEnabled,
                                     configDraft.networkOverlayEnabled,
@@ -3143,6 +3192,7 @@ export const OverlaysDashboard: React.FC = () => {
                                 id="kometa.ratings"
                                 title={t('overlays.jobs.kometa.groups.ratings')}
                                 description={t('overlays.jobs.kometa.groups.ratingsHint')}
+                                openSignal={groupOpenSignal['kometa.ratings']}
                                 activeCount={[
                                     configDraft.ratingsOverlayEnabled,
                                     configDraft.contentRatingEnabled,
@@ -3327,6 +3377,7 @@ export const OverlaysDashboard: React.FC = () => {
                                 id="kometa.technical"
                                 title={t('overlays.jobs.kometa.groups.misc')}
                                 description={t('overlays.jobs.kometa.groups.miscHint')}
+                                openSignal={groupOpenSignal['kometa.technical']}
                                 activeCount={[
                                     configDraft.aspectOverlayEnabled,
                                     configDraft.versionsOverlayEnabled,
@@ -3417,6 +3468,7 @@ export const OverlaysDashboard: React.FC = () => {
                                 id="kometa.bonus"
                                 title={t('overlays.jobs.kometa.groups.bonus')}
                                 description={t('overlays.jobs.kometa.groups.bonusHint')}
+                                openSignal={groupOpenSignal['kometa.bonus']}
                                 activeCount={configDraft.mediastingerOverlayEnabled === true ? 1 : 0}
                                 totalCount={1}
                             >
@@ -3468,6 +3520,7 @@ export const OverlaysDashboard: React.FC = () => {
                         </OverlayJobCard>
 
                         <OverlayJobCard
+                            id="overlay-job-collections"
                             title={t('overlays.jobs.collections.title')}
                             hint={t('overlays.jobs.collections.homeHint')}
                             statusLabel={collectionsJobActive
