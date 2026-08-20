@@ -343,6 +343,18 @@ def _kometa_log_owns_overlay_label(paths: dict | None, rating_key: str) -> bool:
         return False
 
 
+def _kometa_overlay_label_blocks(item, *, paths: dict | None, rating_key: str) -> bool:
+    """True only when the Plex "Overlay" label reflects a genuine Kometa-parity (Media/Layer)
+    stamp on this item — not merely our own banner modes (New Season, New Episode, Live,
+    Recently Added, Top 10), which also set this same label so Plex won't refresh the poster
+    from metadata. Gating "skip if Kometa already overlaid this" on the raw label alone makes a
+    banner mode see its own just-applied stamp as an external Kometa overlay and remove it
+    again on the very next scan — this checks the Kometa engine's own log for real ownership."""
+    if not _has_kometa_overlay_label(item):
+        return False
+    return _kometa_log_owns_overlay_label(paths, rating_key)
+
+
 def _sync_banner_overlay_label(
     item,
     *,
@@ -1019,6 +1031,7 @@ def premiere_show_eligible(
     *,
     skip_kometa: bool = False,
     resolver=None,
+    paths: dict | None = None,
 ) -> tuple[bool, dict]:
     """Recently Added — first-season premiere only (S1 E01 aired or added within window)."""
     meta = {
@@ -1029,7 +1042,9 @@ def premiere_show_eligible(
         "airDateSource": None,
     }
     try:
-        if skip_kometa and _has_kometa_overlay_label(show):
+        if skip_kometa and _kometa_overlay_label_blocks(
+            show, paths=paths, rating_key=str(getattr(show, "ratingKey", "") or "")
+        ):
             meta["reason"] = "kometa_overlay_label"
             return False, meta
         regular = _regular_seasons(show)
@@ -1130,6 +1145,7 @@ def should_have_overlay(
     cutoff: datetime,
     skip_kometa: bool,
     resolver=None,
+    paths: dict | None = None,
 ) -> tuple[bool, dict]:
     meta = {
         "seasonIndex": None,
@@ -1139,7 +1155,9 @@ def should_have_overlay(
         "airDateSource": None,
     }
     try:
-        if skip_kometa and _has_kometa_overlay_label(show):
+        if skip_kometa and _kometa_overlay_label_blocks(
+            show, paths=paths, rating_key=str(getattr(show, "ratingKey", "") or "")
+        ):
             meta["reason"] = "kometa_overlay_label"
             return False, meta
         latest = _latest_season(show)
@@ -1427,6 +1445,7 @@ def discover_eligible_shows(
     skip_kometa: bool,
     progress: ProgressFn | None = None,
     resolver=None,
+    paths: dict | None = None,
 ) -> tuple[set[str], dict[str, dict], dict[str, Any]]:
     """
     Return (should_have_keys, meta_by_key, show_by_key) for shows whose *latest*
@@ -1471,7 +1490,7 @@ def discover_eligible_shows(
                     continue
                 aired = _as_datetime(getattr(ep, "originallyAvailableAt", None))
                 source = "plex" if aired is not None else None
-                if skip_kometa and _has_kometa_overlay_label(show):
+                if skip_kometa and _kometa_overlay_label_blocks(show, paths=paths, rating_key=key):
                     meta_by_key[key] = {
                         "seasonIndex": getattr(season, "index", None),
                         "airedAt": aired.isoformat() if aired else None,
@@ -1529,7 +1548,7 @@ def discover_eligible_shows(
                 key = str(getattr(show, "ratingKey", "") or "")
                 if not key or key in should_have:
                     continue
-                if skip_kometa and _has_kometa_overlay_label(show):
+                if skip_kometa and _kometa_overlay_label_blocks(show, paths=paths, rating_key=key):
                     continue
                 try:
                     latest = _latest_season(show)
@@ -1566,7 +1585,7 @@ def discover_eligible_shows(
             count += 1
             if count % 25 == 0:
                 _progress(progress, f"{section.title}: checked {count} shows…")
-            ok, meta = should_have_overlay(show, cutoff, skip_kometa, resolver=resolver)
+            ok, meta = should_have_overlay(show, cutoff, skip_kometa, resolver=resolver, paths=paths)
             key = str(show.ratingKey)
             show_by_key[key] = show
             meta_by_key[key] = {**meta, "library": section.title}
@@ -1585,6 +1604,7 @@ def discover_eligible_shows_for_keys(
     rating_keys: set[str],
     progress: ProgressFn | None = None,
     resolver=None,
+    paths: dict | None = None,
 ) -> tuple[set[str], dict[str, dict], dict[str, Any]]:
     """Eligibility check for an explicit ratingKey set — no section-wide scan."""
     should_have: set[str] = set()
@@ -1605,7 +1625,7 @@ def discover_eligible_shows_for_keys(
             _progress(progress, f"{title}: not a TV show — New Season skipped")
             meta_by_key[key] = {"reason": "not_show", "library": _library_title(show)}
             continue
-        ok, meta = should_have_overlay(show, cutoff, skip_kometa, resolver=resolver)
+        ok, meta = should_have_overlay(show, cutoff, skip_kometa, resolver=resolver, paths=paths)
         library = _library_title(show)
         meta_by_key[key] = {**meta, "library": library}
         show_by_key[key] = show
@@ -1630,7 +1650,7 @@ def scan_library(config: dict, progress: ProgressFn | None = None) -> dict:
     resolver = create_resolver_from_config(config, paths=paths, progress=progress)
 
     should_have, meta_by_key, show_by_key = discover_eligible_shows(
-        plex, config, cutoff, skip_kometa, progress, resolver=resolver
+        plex, config, cutoff, skip_kometa, progress, resolver=resolver, paths=paths
     )
     resolver.save()
 
@@ -2241,6 +2261,7 @@ def discover_new_episodes(
     skip_kometa: bool,
     progress: ProgressFn | None = None,
     resolver=None,
+    paths: dict | None = None,
 ) -> tuple[set[str], dict[str, Any], dict[str, dict]]:
     """Return (keys, episode_by_key, meta_by_key) for episodes aired within the window."""
     should_have: set[str] = set()
@@ -2260,16 +2281,16 @@ def discover_new_episodes(
             show = ep.show()
         except Exception:
             show = None
-        if skip_kometa and show is not None and _has_kometa_overlay_label(show):
-            return
-        if skip_kometa and _has_kometa_overlay_label(ep):
-            return
-        show_title = getattr(show, "title", None) if show is not None else None
         show_key = str(
             getattr(show, "ratingKey", None)
             or getattr(ep, "grandparentRatingKey", None)
             or ""
         )
+        if skip_kometa and show is not None and _kometa_overlay_label_blocks(show, paths=paths, rating_key=show_key):
+            return
+        if skip_kometa and _kometa_overlay_label_blocks(ep, paths=paths, rating_key=key):
+            return
+        show_title = getattr(show, "title", None) if show is not None else None
         should_have.add(key)
         episode_by_key[key] = ep
         meta_by_key[key] = {
@@ -2357,6 +2378,7 @@ def discover_new_episodes_for_keys(
     rating_keys: set[str],
     progress: ProgressFn | None = None,
     resolver=None,
+    paths: dict | None = None,
 ) -> tuple[set[str], dict[str, Any], dict[str, dict]]:
     """Check New Episode eligibility for explicit show/episode ratingKeys — no library scan."""
     should_have: set[str] = set()
@@ -2375,9 +2397,14 @@ def discover_new_episodes_for_keys(
         key = str(getattr(ep, "ratingKey", "") or "")
         if not key or key in should_have:
             return
-        if skip_kometa and show is not None and _has_kometa_overlay_label(show):
+        show_key = str(
+            getattr(show, "ratingKey", None)
+            or getattr(ep, "grandparentRatingKey", None)
+            or ""
+        )
+        if skip_kometa and show is not None and _kometa_overlay_label_blocks(show, paths=paths, rating_key=show_key):
             return
-        if skip_kometa and _has_kometa_overlay_label(ep):
+        if skip_kometa and _kometa_overlay_label_blocks(ep, paths=paths, rating_key=key):
             return
         aired = _as_datetime(getattr(ep, "originallyAvailableAt", None))
         source = "plex" if aired is not None else None
@@ -2388,11 +2415,6 @@ def discover_new_episodes_for_keys(
         if aired is None or aired < cutoff:
             return
         show_title = getattr(show, "title", None) if show is not None else None
-        show_key = str(
-            getattr(show, "ratingKey", None)
-            or getattr(ep, "grandparentRatingKey", None)
-            or ""
-        )
         should_have.add(key)
         episode_by_key[key] = ep
         meta_by_key[key] = {
@@ -2670,11 +2692,11 @@ def run_new_episode_overlays(
     scoped_run = bool(only_keys)
     if scoped_run:
         should_have, episode_by_key, meta_by_key = discover_new_episodes_for_keys(
-            plex, config, cutoff, skip_kometa, only_keys, progress, resolver=resolver
+            plex, config, cutoff, skip_kometa, only_keys, progress, resolver=resolver, paths=paths
         )
     else:
         should_have, episode_by_key, meta_by_key = discover_new_episodes(
-            plex, config, cutoff, skip_kometa, progress, resolver=resolver
+            plex, config, cutoff, skip_kometa, progress, resolver=resolver, paths=paths
         )
 
     added = 0
@@ -3041,12 +3063,12 @@ def run_overlays(
     if new_season_on:
         if scoped_run:
             should_have, _meta_by_key, show_by_key = discover_eligible_shows_for_keys(
-                plex, config, cutoff, skip_kometa, only_keys, progress, resolver=resolver
+                plex, config, cutoff, skip_kometa, only_keys, progress, resolver=resolver, paths=paths
             )
         else:
             _progress(progress, "Scanning for eligible new seasons…")
             should_have, _meta_by_key, show_by_key = discover_eligible_shows(
-                plex, config, cutoff, skip_kometa, progress, resolver=resolver
+                plex, config, cutoff, skip_kometa, progress, resolver=resolver, paths=paths
             )
         should_have = {k for k in should_have if k not in reserved}
         episode_log = _load_log(paths["episodeLog"])
@@ -3076,7 +3098,7 @@ def run_overlays(
 
                 needs = existing is None or bool(existing.get("preview_only"))
                 if not needs:
-                    ok, _meta = should_have_overlay(show, cutoff, skip_kometa, resolver=resolver)
+                    ok, _meta = should_have_overlay(show, cutoff, skip_kometa, resolver=resolver, paths=paths)
                     if not ok:
                         if remove_show_overlay(show, False, progress, paths=paths, config=config):
                             del log[key]

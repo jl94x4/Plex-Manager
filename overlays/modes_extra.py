@@ -263,9 +263,9 @@ TOP10_PLACEMENT = {
 }
 
 
-def discover_live_shows(plex, config: dict, sections, progress: ProgressFn | None = None, resolver=None):
+def discover_live_shows(plex, config: dict, sections, progress: ProgressFn | None = None, resolver=None, paths: dict | None = None):
     """Shows whose latest episode aired within liveScheduleDays."""
-    from core import _as_datetime, _has_kometa_overlay_label, _only_rating_keys, _fetch_plex_item, _library_title
+    from core import _as_datetime, _kometa_overlay_label_blocks, _only_rating_keys, _fetch_plex_item, _library_title
 
     days = int(config.get("liveScheduleDays") or config.get("live_schedule_days") or 1)
     cutoff = datetime.now() - timedelta(days=max(0, days))
@@ -277,7 +277,7 @@ def discover_live_shows(plex, config: dict, sections, progress: ProgressFn | Non
         key = str(getattr(show, "ratingKey", "") or "")
         if not key:
             return
-        if skip_kometa and _has_kometa_overlay_label(show):
+        if skip_kometa and _kometa_overlay_label_blocks(show, paths=paths, rating_key=key):
             if only_keys:
                 _progress(progress, f"{getattr(show, 'title', key)}: skipped (Overlay label)")
             return
@@ -434,7 +434,7 @@ def run_live_overlays(
     reserved = reserved_keys or set()
     log = _load_log(log_path)
     sections = list(_iter_tv_sections(plex, config, bundle="core"))
-    candidates = discover_live_shows(plex, config, sections, progress, resolver=resolver)
+    candidates = discover_live_shows(plex, config, sections, progress, resolver=resolver, paths=paths)
     should = {k: v for k, v in candidates.items() if k not in reserved}
 
     added = removed = 0
@@ -533,9 +533,9 @@ def discover_recently_added(
     sections,
     progress: ProgressFn | None = None,
     resolver=None,
+    paths: dict | None = None,
 ):
     from core import (
-        _has_kometa_overlay_label,
         _only_rating_keys,
         _fetch_plex_item,
         _library_title,
@@ -557,6 +557,7 @@ def discover_recently_added(
             cutoff,
             skip_kometa=skip_kometa,
             resolver=resolver,
+            paths=paths,
         )
         if not ok:
             if only_keys:
@@ -671,7 +672,7 @@ def run_recently_added_overlays(
     sections = list(_iter_tv_sections(plex, config, bundle="recently"))
     if not sections and not scoped_run:
         _progress(progress, "No TV libraries in Recently Added scope (check the library selector on this card).")
-    candidates = discover_recently_added(plex, config, sections, progress, resolver=resolver)
+    candidates = discover_recently_added(plex, config, sections, progress, resolver=resolver, paths=paths)
     should = {k: v for k, v in candidates.items() if k not in reserved}
 
     added = removed = 0
@@ -761,8 +762,8 @@ def run_recently_added_overlays(
     }
 
 
-def discover_top10(plex, config: dict, sections, progress: ProgressFn | None = None):
-    from core import _has_kometa_overlay_label
+def discover_top10(plex, config: dict, sections, progress: ProgressFn | None = None, paths: dict | None = None):
+    from core import _kometa_overlay_label_blocks
 
     limit = int(config.get("top10Count") or config.get("top10_count") or 10)
     limit = max(1, min(50, limit))
@@ -774,7 +775,7 @@ def discover_top10(plex, config: dict, sections, progress: ProgressFn | None = N
                 key = str(getattr(show, "ratingKey", "") or "")
                 if not key:
                     continue
-                if skip_kometa and _has_kometa_overlay_label(show):
+                if skip_kometa and _kometa_overlay_label_blocks(show, paths=paths, rating_key=key):
                     continue
                 score = 0.0
                 for attr in ("audienceRating", "rating", "userRating"):
@@ -846,7 +847,7 @@ def run_top10_overlays(plex, config: dict, paths: dict, preview_mode: bool, prog
 
     badge = Image.open(asset)
     sections = list(_iter_tv_sections(plex, config, bundle="core"))
-    should = discover_top10(plex, config, sections, progress)
+    should = discover_top10(plex, config, sections, progress, paths=paths)
 
     added = removed = 0
     errors: list[str] = []
