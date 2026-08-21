@@ -309,10 +309,11 @@ class _MediaEl:
 
 
 class _EpVideo:
-    def __init__(self, rk, gp, **media):
+    def __init__(self, rk, gp, parentIndex=1, **media):
         self.attrib = {
             "ratingKey": str(rk),
             "grandparentRatingKey": str(gp),
+            "parentIndex": str(parentIndex),
             "type": "episode",
         }
         self._media = [_MediaEl(**media)]
@@ -348,6 +349,36 @@ listing = _index_show_resolutions_from_episode_listing(
 )
 assert listing["4k"] == {"7"}, listing
 assert listing["1080p"] == {"8"}, listing
+
+# Mixed show: 50% 4K is not enough; 2/3 is.
+mixed_half = _index_show_resolutions_from_episode_listing(
+    _PlexEpisodes(_EpPage([
+        _EpVideo(1, 10, videoResolution="uhd", width="3840"),
+        _EpVideo(2, 10, videoResolution="1080", width="1920"),
+    ])),
+    "2",
+)
+assert mixed_half["4k"] == set(), mixed_half
+assert mixed_half["1080p"] == {"10"}, mixed_half
+mixed_majority = _index_show_resolutions_from_episode_listing(
+    _PlexEpisodes(_EpPage([
+        _EpVideo(3, 11, videoResolution="uhd", width="3840"),
+        _EpVideo(4, 11, videoResolution="uhd", width="3840"),
+        _EpVideo(5, 11, videoResolution="1080", width="1920"),
+    ])),
+    "2",
+)
+assert mixed_majority["4k"] == {"11"}, mixed_majority
+# Specials must not push a 1080p show over the 4K line.
+specials_only = _index_show_resolutions_from_episode_listing(
+    _PlexEpisodes(_EpPage([
+        _EpVideo(6, 12, parentIndex=0, videoResolution="uhd", width="3840"),
+        _EpVideo(7, 12, parentIndex=1, videoResolution="1080", width="1920"),
+    ])),
+    "2",
+)
+assert specials_only["4k"] == set(), specials_only
+assert specials_only["1080p"] == {"12"}, specials_only
 
 # Compose with stage-4 winners
 winners2 = {

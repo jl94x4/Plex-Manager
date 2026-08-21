@@ -504,20 +504,40 @@ def _episode_el_resolution_key(el) -> str | None:
     return best
 
 
+# Show posters get 4K only when more than this share of regular episodes are 4K.
+TV_4K_MIN_SHARE = 0.5
+
+
+def _episode_season_index(el) -> int:
+    raw = _el_attr(el, "parentIndex")
+    if not raw:
+        return 1
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return 1
+
+
 def _index_show_resolutions_from_episode_listing(
     plex,
     sid: str,
     *,
     page_size: int = 500,
     progress: ProgressFn | None = None,
+    fourk_min_share: float = TV_4K_MIN_SHARE,
 ) -> dict[str, set[str]]:
     """Page every episode and stamp the *show* key from videoResolution/width.
 
     TV resolution filters (`resolution=4k` / `uhd`) often return episode rows
     without grandparentRatingKey, or 400 entirely. The portal stats builder
     already uses `/all?type=4` + Media.videoResolution — do the same here.
+
+    4K is majority-only: a show is tagged 4K when more than `fourk_min_share`
+    of its regular-season episodes (skips Specials) are 4K/UHD.
     """
     buckets: dict[str, set[str]] = {key: set() for key in _RESOLUTION_RES_RE}
+    totals: dict[str, int] = {}
+    fourk_counts: dict[str, int] = {}
     start = 0
     size = max(50, int(page_size) or 500)
     episodes = 0
@@ -545,13 +565,19 @@ def _index_show_resolutions_from_episode_listing(
         for el in children:
             batch += 1
             episodes += 1
-            show_key = _el_attr(el, "grandparentRatingKey") or _el_attr(el, "parentRatingKey")
+            show_key = _el_attr(el, "grandparentRatingKey")
             if not show_key:
                 continue
+            if _episode_season_index(el) <= 0:
+                continue
+            totals[show_key] = totals.get(show_key, 0) + 1
             res_key = _episode_el_resolution_key(el)
             if not res_key:
                 continue
-            buckets[res_key].add(show_key)
+            if res_key == "4k":
+                fourk_counts[show_key] = fourk_counts.get(show_key, 0) + 1
+            else:
+                buckets[res_key].add(show_key)
             mapped += 1
         try:
             attrib = getattr(data, "attrib", None) or {}
@@ -567,11 +593,19 @@ def _index_show_resolutions_from_episode_listing(
             break
         if batch < size:
             break
-    fourk = len(buckets.get("4k") or [])
+    any_fourk = {show for show, n in fourk_counts.items() if n > 0}
+    majority = {
+        show
+        for show, n in totals.items()
+        if n > 0 and (fourk_counts.get(show, 0) / n) > fourk_min_share
+    }
+    buckets["4k"] = majority
     if progress:
+        pct = int(fourk_min_share * 100)
         progress(
-            f"Section {sid}: TV episode listing — {fourk} 4K shows "
-            f"({mapped} episodes with resolution, {episodes} scanned)"
+            f"Section {sid}: TV episode listing — {len(majority)} 4K shows "
+            f"(>{pct}% of regular episodes; {len(any_fourk)} had any 4K; "
+            f"{mapped} episodes with resolution, {episodes} scanned)"
         )
     return buckets
 
@@ -768,7 +802,12 @@ class SectionIndex:
                     plex, sid, progress=progress
                 )
                 for res_key, keys in listing.items():
-                    idx.resolution_members.setdefault(res_key, set()).update(keys)
+                    if res_key == "4k":
+                        # Majority listing is authoritative — Plex 4K filters
+                        # would otherwise stamp a show from a single UHD episode.
+                        idx.resolution_members["4k"] = set(keys)
+                    else:
+                        idx.resolution_members.setdefault(res_key, set()).update(keys)
             if progress:
                 counts = ", ".join(
                     f"{k}={len(v)}" for k, v in sorted(idx.resolution_members.items()) if v
@@ -1125,6 +1164,10 @@ class KometaDetector:
             if res_key:
                 members = idx.resolution_members.get(res_key) or set()
                 if key not in members:
+                    # TV 4K uses the >50% episode index; sampling latest eps
+                    # would stamp mixed libraries from a handful of UHD files.
+                    if idx.is_show and res_key == "4k":
+                        continue
                     if inferred_res is None:
                         inferred_res = item_resolution_key(item) or ""
                     if inferred_res != res_key:
