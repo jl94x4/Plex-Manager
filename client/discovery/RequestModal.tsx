@@ -341,23 +341,44 @@ export const RequestModal: React.FC<Props> = ({
         return undefined;
     }, [open, options, advancedQuality, showAdvanced, loadAdvancedForQuality]);
 
-    // #170: keep Destination / Quality / Root Folder inside the mobile scroller.
-    // scrollIntoView({ block: 'nearest' }) no-ops when the toggle is already visible,
-    // which leaves Root Folder clipped under the sticky submit bar.
+    // #170: after Advanced expands, scroll just enough that Root Folder isn't
+    // clipped under the sticky submit bar. Prefer the section bottom so Destination
+    // + Quality + Root are all reachable even when the block is taller than the sheet.
     const advancedForm = qualityForms[advancedQuality];
     useEffect(() => {
         if (!open || !showAdvanced) return undefined;
         if (advancedForm.loading && !advancedForm.loaded) return undefined;
-        const frame = window.requestAnimationFrame(() => {
+        let cancelled = false;
+        const reveal = () => {
+            if (cancelled) return;
             const el = advancedSectionRef.current;
             const scroller = scrollBodyRef.current;
             if (!el || !scroller) return;
             const elRect = el.getBoundingClientRect();
             const scrollerRect = scroller.getBoundingClientRect();
-            const nextTop = scroller.scrollTop + (elRect.top - scrollerRect.top) - 8;
-            scroller.scrollTo({ top: Math.max(0, nextTop), behavior: 'smooth' });
+            const pad = 12;
+            if (elRect.bottom > scrollerRect.bottom - pad) {
+                scroller.scrollTo({
+                    top: scroller.scrollTop + (elRect.bottom - scrollerRect.bottom) + pad,
+                    behavior: 'smooth',
+                });
+            } else if (elRect.top < scrollerRect.top + pad) {
+                scroller.scrollTo({
+                    top: Math.max(0, scroller.scrollTop + (elRect.top - scrollerRect.top) - pad),
+                    behavior: 'smooth',
+                });
+            }
+        };
+        // Two frames: wait until Destination / Quality / Root have laid out.
+        let frame2 = 0;
+        const frame1 = window.requestAnimationFrame(() => {
+            frame2 = window.requestAnimationFrame(reveal);
         });
-        return () => window.cancelAnimationFrame(frame);
+        return () => {
+            cancelled = true;
+            window.cancelAnimationFrame(frame1);
+            window.cancelAnimationFrame(frame2);
+        };
     }, [open, showAdvanced, advancedQuality, advancedForm.loading, advancedForm.loaded]);
 
     useEffect(() => {
@@ -783,7 +804,8 @@ export const RequestModal: React.FC<Props> = ({
                     </div>
                 )}
             </div>
-            <div className="flex flex-col gap-2 max-h-none sm:max-h-64 sm:overflow-y-auto custom-scrollbar pr-1">
+            {/* #170: cap on mobile too — an uncapped list pushed Advanced off-screen. */}
+            <div className="flex flex-col gap-2 max-h-[min(40vh,20rem)] overflow-y-auto overscroll-y-auto custom-scrollbar pr-1">
                 {(options?.seasons || []).map((season) => {
                     const seasonNumber = Number(season.seasonNumber);
                     const selected = selectedSeasons.includes(seasonNumber);
@@ -839,20 +861,22 @@ export const RequestModal: React.FC<Props> = ({
 
     return (
         <ModalPortal open={open}>
-        <div className="fixed inset-x-0 top-0 z-[340] flex items-end sm:items-center justify-center p-0 sm:p-4 bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] sm:inset-0 sm:bottom-0">
+        <div className="fixed inset-x-0 top-0 z-[340] flex items-end sm:items-center justify-center p-0 sm:p-4 bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] sm:inset-0 sm:bottom-0 h-[calc(100dvh-4rem-env(safe-area-inset-bottom,0px))] sm:h-full">
             <button
                 type="button"
                 aria-label={t('request.closeAria')}
                 className="absolute inset-0 bg-black/80 backdrop-blur-sm"
                 onClick={() => { if (!submitting) onClose(); }}
             />
-            {/* #170: h-full on mobile bounds the sheet so Advanced options can scroll to Root Folder. */}
+            {/* #170: size the sheet with insets, not height:100%. The overlay is
+                stretched via top/bottom with height:auto, so h-full/max-h-full never
+                resolve on iOS and the inner scroller never gets a bounded height. */}
             <div
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="request-modal-title"
                 onMouseDown={(event) => event.stopPropagation()}
-                className="relative w-full sm:max-w-3xl lg:max-w-4xl h-full sm:h-auto max-h-full sm:max-h-[85vh] min-h-0 bg-card border border-white/10 rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+                className="absolute inset-0 sm:relative sm:inset-auto w-full sm:max-w-3xl lg:max-w-4xl sm:max-h-[85vh] min-h-0 bg-card border border-white/10 rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden"
             >
                 <div className="flex items-start justify-between gap-4 p-5 border-b border-white/10 bg-black/20 shrink-0">
                     <div className="flex items-start gap-4 min-w-0">
@@ -905,7 +929,7 @@ export const RequestModal: React.FC<Props> = ({
 
                 <div
                     ref={scrollBodyRef}
-                    className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain touch-pan-y custom-scrollbar [-webkit-overflow-scrolling:touch] p-5 pb-8 flex flex-col gap-5"
+                    className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain touch-pan-y custom-scrollbar [-webkit-overflow-scrolling:touch] p-5 pb-8 space-y-5"
                 >
                     {loading ? (
                         <div className="flex flex-col items-center justify-center gap-3 py-10">
