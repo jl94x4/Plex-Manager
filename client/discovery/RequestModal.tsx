@@ -106,6 +106,7 @@ export const RequestModal: React.FC<Props> = ({
     const [tagSuggestionsOpen, setTagSuggestionsOpen] = useState(false);
     const loadGenRef = useRef(0);
     const advancedSectionRef = useRef<HTMLDivElement>(null);
+    const scrollBodyRef = useRef<HTMLDivElement>(null);
     const onErrorRef = useRef(onError);
     const onSuccessRef = useRef(onSuccess);
     const onCloseRef = useRef(onClose);
@@ -339,6 +340,25 @@ export const RequestModal: React.FC<Props> = ({
         void loadAdvancedForQuality(options, advancedQuality);
         return undefined;
     }, [open, options, advancedQuality, showAdvanced, loadAdvancedForQuality]);
+
+    // #170: keep Destination / Quality / Root Folder inside the mobile scroller.
+    // scrollIntoView({ block: 'nearest' }) no-ops when the toggle is already visible,
+    // which leaves Root Folder clipped under the sticky submit bar.
+    const advancedForm = qualityForms[advancedQuality];
+    useEffect(() => {
+        if (!open || !showAdvanced) return undefined;
+        if (advancedForm.loading && !advancedForm.loaded) return undefined;
+        const frame = window.requestAnimationFrame(() => {
+            const el = advancedSectionRef.current;
+            const scroller = scrollBodyRef.current;
+            if (!el || !scroller) return;
+            const elRect = el.getBoundingClientRect();
+            const scrollerRect = scroller.getBoundingClientRect();
+            const nextTop = scroller.scrollTop + (elRect.top - scrollerRect.top) - 8;
+            scroller.scrollTo({ top: Math.max(0, nextTop), behavior: 'smooth' });
+        });
+        return () => window.cancelAnimationFrame(frame);
+    }, [open, showAdvanced, advancedQuality, advancedForm.loading, advancedForm.loaded]);
 
     useEffect(() => {
         if (!open) return undefined;
@@ -826,12 +846,13 @@ export const RequestModal: React.FC<Props> = ({
                 className="absolute inset-0 bg-black/80 backdrop-blur-sm"
                 onClick={() => { if (!submitting) onClose(); }}
             />
+            {/* #170: h-full on mobile bounds the sheet so Advanced options can scroll to Root Folder. */}
             <div
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="request-modal-title"
                 onMouseDown={(event) => event.stopPropagation()}
-                className="relative w-full sm:max-w-3xl lg:max-w-4xl h-auto max-h-full sm:max-h-[85vh] min-h-0 bg-card border border-white/10 rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+                className="relative w-full sm:max-w-3xl lg:max-w-4xl h-full sm:h-auto max-h-full sm:max-h-[85vh] min-h-0 bg-card border border-white/10 rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden"
             >
                 <div className="flex items-start justify-between gap-4 p-5 border-b border-white/10 bg-black/20 shrink-0">
                     <div className="flex items-start gap-4 min-w-0">
@@ -882,7 +903,10 @@ export const RequestModal: React.FC<Props> = ({
                     </button>
                 </div>
 
-                <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain touch-pan-y custom-scrollbar p-5 flex flex-col gap-5">
+                <div
+                    ref={scrollBodyRef}
+                    className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-y-contain touch-pan-y custom-scrollbar [-webkit-overflow-scrolling:touch] p-5 pb-8 flex flex-col gap-5"
+                >
                     {loading ? (
                         <div className="flex flex-col items-center justify-center gap-3 py-10">
                             <Loader2 className="w-7 h-7 text-plex animate-spin" />
@@ -1022,20 +1046,7 @@ export const RequestModal: React.FC<Props> = ({
                                 >
                                     <button
                                         type="button"
-                                        onClick={() => {
-                                            setShowAdvanced((prev) => {
-                                                const next = !prev;
-                                                if (next) {
-                                                    window.requestAnimationFrame(() => {
-                                                        advancedSectionRef.current?.scrollIntoView({
-                                                            behavior: 'smooth',
-                                                            block: 'nearest',
-                                                        });
-                                                    });
-                                                }
-                                                return next;
-                                            });
-                                        }}
+                                        onClick={() => setShowAdvanced((prev) => !prev)}
                                         className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left hover:bg-white/[0.03] transition-colors"
                                     >
                                         <span className="min-w-0 flex flex-col gap-0.5">
