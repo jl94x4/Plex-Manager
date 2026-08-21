@@ -626,91 +626,97 @@ export const ProfilePage: React.FC<Props> = ({
                         </DashboardPanel>
                     ) : null}
 
-                    {!data.privacy?.locked && data.social && (data.social.email || data.social.libraries || (Array.isArray(data.social.following) && data.social.following.length)) ? (
-                        <DashboardPanel title={t('profilePage.about')}>
-                            {data.social.email ? (
-                                <p className="text-sm text-text mb-3">
-                                    <span className="text-[10px] uppercase tracking-widest font-bold text-muted mr-2">{t('profilePage.publicEmail')}</span>
-                                    {data.social.email}
-                                </p>
-                            ) : null}
-                            {data.social.libraries ? (
-                                <p className="text-sm text-text mb-3">
-                                    <span className="text-[10px] uppercase tracking-widest font-bold text-muted mr-2">{t('profilePage.libraries')}</span>
-                                    {data.social.libraries.all
-                                        ? t('profilePage.allLibraries')
-                                        : (data.social.libraries.names || []).join(' · ')}
-                                </p>
-                            ) : null}
-                            {Array.isArray(data.social.following) && data.social.following.length ? (
-                                <div>
-                                    <p className="text-[10px] uppercase tracking-widest font-bold text-muted mb-2">{t('profilePage.followingList')}</p>
-                                    <div className="flex flex-wrap gap-2">
-                                    {data.social.following.map((peer: any, index: number) => {
-                                        const canOpen = !!peer.accountId && String(peer.username || '').toLowerCase() !== 'anonymous';
-                                        const body = (
-                                            <>
-                                                <img src={resolveAvatar(peer.thumb, 48)} alt="" className="w-6 h-6 rounded-full object-cover" />
-                                                <span className="truncate max-w-[8rem]">{peer.username}</span>
-                                            </>
-                                        );
-                                        return canOpen ? (
-                                            <button
-                                                key={peer.accountId || index}
-                                                type="button"
-                                                onClick={() => goToProfile(onNavigate, peer.accountId, peer.username)}
-                                                className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/25 px-2 py-1 text-xs font-bold hover:border-plex/40"
-                                            >
-                                                {body}
-                                            </button>
-                                        ) : (
-                                            <span
-                                                key={peer.accountId || index}
-                                                className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/25 px-2 py-1 text-xs font-bold text-muted"
-                                            >
-                                                {body}
-                                            </span>
-                                        );
-                                    })}
+                    {(() => {
+                        const showAbout = !data.privacy?.locked && !!(data.social && (
+                            data.social.email
+                            || data.social.libraries
+                            || (Array.isArray(data.social.following) && data.social.following.length)
+                        ));
+                        const showLastWatched = !data.privacy?.locked && recentWatched.length > 0;
+                        if (!showAbout && !showLastWatched) return null;
+                        const aboutPanel = showAbout ? (
+                            <DashboardPanel title={t('profilePage.about')} className="h-full">
+                                {data.social?.email ? (
+                                    <p className="text-sm text-text mb-3">
+                                        <span className="text-[10px] uppercase tracking-widest font-bold text-muted mr-2">{t('profilePage.publicEmail')}</span>
+                                        {data.social.email}
+                                    </p>
+                                ) : null}
+                                {data.social?.libraries ? (
+                                    <p className="text-sm text-text mb-3">
+                                        <span className="text-[10px] uppercase tracking-widest font-bold text-muted mr-2">{t('profilePage.libraries')}</span>
+                                        {data.social.libraries.all
+                                            ? t('profilePage.allLibraries')
+                                            : (data.social.libraries.names || []).join(' · ')}
+                                    </p>
+                                ) : null}
+                                {Array.isArray(data.social?.following) && data.social.following.length ? (
+                                    <div>
+                                        <p className="text-[10px] uppercase tracking-widest font-bold text-muted mb-2">{t('profilePage.followingList')}</p>
+                                        <div className="flex flex-wrap gap-2">
+                                        {data.social.following.map((peer: any, index: number) => {
+                                            const canOpen = !!peer.accountId && String(peer.username || '').toLowerCase() !== 'anonymous';
+                                            const body = (
+                                                <>
+                                                    <img src={resolveAvatar(peer.thumb, 48)} alt="" className="w-6 h-6 rounded-full object-cover" />
+                                                    <span className="truncate max-w-[8rem]">{peer.username}</span>
+                                                </>
+                                            );
+                                            return canOpen ? (
+                                                <button
+                                                    key={peer.accountId || index}
+                                                    type="button"
+                                                    onClick={() => goToProfile(onNavigate, peer.accountId, peer.username)}
+                                                    className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/25 px-2 py-1 text-xs font-bold hover:border-plex/40"
+                                                >
+                                                    {body}
+                                                </button>
+                                            ) : (
+                                                <span
+                                                    key={peer.accountId || index}
+                                                    className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-black/25 px-2 py-1 text-xs font-bold text-muted"
+                                                >
+                                                    {body}
+                                                </span>
+                                            );
+                                        })}
+                                        </div>
                                     </div>
-                                </div>
-                            ) : null}
-                        </DashboardPanel>
-                    ) : null}
-
-                    {!data.privacy?.locked && recentWatched.length ? (
-                        <DashboardPanel title={t('profilePage.lastWatched')} subtitle={t('profilePage.lastWatchedHint')}>
-                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                                ) : null}
+                            </DashboardPanel>
+                        ) : null;
+                        const lastWatchedPanel = showLastWatched ? (
+                        <DashboardPanel title={t('profilePage.lastWatched')} subtitle={t('profilePage.lastWatchedHint')} className="h-full min-w-0">
+                            <div className="flex gap-3 overflow-x-auto no-scrollbar pb-1">
                                 {recentWatched.map((item: any, index: number) => {
                                     const discoveryPath = titleDiscoveryPath(item);
-                                    const cardClass = `${index > 0 ? 'hidden sm:flex' : 'flex'} flex-row sm:flex-col items-center sm:items-stretch gap-3 rounded-2xl border border-white/10 bg-black/25 p-3 min-w-0`;
+                                    const cardClass = `${discoverRowCardWidthClass('small')} shrink-0`;
                                     const body = (
                                         <>
                                             {item.thumbUrl ? (
                                                 <img
                                                     src={resolvePortalAssetUrl(item.thumbUrl)}
                                                     alt=""
-                                                    className="w-16 h-24 sm:w-full sm:h-auto sm:aspect-[2/3] rounded-lg object-cover border border-white/10 shrink-0"
+                                                    className="w-full aspect-[2/3] rounded-lg object-cover border border-white/10"
                                                 />
                                             ) : (
-                                                <span className="inline-flex w-16 h-24 sm:w-full sm:aspect-[2/3] items-center justify-center rounded-lg border border-white/10 bg-black/40 text-plex shrink-0">
-                                                    <Play className="w-6 h-6" />
+                                                <span className="inline-flex w-full aspect-[2/3] items-center justify-center rounded-lg border border-white/10 bg-black/40 text-plex">
+                                                    <Play className="w-5 h-5" />
                                                 </span>
                                             )}
-                                            <div className="min-w-0 sm:mt-1">
-                                                <p className="text-sm font-black text-text truncate">{item.title}</p>
-                                                {item.episodeTitle ? (
-                                                    <p className="text-xs text-muted truncate mt-0.5">{item.episodeTitle}</p>
-                                                ) : null}
-                                            </div>
+                                            <p className="mt-1.5 text-[11px] font-bold text-text truncate">{item.title}</p>
+                                            {item.episodeTitle ? (
+                                                <p className="text-[10px] text-muted truncate">{item.episodeTitle}</p>
+                                            ) : null}
                                         </>
                                     );
                                     return discoveryPath ? (
                                         <button
                                             key={`${item.title}-${item.viewedAt || index}`}
                                             type="button"
+                                            title={item.title}
                                             onClick={() => onNavigate('discovery', { path: discoveryPath })}
-                                            className={`${cardClass} text-left hover:border-plex/40 hover:opacity-90`}
+                                            className={`${cardClass} text-left hover:opacity-90`}
                                         >
                                             {body}
                                         </button>
@@ -718,6 +724,7 @@ export const ProfilePage: React.FC<Props> = ({
                                         <div
                                             key={`${item.title}-${item.viewedAt || index}`}
                                             className={cardClass}
+                                            title={item.title}
                                         >
                                             {body}
                                         </div>
@@ -725,7 +732,17 @@ export const ProfilePage: React.FC<Props> = ({
                                 })}
                             </div>
                         </DashboardPanel>
-                    ) : null}
+                        ) : null;
+                        if (showAbout && showLastWatched) {
+                            return (
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+                                    <div className="min-w-0">{aboutPanel}</div>
+                                    <div className="lg:col-span-2 min-w-0">{lastWatchedPanel}</div>
+                                </div>
+                            );
+                        }
+                        return aboutPanel || lastWatchedPanel;
+                    })()}
 
                     {!data.privacy?.locked && (Number(story.activeDays) > 0 || Number(story.bingeMax) > 0 || Number(story.currentStreak) > 0 || Number(achievements?.firstUnlocks?.count) > 0) ? (
                         <DashboardPanel title={t('profilePage.serverStory')} subtitle={t('profilePage.serverStoryHint')}>
