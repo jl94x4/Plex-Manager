@@ -7,6 +7,7 @@ from kometa_detect import (
     _AUDIO_RE,
     _EDITION_RE,
     _RESOLUTION_ALT_RE,
+    _RESOLUTION_RES_RE,
     _VIDEO_RE,
     RESOLUTION_VARIANTS,
     Winner,
@@ -29,6 +30,15 @@ assert not _RESOLUTION_ALT_RE["plus"].search("Movie.2160p.HDR.WEB-DL.mkv")
 # Weight ordering is strictly descending
 weights = [w for _, _, _, w in RESOLUTION_VARIANTS]
 assert weights == sorted(weights, reverse=True), "resolution ladder must be weight-desc"
+
+# TV libraries expose 4K as UHD; that must not land in the 720p (hd) bucket.
+assert _RESOLUTION_RES_RE["4k"].search("uhd")
+assert _RESOLUTION_RES_RE["4k"].search("UHD")
+assert _RESOLUTION_RES_RE["4k"].search("4k")
+assert _RESOLUTION_RES_RE["720p"].search("hd")
+assert _RESOLUTION_RES_RE["720p"].search("720")
+assert not _RESOLUTION_RES_RE["720p"].search("uhd")
+assert not _RESOLUTION_RES_RE["720p"].search("UHD")
 
 # Audio codec ladder: TrueHD Atmos beats plain Atmos, matched on filepath
 path = r"D:\Movies\Movie (2020)\Movie.2020.TrueHD.Atmos.7.1.mkv"
@@ -181,11 +191,45 @@ class _Media:
 assert item_resolution_key(_Fake(type="movie", media=[_Media(width=3840, videoResolution="4k")])) == "4k"
 assert item_resolution_key(_Fake(type="movie", media=[_Media(width=1920, videoResolution="1080")])) == "1080p"
 assert item_resolution_key(_Fake(type="movie", media=[_Media(width=0, videoResolution="2160")])) == "4k"
+assert item_resolution_key(_Fake(type="movie", media=[_Media(width=0, videoResolution="uhd")])) == "4k"
+
+
+class _Ep:
+    def __init__(self, media):
+        self.media = media
+
+    def reload(self):
+        return None
+
+
+class _Season:
+    def __init__(self, index, eps):
+        self.index = index
+        self._eps = eps
+
+    def episodes(self):
+        return self._eps
+
+
+class _Show:
+    def __init__(self, seasons):
+        self.type = "show"
+        self._seasons = seasons
+
+    def seasons(self):
+        return self._seasons
+
+
+# Sample latest regular season; skip Specials even when they are listed last.
+_specials = _Season(0, [_Ep([_Media(width=720, videoResolution="720")])])
+_s1 = _Season(1, [_Ep([_Media(width=1920, videoResolution="1080")])])
+_s2 = _Season(2, [_Ep([_Media(width=3840, videoResolution="4k")])])
+assert item_resolution_key(_Show([_specials, _s1, _s2])) == "4k"
 
 
 class _El:
-    def __init__(self, rk):
-        self.attrib = {"ratingKey": str(rk)}
+    def __init__(self, rk, **extra):
+        self.attrib = {"ratingKey": str(rk), **{k: str(v) for k, v in extra.items()}}
 
 
 class _Container(list):
@@ -211,6 +255,44 @@ plex_page = _PlexPaginate()
 got = _query_rating_keys(plex_page, "/library/sections/1/all?type=1&resolution=4k", page_size=50)
 assert len(got) == 120, len(got)
 assert len(plex_page.calls) >= 3, plex_page.calls
+
+
+class _Tree:
+    def __init__(self, videos, dirs):
+        self._videos = videos
+        self._dirs = dirs
+        total = len(videos) + len(dirs)
+        self.attrib = {"totalSize": str(total), "size": str(total)}
+
+    def findall(self, tag):
+        if tag == "Video":
+            return self._videos
+        if tag == "Directory":
+            return self._dirs
+        return []
+
+    def __iter__(self):
+        return iter(self._videos + self._dirs)
+
+
+class _PlexTree:
+    def __init__(self, tree):
+        self.tree = tree
+
+    def query(self, path, headers=None):
+        return self.tree
+
+
+# Episode hits must stamp the show: collect Video + Directory and ancestor keys.
+ep_el = _El(99, parentRatingKey=50, grandparentRatingKey=7)
+show_el = _El(7)
+tree_plex = _PlexTree(_Tree([ep_el], [show_el]))
+mapped = _query_rating_keys(
+    tree_plex,
+    "/library/sections/2/all?type=4&resolution=4k",
+    include_ancestors=True,
+)
+assert mapped == {"99", "50", "7"}, mapped
 
 # Compose with stage-4 winners
 winners2 = {

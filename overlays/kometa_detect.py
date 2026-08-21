@@ -27,9 +27,11 @@ ProgressFn = Callable[[str], None]
 # resolution.yml `res` conditional — regex matched against Plex resolution
 # filter choices (Kometa validate_attribute applies these client-side).
 RESOLUTION_RES_REGEX: dict[str, str] = {
-    "4k": r"(?i)2160|4k",
+    # Include UHD — Plex TV libraries often expose 4K as "UHD", and Kometa's
+    # bare `hd` token would otherwise file those under 720p (`hd` is in `uhd`).
+    "4k": r"(?i)2160|4k|uhd",
     "1080p": r"(?i)1080|2k",
-    "720p": r"(?i)720|hd",
+    "720p": r"(?i)720|\bhd\b",
     "576p": r"(?i)576",
     "480p": r"(?i)480|sd",
 }
@@ -403,12 +405,52 @@ def _section_numeric_id(section) -> str:
     return str(getattr(section, "key", "") or "").rstrip("/").split("/")[-1]
 
 
-def _query_rating_keys(plex, path: str, *, page_size: int = 500) -> set[str]:
+def _container_children(data) -> list:
+    """Video AND Directory nodes — shows are Directory, movies/episodes are Video."""
+    children = list(data) if not isinstance(data, list) else data
+    try:
+        if hasattr(data, "findall"):
+            found = list(data.findall("Video") or []) + list(data.findall("Directory") or [])
+            if found:
+                return found
+    except Exception:
+        pass
+    return children
+
+
+def _rating_keys_from_el(el, *, include_ancestors: bool = False) -> list[str]:
+    attrib = getattr(el, "attrib", None) or {}
+    keys: list[str] = []
+    rk = attrib.get("ratingKey") if hasattr(attrib, "get") else None
+    if rk is None:
+        rk = getattr(el, "ratingKey", None)
+    if rk:
+        keys.append(str(rk))
+    if include_ancestors:
+        for name in ("parentRatingKey", "grandparentRatingKey"):
+            val = attrib.get(name) if hasattr(attrib, "get") else None
+            if val is None:
+                val = getattr(el, name, None)
+            if val:
+                keys.append(str(val))
+    return keys
+
+
+def _query_rating_keys(
+    plex,
+    path: str,
+    *,
+    page_size: int = 500,
+    include_ancestors: bool = False,
+) -> set[str]:
     """Collect all ratingKeys for a Plex filter query (paginated).
 
     plexapi's default container size is ~50. Without pagination, large libraries
     (e.g. 600+ 4K movies) only get the first page indexed — most titles miss
     resolution / HDR / DV badges.
+
+    include_ancestors: also store parent/grandparent keys so episode-level
+    resolution/HDR hits stamp the show poster (TV libraries).
     """
     keys: set[str] = set()
     start = 0
@@ -431,24 +473,12 @@ def _query_rating_keys(plex, path: str, *, page_size: int = 500) -> set[str]:
         if data is None:
             break
         batch = 0
-        # plexapi may return ElementTree root, a list of videos, or MediaContainer.
-        children = list(data) if not isinstance(data, list) else data
-        try:
-            # Prefer explicit Video/Directory nodes when present (avoids iterating attrs).
-            if hasattr(data, "findall"):
-                found = data.findall("Video") or data.findall("Directory") or []
-                if found:
-                    children = list(found)
-        except Exception:
-            pass
+        children = _container_children(data)
         for el in children:
             try:
-                attrib = getattr(el, "attrib", None) or {}
-                rk = attrib.get("ratingKey") if hasattr(attrib, "get") else None
-                if rk is None:
-                    rk = getattr(el, "ratingKey", None)
-                if rk:
-                    keys.add(str(rk))
+                extracted = _rating_keys_from_el(el, include_ancestors=include_ancestors)
+                if extracted:
+                    keys.update(extracted)
                     batch += 1
             except Exception:
                 continue
@@ -475,14 +505,7 @@ def _query_attrib_values(plex, path: str, attrib: str) -> set[str]:
         return values
     if data is None:
         return values
-    children = list(data) if not isinstance(data, list) else data
-    try:
-        if hasattr(data, "findall"):
-            found = data.findall("Video") or data.findall("Directory") or []
-            if found:
-                children = list(found)
-    except Exception:
-        pass
+    children = _container_children(data)
     for el in children:
         try:
             attrib_map = getattr(el, "attrib", None) or {}
@@ -525,7 +548,7 @@ def _resolution_filter_values(plex, section) -> list[str]:
     except Exception:
         pass
     # Always try canonical tokens so we still index when /resolution is empty or odd.
-    for token in ("4k", "2160", "1080", "720", "576", "480"):
+    for token in ("4k", "2160", "uhd", "1080", "720", "576", "480"):
         _add(token)
     return values
 
@@ -581,7 +604,18 @@ class SectionIndex:
                             f"/library/sections/{sid}/all?type={qtype}&{prefix}resolution={choice}",
                         )
                     except Exception:
-                        continue
+                        pass
+                    if is_show:
+                        # Episode rows actually carry resolution. Map them onto the
+                        # show (and season) via grandparent/parent so show posters stamp.
+                        try:
+                            members |= _query_rating_keys(
+                                plex,
+                                f"/library/sections/{sid}/all?type=4&resolution={choice}",
+                                include_ancestors=True,
+                            )
+                        except Exception:
+                            pass
                 idx.resolution_members[res_key] = members
             if progress:
                 counts = ", ".join(
@@ -599,6 +633,15 @@ class SectionIndex:
                 )
             except Exception:
                 idx.hdr_members = set()
+            if is_show:
+                try:
+                    idx.hdr_members |= _query_rating_keys(
+                        plex,
+                        f"/library/sections/{sid}/all?type=4&hdr=1",
+                        include_ancestors=True,
+                    )
+                except Exception:
+                    pass
 
         if need_dovi:
             try:
@@ -611,6 +654,15 @@ class SectionIndex:
                 idx.dovi_members = None
                 if progress:
                     progress(f"Section {sid}: native dovi filter unavailable, using stream checks")
+            if is_show and idx.dovi_members is not None:
+                try:
+                    idx.dovi_members |= _query_rating_keys(
+                        plex,
+                        f"/library/sections/{sid}/all?type=4&dovi=1",
+                        include_ancestors=True,
+                    )
+                except Exception:
+                    pass
         return idx
 
 
@@ -665,14 +717,57 @@ def item_filepaths(item) -> list[str]:
     return paths
 
 
+def _season_index(season) -> int:
+    try:
+        return int(getattr(season, "index", None))
+    except (TypeError, ValueError):
+        return -1
+
+
+def _show_episode_sample(item, limit: int = 8) -> list:
+    """Latest regular-season episodes — skip Specials, don't walk the whole series."""
+    seasons = []
+    try:
+        seasons = list(item.seasons() or [])
+    except Exception:
+        seasons = []
+    regular = [s for s in seasons if _season_index(s) > 0]
+    regular.sort(key=_season_index)
+    sample: list = []
+    for season in reversed(regular):
+        try:
+            eps = list(season.episodes() or [])
+        except Exception:
+            continue
+        for ep in reversed(eps):
+            sample.append(ep)
+            if len(sample) >= limit:
+                return sample
+    if sample:
+        return sample
+    try:
+        return list(item.episodes(maxresults=limit) or [])[:limit]
+    except TypeError:
+        pass
+    except Exception:
+        return []
+    return []
+
+
 def item_resolution_key(item) -> str | None:
     """Best-effort 4k/1080p/… from media width / videoResolution (filter-index fallback)."""
     stype = str(getattr(item, "type", "") or "").lower()
     medias = []
     try:
-        if stype == "show" and hasattr(item, "episodes"):
-            # Sample a few recent episodes — same idea as modes_kometa._inspect_media.
-            eps = list(item.episodes() or [])[-8:]
+        if stype == "show" and hasattr(item, "seasons"):
+            for ep in _show_episode_sample(item):
+                ensure_item_media(ep)
+                medias.extend(list(getattr(ep, "media", None) or []))
+        elif stype == "season" and hasattr(item, "episodes"):
+            try:
+                eps = list(item.episodes() or [])[-8:]
+            except Exception:
+                eps = []
             for ep in eps:
                 ensure_item_media(ep)
                 medias.extend(list(getattr(ep, "media", None) or []))
@@ -690,7 +785,13 @@ def item_resolution_key(item) -> str | None:
             width = 0
         vres = str(getattr(media, "videoResolution", None) or "").strip().lower()
         key = None
-        if width >= 3800 or vres in {"4k", "2160", "2160p"} or "4k" in vres or "2160" in vres:
+        if (
+            width >= 3800
+            or vres in {"4k", "2160", "2160p", "uhd"}
+            or "4k" in vres
+            or "2160" in vres
+            or "uhd" in vres
+        ):
             key = "4k"
         elif width >= 1800 or "1080" in vres or vres == "2k":
             key = "1080p"

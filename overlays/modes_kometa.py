@@ -308,7 +308,7 @@ def _scan_media_objects(medias, info: dict[str, Any]) -> dict[str, Any]:
             width = 0
         vres = str(getattr(media, "videoResolution", None) or "").lower()
         res = None
-        if width >= 3800 or "4k" in vres or vres == "2160":
+        if width >= 3800 or "4k" in vres or vres in {"2160", "2160p", "uhd"} or "uhd" in vres:
             res = "4K"
         elif width >= 1800 or "1080" in vres:
             res = "1080P"
@@ -379,12 +379,9 @@ def _inspect_media(item) -> dict[str, Any]:
         _scan_media_objects(medias, info)
         return _finalize_media_lines(info)
 
-    try:
-        episodes = list(item.episodes() or [])
-    except Exception:
-        return info
-    # Prefer newer episodes (often better encodes); keep this shallow for large libraries.
-    for ep in reversed(episodes[-8:]):
+    from kometa_detect import _show_episode_sample
+
+    for ep in _show_episode_sample(item):
         try:
             ep_medias = list(getattr(ep, "media", None) or [])
         except Exception:
