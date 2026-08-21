@@ -109,6 +109,10 @@ export interface ArrInstance {
     /** When true, Discover request modal routes UHD/4K requests to this instance. */
     is4k?: boolean;
     plexLibraryIds?: string[];
+    /** Quality profile used when a request does not pick Advanced options. */
+    defaultQualityProfileId?: number | null;
+    /** Root folder used when a request does not pick Advanced options. */
+    defaultRootFolder?: string;
 }
 
 export interface DownloadClientConfig {

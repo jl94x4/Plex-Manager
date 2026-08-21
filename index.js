@@ -1286,6 +1286,7 @@ import {
     resolveSonarrSeriesForShow,
     buildArrDeepUrl,
     fetchArrQualityProfiles,
+    fetchArrRootFolders,
     updateArrEntityQualityProfile,
     triggerArrEntitySearch,
     fetchSonarrEpisodesForSeries,
@@ -11104,6 +11105,38 @@ app.get('/api/arr/deep-link', requireAuth, requireAdmin, async (req, res) => {
     } catch (e) {
         log(`Arr deep-link error: ${e.message}`);
         res.status(500).json({ error: e.message || 'Failed to resolve Arr deep link' });
+    }
+});
+
+app.post('/api/arr/options', requireAdmin, async (req, res) => {
+    try {
+        const arrType = String(req.body?.type || '').toLowerCase();
+        if (!['sonarr', 'radarr', 'lidarr'].includes(arrType)) {
+            return res.status(400).json({ error: 'type must be sonarr, radarr, or lidarr' });
+        }
+        const stored = await loadFile(CONFIG_PATH, {});
+        const existing = req.body?.instanceId ? getArrInstance(stored, req.body.instanceId) : null;
+        const url = await resolveIntegrationUrlForTest(req.body?.url || existing?.url, existing?.url);
+        const apiKey = resolveTestCredential(req.body?.apiKey, existing?.apiKey || '');
+        if (!url || !apiKey) {
+            return res.status(400).json({ error: 'URL and API key are required.' });
+        }
+        const instance = {
+            id: String(req.body?.instanceId || existing?.id || 'draft'),
+            type: arrType,
+            name: existing?.name || arrType,
+            url,
+            apiKey,
+            enabled: true,
+        };
+        const [profiles, rootFolders] = await Promise.all([
+            fetchArrQualityProfiles(instance, { resolveUrl: (value) => value, timeoutMs: 8000 }),
+            fetchArrRootFolders(instance, { resolveUrl: (value) => value, timeoutMs: 8000 }),
+        ]);
+        res.json({ profiles, rootFolders });
+    } catch (e) {
+        log(`Arr options error: ${e.message}`);
+        res.status(500).json({ error: e.message || 'Failed to load *arr options' });
     }
 });
 

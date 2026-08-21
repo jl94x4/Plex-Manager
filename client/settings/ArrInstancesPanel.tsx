@@ -1,6 +1,7 @@
-import React from 'react';
-import { Plus, Trash2, Star } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Plus, Trash2, Star, Loader2 } from 'lucide-react';
 import type { ArrInstance } from '../shared/types';
+import { apiFetch } from '../shared/api';
 import { IntegrationTestButton } from '../shared/IntegrationTestButton';
 import { SettingsSwitch } from '../shared/ui';
 
@@ -55,6 +56,8 @@ export const createEmptyArrInstance = (type: ArrAppType, isDefault = false): Arr
     isDefault,
     is4k: false,
     plexLibraryIds: [],
+    defaultQualityProfileId: null,
+    defaultRootFolder: '',
 });
 
 type PlexLibrary = {
@@ -82,6 +85,12 @@ export type ArrInstancesPanelCopy = {
     plexLibraries: string;
     libraryMappingHint: string;
     assignedElsewhere: string;
+    defaultQualityProfile: string;
+    defaultRootFolder: string;
+    routingDefaultsHint: string;
+    useArrDefault: string;
+    optionsNeedCredentials: string;
+    optionsLoadFailed: string;
     testConnection: string;
     connectionSuccessful: string;
     connectionFailed: string;
@@ -106,6 +115,12 @@ const DEFAULT_COPY: ArrInstancesPanelCopy = {
     plexLibraries: 'Plex Libraries',
     libraryMappingHint: 'Map libraries to this instance for maintenance routing. Unmapped libraries use the default instance.',
     assignedElsewhere: 'Assigned to another instance',
+    defaultQualityProfile: 'Default quality profile',
+    defaultRootFolder: 'Default root folder',
+    routingDefaultsHint: 'Used when a request does not pick Advanced options. Leave on *arr default to use the first profile or folder from this instance.',
+    useArrDefault: 'Use *arr default',
+    optionsNeedCredentials: 'Enter a URL and API key to load profiles and folders.',
+    optionsLoadFailed: 'Could not load profiles and root folders from this instance.',
     testConnection: 'Test Connection',
     connectionSuccessful: 'Connection successful',
     connectionFailed: 'Connection failed',
@@ -123,6 +138,128 @@ type Props = {
     onMessage: (message: string, success: boolean) => void;
     className?: string;
     copy?: Partial<ArrInstancesPanelCopy>;
+};
+
+type RoutingOptions = {
+    profiles: { id: number; name: string }[];
+    rootFolders: { id: number; path: string; freeSpace?: number | null }[];
+};
+
+const ArrInstanceRoutingDefaults: React.FC<{
+    type: ArrAppType;
+    instance: ArrInstance;
+    saved?: ArrInstance;
+    copy: ArrInstancesPanelCopy;
+    onChange: (patch: Partial<ArrInstance>) => void;
+}> = ({ type, instance, saved, copy, onChange }) => {
+    const [loading, setLoading] = useState(false);
+    const [loadError, setLoadError] = useState('');
+    const [options, setOptions] = useState<RoutingOptions>({ profiles: [], rootFolders: [] });
+    const canLoad = hasCredentials(instance, saved);
+
+    useEffect(() => {
+        if (!canLoad) {
+            setOptions({ profiles: [], rootFolders: [] });
+            setLoadError('');
+            setLoading(false);
+            return undefined;
+        }
+        let cancelled = false;
+        const timer = window.setTimeout(() => {
+            setLoading(true);
+            void (async () => {
+                try {
+                    const data = await apiFetch('/api/arr/options', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            instanceId: instance.id,
+                            type,
+                            url: instance.url,
+                            apiKey: instance.apiKey,
+                        }),
+                    });
+                    if (cancelled) return;
+                    setOptions({
+                        profiles: Array.isArray(data?.profiles) ? data.profiles : [],
+                        rootFolders: Array.isArray(data?.rootFolders) ? data.rootFolders : [],
+                    });
+                    setLoadError('');
+                } catch (error) {
+                    if (cancelled) return;
+                    setOptions({ profiles: [], rootFolders: [] });
+                    setLoadError(error instanceof Error ? error.message : copy.optionsLoadFailed);
+                } finally {
+                    if (!cancelled) setLoading(false);
+                }
+            })();
+        }, 400);
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
+    }, [canLoad, copy.optionsLoadFailed, instance.apiKey, instance.id, instance.url, type]);
+
+    const profileValue = instance.defaultQualityProfileId != null ? String(instance.defaultQualityProfileId) : '';
+    const folderValue = instance.defaultRootFolder || '';
+    const profileIds = new Set(options.profiles.map((profile) => String(profile.id)));
+    const folderPaths = new Set(options.rootFolders.map((folder) => folder.path));
+
+    const selectClass = 'w-full p-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-sm';
+
+    return (
+        <div className="space-y-3">
+            <p className="text-[11px] text-muted">{copy.routingDefaultsHint}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                    <label className="text-xs text-muted uppercase tracking-wider font-bold mb-1 flex items-center gap-2">
+                        {copy.defaultQualityProfile}
+                        {loading ? <Loader2 className="w-3 h-3 animate-spin text-plex" /> : null}
+                    </label>
+                    <select
+                        className={selectClass}
+                        disabled={!canLoad || loading}
+                        value={profileValue}
+                        onChange={(event) => {
+                            const next = event.target.value;
+                            onChange({ defaultQualityProfileId: next ? Number(next) : null });
+                        }}
+                    >
+                        <option value="">{copy.useArrDefault}</option>
+                        {options.profiles.map((profile) => (
+                            <option key={profile.id} value={String(profile.id)}>{profile.name}</option>
+                        ))}
+                        {profileValue && !profileIds.has(profileValue) ? (
+                            <option value={profileValue}>{`Profile ${profileValue}`}</option>
+                        ) : null}
+                    </select>
+                </div>
+                <div>
+                    <label className="text-xs text-muted uppercase tracking-wider font-bold mb-1 block">
+                        {copy.defaultRootFolder}
+                    </label>
+                    <select
+                        className={selectClass}
+                        disabled={!canLoad || loading}
+                        value={folderValue}
+                        onChange={(event) => onChange({ defaultRootFolder: event.target.value })}
+                    >
+                        <option value="">{copy.useArrDefault}</option>
+                        {options.rootFolders.map((folder) => (
+                            <option key={folder.path} value={folder.path}>{folder.path}</option>
+                        ))}
+                        {folderValue && !folderPaths.has(folderValue) ? (
+                            <option value={folderValue}>{folderValue}</option>
+                        ) : null}
+                    </select>
+                </div>
+            </div>
+            {!canLoad ? (
+                <p className="text-[11px] text-muted">{copy.optionsNeedCredentials}</p>
+            ) : loadError ? (
+                <p className="text-[11px] text-amber-300">{loadError}</p>
+            ) : null}
+        </div>
+    );
 };
 
 export const ArrInstancesPanel: React.FC<Props> = ({
@@ -186,6 +323,8 @@ export const ArrInstancesPanel: React.FC<Props> = ({
             createEmptyArrInstance(type, instances.length === 0),
         ]);
     };
+
+    const supportsRoutingDefaults = type === 'sonarr' || type === 'radarr' || type === 'lidarr';
 
     return (
         <div className={className}>
@@ -333,6 +472,16 @@ export const ArrInstancesPanel: React.FC<Props> = ({
                                         placeholder={copy.apiKeyPlaceholder}
                                     />
                                 </div>
+
+                                {supportsRoutingDefaults ? (
+                                    <ArrInstanceRoutingDefaults
+                                        type={type}
+                                        instance={instance}
+                                        saved={saved}
+                                        copy={copy}
+                                        onChange={(patch) => updateInstance(instance.id, patch)}
+                                    />
+                                ) : null}
 
                                 {availableLibraries.length > 0 && (
                                     <div>
