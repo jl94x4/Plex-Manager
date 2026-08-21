@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    Award, Calendar, ChevronLeft, ChevronRight, Clapperboard, Clock, Disc3,
+    Award, Calendar, CalendarCheck, ChevronLeft, ChevronRight, Clapperboard, Clock, Disc3,
     Film, Flame, Lock, Music2, Sparkles, Trophy, X, Info, Medal, Target,
     Gauge, PlayCircle, ChevronDown, Share2, Bell, BellOff, Pin,
-    ArrowDownRight, ArrowUpRight, Minus, Swords, Crosshair, Shield, type LucideIcon,
+    ArrowDownRight, ArrowUpRight, Minus, Swords, Crosshair, Shield, Gift, Sun, Send,
+    CheckCircle2, Tv, type LucideIcon,
 } from 'lucide-react';
 import { apiFetch, apiFetchShared } from '../shared/api';
 import { logoUrl, portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
@@ -46,10 +47,19 @@ const BREAKDOWN_META: Record<string, { icon: LucideIcon; statKey?: string; tipKe
     trackPlays: { icon: Music2, tipKey: 'xp.tip.trackPlays', statKey: 'trackPlays' },
     totalPlays: { icon: Gauge, tipKey: 'xp.tip.totalPlays', statKey: 'totalPlays' },
     activeDays: { icon: Calendar, tipKey: 'xp.tip.activeDays', statKey: 'activeDays' },
+    dailyWatches: { icon: CalendarCheck, tipKey: 'xp.tip.dailyWatches', statKey: 'dailyWatches' },
+    currentStreak: { icon: Flame, tipKey: 'xp.tip.currentStreak', statKey: 'currentStreak' },
     longestStreak: { icon: Flame, tipKey: 'xp.tip.longestStreak', statKey: 'longestStreak' },
     weekendPlays: { icon: Sparkles, tipKey: 'xp.tip.weekendPlays', statKey: 'weekendPlays' },
+    movieFinishes: { icon: CheckCircle2, tipKey: 'xp.tip.movieFinishes', statKey: 'movieFinishes' },
+    episodeFinishes: { icon: Tv, tipKey: 'xp.tip.episodeFinishes', statKey: 'episodeFinishes' },
+    trackFinishes: { icon: Disc3, tipKey: 'xp.tip.trackFinishes', statKey: 'trackFinishes' },
+    bingeSessions: { icon: Tv, tipKey: 'xp.tip.bingeSessions', statKey: 'bingeSessions' },
     minutesWatched: { icon: Clock, tipKey: 'xp.tip.minutesWatched', statKey: 'minutesWatched' },
     hoursWatched: { icon: Clock, tipKey: 'xp.tip.hoursWatched', statKey: 'hoursWatched' },
+    sundayMinutes: { icon: Sun, tipKey: 'xp.tip.sundayMinutes', statKey: 'sundayMinutes' },
+    mediaRequests: { icon: Send, tipKey: 'xp.tip.mediaRequests', statKey: 'mediaRequests' },
+    badgeUnlocks: { icon: Gift, tipKey: 'xp.tip.badgeUnlocks', statKey: 'earnedCount' },
 };
 
 const formatLabel = (key: string, translate = tAchievements) => translate(`xp.source.${key}`) !== `xp.source.${key}`

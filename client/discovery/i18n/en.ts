@@ -1525,7 +1525,7 @@ export const en = {
             mostCommon: 'Most common',
             noData: 'No data yet.',
             xpWeights: 'XP weights',
-            xpWeightsHint: 'Points awarded per stat. Watch time is 1 XP per minute by default. Hours watched stays at 0 so it does not double-count minutes. Total plays defaults to 0 because it double-counts movie/episode/track plays. Rebuild XP snapshots after changing weights.',
+            xpWeightsHint: 'Points awarded per stat. Watch time is 1 XP per minute, doubled on Sundays. Finishes, daily first-watch, current streak, binge sessions, badge unlocks, and media requests also pay XP. Hours watched and total plays stay at 0 so they do not double-count. Rebuild XP snapshots after changing weights.',
             resetToDefaults: 'Reset to defaults',
             disableBadges: 'Disable badges',
             disableBadgesHint: 'Hidden badges stay locked for everyone and won’t appear in progress or the hall of fame.',
