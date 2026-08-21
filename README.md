@@ -48,6 +48,7 @@ Once set up, users sign in with Plex OAuth or Jellyfin / Emby authentication (Qu
 | **Analytics** | Everyone | Deeper personal and server analytics |
 | **Achievements** | Everyone | XP, badge ladders, streaks, and optional leaderboard |
 | **Profile** | Everyone | Shareable dossier, trophy case, taste stats, last watched |
+| **Preferences** | Everyone | Language, theme, notifications, and privacy overrides |
 | **Support** | Everyone | In-portal tickets with comments and unread badges |
 | **Users / Settings** | Admin | Access, invites, branding, layout, and integrations |
 | **ColleXions** | Admin | Automated Plex collections from Trakt, MDBList, TMDB, and recipes |
@@ -120,8 +121,10 @@ Every member has a **Profile** page that doubles as a shareable dossier:
 - Trophy case of earned Achievements badges (click through to badge detail)
 - Wrap-up recap with the same shareable PNG export as Home
 - Last watched / recently requested rails that deep-link into Discover
-- Public share URL so signed-in members can open each other's dossiers
+- Share URL so signed-in members can open each other's dossiers when the owner has **Show my profile** on
 - **Dossier Arena** matchup on the Achievements leaderboard for comparing two users
+
+Visibility of names, trophies, email, and libraries follows **Preferences → Privacy** (see [Privacy](#privacy)).
 
 ---
 
@@ -134,6 +137,38 @@ Opt-in gamification powered by Tautulli / Jellystat watch history (enable in **S
 - Unlock celebrations, a pin-able badge rack, and optional in-app notifications
 - Server **leaderboard** (can be hidden independently of Achievements)
 - Shareable Achievements recap image, same native-share flow as wrap-up
+- Leaderboard and public trophy case honour **Show my achievements**; you always see your own badges
+
+---
+
+### Privacy
+
+Identity on live streams, Dashboard Now Playing, Analytics, the Achievements leaderboard, and member profiles is privacy-first. Admins pick the **default** experience for the community; each member can then tighten (or, when names are allowed, relax) what others see about **them**.
+
+**Admin default (Settings → Stream User Privacy)** — how non-admins see other people, including the public status page:
+
+| Mode | What other members see | Members can still… |
+|---|---|---|
+| **Show Names** | Real usernames and player/device names | Hide their own name, player, profile, achievements, email, or libraries in Preferences |
+| **Show as Anonymous** | Everyone appears as Anonymous | Hide extra profile fields (email, libraries, profile link, achievements). They cannot unmask their name while this mode is on |
+| **Hide Completely** | Names and player labels are omitted | Same extra-field controls as Anonymous |
+
+**Settings → Analytics → Show usernames in Analytics** is a separate default: when off, non-admins see Viewer 1 / Device 1 style labels on Analytics even if stream names are shown elsewhere.
+
+Admins (and impersonation-as-admin) always see real identities. Use **Show as Anonymous** or **Hide Completely** when you want a private community by default; members who want to be visible wait until you switch back to **Show Names**, then opt in from Preferences.
+
+**Member overrides (Preferences → Privacy)** — stored on the account and applied whenever the admin allows names:
+
+| Toggle | Default | What it controls |
+|---|---|---|
+| **Show my name** | On | Username on Dashboard, Analytics, leaderboard, and profile |
+| **Show my player name** | On | Player / device on Now Playing |
+| **Show my achievements** | On | Appear on the leaderboard and show trophies on your public profile |
+| **Show my profile** | On | Other members can open your dossier from the leaderboard and Dashboard (admins can still view it) |
+| **Show my email** | Off | Email on your profile |
+| **Show my libraries** | Off | Which libraries you can access |
+
+Turning a toggle off only hides **you** from other members. It does not change anyone else's visibility. If the admin later hides names globally, name and player toggles pause until names are allowed again; your saved choices come back when they do.
 
 ---
 
@@ -377,7 +412,7 @@ Beautiful, responsive HTML emails sent automatically:
 ### Public-Facing Pages
 
 - **Landing Page** - A sleek login page showing live library stats (total movies, shows, music) and your configured server branding
-- **Status Page** - A public `/status` dashboard showing the live uptime of your media server, analytics companion, and download clients
+- **Status Page** - A public `/status` dashboard showing the live uptime of your media server, analytics companion, and download clients. Stream identities on that page follow **Stream User Privacy**
 - **Invite Claim Page** - A dedicated, shareable page for invited users to claim their account
 
 ---
@@ -739,6 +774,8 @@ All configuration is managed through the **Settings UI** in the browser. Key opt
 | Download Clients | qBittorrent, Real-Debrid Client, Transmission, BitTorrent, Deluge, SABnzbd, and NZBGet for the Downloads page |
 | Request App (optional) | Seerr / Jellyseerr URL and API key — use as request engine, Discover metadata source, or history import |
 | Tautulli / Jellystat | Tautulli for Plex analytics, Jellystat for Jellyfin analytics |
+| Stream User Privacy | Default identity policy for non-admins: show names, show as Anonymous, or hide completely. Members override their own profile in Preferences when names are allowed |
+| Show usernames in Analytics | Whether non-admins see real names on Analytics (otherwise Viewer 1 / Device 1) |
 | Scanner | Autoscan-style library refresh, ARR webhooks, path rewrites |
 | ColleXions / Overlays / Poster Sets / Editions | Enable bundled Plex workers (collections, Layer stamps, artwork sets, edition tags) |
 | Achievements / Support | XP/badges/leaderboard, and in-portal tickets |
