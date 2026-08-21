@@ -294,6 +294,61 @@ mapped = _query_rating_keys(
 )
 assert mapped == {"99", "50", "7"}, mapped
 
+from kometa_detect import (
+    _episode_el_resolution_key,
+    _index_show_resolutions_from_episode_listing,
+)
+
+
+class _MediaEl:
+    def __init__(self, **kw):
+        self.attrib = {k: str(v) for k, v in kw.items()}
+
+    def findall(self, tag):
+        return []
+
+
+class _EpVideo:
+    def __init__(self, rk, gp, **media):
+        self.attrib = {
+            "ratingKey": str(rk),
+            "grandparentRatingKey": str(gp),
+            "type": "episode",
+        }
+        self._media = [_MediaEl(**media)]
+
+    def findall(self, tag):
+        return self._media if tag == "Media" else []
+
+
+class _EpPage(list):
+    def __init__(self, videos):
+        super().__init__(videos)
+        self._videos = videos
+        self.attrib = {"totalSize": str(len(videos)), "size": str(len(videos))}
+
+    def findall(self, tag):
+        return self._videos if tag == "Video" else []
+
+
+class _PlexEpisodes:
+    def query(self, path, headers=None):
+        return self.page
+
+    def __init__(self, page):
+        self.page = page
+
+
+uhd_ep = _EpVideo(99, 7, videoResolution="uhd", width="3840")
+hd_ep = _EpVideo(100, 8, videoResolution="1080", width="1920")
+assert _episode_el_resolution_key(uhd_ep) == "4k"
+listing = _index_show_resolutions_from_episode_listing(
+    _PlexEpisodes(_EpPage([uhd_ep, hd_ep])),
+    "2",
+)
+assert listing["4k"] == {"7"}, listing
+assert listing["1080p"] == {"8"}, listing
+
 # Compose with stage-4 winners
 winners2 = {
     "aspect": Winner(family="aspect", name="2.35", key="2.35", text="2.35"),

@@ -2018,6 +2018,7 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                     progress,
                     f"{getattr(item, 'title', key)}: skipped (Overlay label / external Kometa)",
                 )
+                skipped += 1
                 continue
             item_type = str(getattr(item, "type", "") or "").lower()
             library = _item_library_title(item)
@@ -2027,6 +2028,7 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                 "itemType": item_type,
                 "winners": {},
             }
+            attempted: set[str] = set()
             for family in media_family_set:
                 if item_type == "episode" and family != "episode_info":
                     continue
@@ -2046,6 +2048,7 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                 allow, deny = allow_deny.get(FAMILY_SCOPE.get(family, ""), ([], []))
                 if not _title_allowed(key, allow, deny):
                     continue
+                attempted.add(family)
                 try:
                     section = None
                     try:
@@ -2071,20 +2074,55 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
             if row["winners"]:
                 should[key] = row
             elif media_family_set:
-                _progress(
-                    progress,
-                    f"{getattr(item, 'title', key)}: no Layer family matched — waiting for collection rules if enabled",
-                )
+                title = getattr(item, "title", key)
+                not_applicable = sorted(media_family_set - attempted)
+                if attempted:
+                    detail = f"tried {', '.join(sorted(attempted))} — no matching data found on this title"
+                    if not_applicable:
+                        detail += f"; {', '.join(not_applicable)} don't apply to a {item_type or 'this'} item"
+                else:
+                    detail = (
+                        f"none of your enabled families ({', '.join(not_applicable)}) apply to a "
+                        f"{item_type or 'this'} item"
+                    )
+                _progress(progress, f"{title}: no Layer badge matched — {detail}")
     elif media_family_set:
         if detector is None:
             detector = KometaDetector(plex, progress=progress)
         plans = _collect_section_plans(plex, config, scope=scope_name)
+        movie_libs = []
+        show_libs = []
+        for plan in plans.values():
+            section = plan["section"]
+            families_here = plan["families"] & media_family_set
+            if not families_here:
+                continue
+            stype = str(getattr(section, "type", "") or "").lower()
+            title = str(getattr(section, "title", "") or "")
+            (show_libs if stype == "show" else movie_libs).append(title or str(getattr(section, "key", "")))
+        _progress(
+            progress,
+            f"Layer libraries: {len(movie_libs)} movie ({', '.join(movie_libs) or 'none'}), "
+            f"{len(show_libs)} TV ({', '.join(show_libs) or 'none'})",
+        )
+        if "resolution" in media_family_set and not show_libs:
+            _progress(
+                progress,
+                "No TV libraries in this Layer pass — 4K will not stamp show posters. "
+                "Enable Include TV shows and tick TV libraries on Media / Layer.",
+            )
         for sid, plan in plans.items():
             section = plan["section"]
             section_families = plan["families"] & media_family_set
             if not section_families:
                 continue
-            _progress(progress, f"Layer scan: {getattr(section, 'title', sid)} ({', '.join(sorted(section_families))})…")
+            stype = str(getattr(section, "type", "") or "").lower() or "unknown"
+            _progress(
+                progress,
+                f"Layer scan: {getattr(section, 'title', sid)} [{stype}] ({', '.join(sorted(section_families))})…",
+            )
+            if stype == "show" and "resolution" in section_families:
+                detector.index_for(section, need_resolution=True, need_hdr=True, need_dovi=True)
             for item in _iter_section_items(section, section_families):
                 scanned += 1
                 if scanned % 50 == 0:
@@ -2098,6 +2136,7 @@ def run_kometa_parity(plex, config: dict, paths: dict, preview_mode: bool, progr
                     and _has_kometa_overlay_label(item)
                     and not _overlay_label_explained_locally(paths, key)
                 ):
+                    skipped += 1
                     continue  # managed by a real Kometa install — leave alone
                 item_type = str(getattr(item, "type", "") or "").lower()
                 row = should.get(key) or {

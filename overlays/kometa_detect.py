@@ -418,22 +418,162 @@ def _container_children(data) -> list:
     return children
 
 
-def _rating_keys_from_el(el, *, include_ancestors: bool = False) -> list[str]:
+def _el_attr(el, name: str) -> str:
+    """ratingKey / grandparentRatingKey from XML attrib, Element.get, or plexapi objects."""
     attrib = getattr(el, "attrib", None) or {}
+    if hasattr(attrib, "get"):
+        val = attrib.get(name)
+        if val:
+            return str(val)
+    getter = getattr(el, "get", None)
+    if callable(getter):
+        try:
+            val = getter(name)
+            if val:
+                return str(val)
+        except Exception:
+            pass
+    val = getattr(el, name, None)
+    return str(val) if val else ""
+
+
+def _rating_keys_from_el(el, *, include_ancestors: bool = False) -> list[str]:
     keys: list[str] = []
-    rk = attrib.get("ratingKey") if hasattr(attrib, "get") else None
-    if rk is None:
-        rk = getattr(el, "ratingKey", None)
+    rk = _el_attr(el, "ratingKey")
     if rk:
-        keys.append(str(rk))
+        keys.append(rk)
     if include_ancestors:
         for name in ("parentRatingKey", "grandparentRatingKey"):
-            val = attrib.get(name) if hasattr(attrib, "get") else None
-            if val is None:
-                val = getattr(el, name, None)
+            val = _el_attr(el, name)
             if val:
-                keys.append(str(val))
+                keys.append(val)
     return keys
+
+
+def _episode_el_resolution_key(el) -> str | None:
+    """Best resolution on an episode Video/Media node (list views include Media)."""
+    medias = []
+    try:
+        if hasattr(el, "findall"):
+            medias = list(el.findall("Media") or [])
+    except Exception:
+        medias = []
+    if not medias:
+        try:
+            medias = list(getattr(el, "media", None) or [])
+        except Exception:
+            medias = []
+    best: str | None = None
+    rank = {"4k": 5, "1080p": 4, "720p": 3, "576p": 2, "480p": 1}
+    for media in medias:
+        attrib = getattr(media, "attrib", None) or {}
+        try:
+            width = int(
+                (attrib.get("width") if hasattr(attrib, "get") else None)
+                or getattr(media, "width", None)
+                or 0
+            )
+        except (TypeError, ValueError):
+            width = 0
+        vres = str(
+            (attrib.get("videoResolution") if hasattr(attrib, "get") else None)
+            or getattr(media, "videoResolution", None)
+            or ""
+        ).strip().lower()
+        key = None
+        if (
+            width >= 3800
+            or vres in {"4k", "2160", "2160p", "uhd"}
+            or "4k" in vres
+            or "2160" in vres
+            or "uhd" in vres
+        ):
+            key = "4k"
+        elif width >= 1800 or "1080" in vres or vres == "2k":
+            key = "1080p"
+        elif width >= 1200 or "720" in vres:
+            key = "720p"
+        elif "576" in vres:
+            key = "576p"
+        elif width > 0 or "480" in vres or vres in {"sd", "480"}:
+            key = "480p"
+        if key and (best is None or rank.get(key, 0) > rank.get(best, 0)):
+            best = key
+            if best == "4k":
+                break
+    return best
+
+
+def _index_show_resolutions_from_episode_listing(
+    plex,
+    sid: str,
+    *,
+    page_size: int = 500,
+    progress: ProgressFn | None = None,
+) -> dict[str, set[str]]:
+    """Page every episode and stamp the *show* key from videoResolution/width.
+
+    TV resolution filters (`resolution=4k` / `uhd`) often return episode rows
+    without grandparentRatingKey, or 400 entirely. The portal stats builder
+    already uses `/all?type=4` + Media.videoResolution — do the same here.
+    """
+    buckets: dict[str, set[str]] = {key: set() for key in _RESOLUTION_RES_RE}
+    start = 0
+    size = max(50, int(page_size) or 500)
+    episodes = 0
+    mapped = 0
+    path = f"/library/sections/{sid}/all?type=4"
+    while True:
+        headers = {
+            "X-Plex-Container-Start": str(start),
+            "X-Plex-Container-Size": str(size),
+        }
+        try:
+            data = plex.query(path, headers=headers)
+        except TypeError:
+            data = plex.query(
+                f"{path}&X-Plex-Container-Start={start}&X-Plex-Container-Size={size}"
+            )
+        except Exception:
+            break
+        if data is None:
+            break
+        children = _container_children(data)
+        if not children:
+            break
+        batch = 0
+        for el in children:
+            batch += 1
+            episodes += 1
+            show_key = _el_attr(el, "grandparentRatingKey") or _el_attr(el, "parentRatingKey")
+            if not show_key:
+                continue
+            res_key = _episode_el_resolution_key(el)
+            if not res_key:
+                continue
+            buckets[res_key].add(show_key)
+            mapped += 1
+        try:
+            attrib = getattr(data, "attrib", None) or {}
+            total = int(attrib.get("totalSize") or attrib.get("size") or 0)
+        except (TypeError, ValueError, AttributeError):
+            total = 0
+        start += size
+        if progress and episodes and episodes % 2000 == 0:
+            progress(f"Section {sid}: reading episode resolution ({episodes} scanned)…")
+        if batch == 0:
+            break
+        if total > 0 and start >= total:
+            break
+        if batch < size:
+            break
+    fourk = len(buckets.get("4k") or [])
+    if progress:
+        progress(
+            f"Section {sid}: TV episode listing — {fourk} 4K shows "
+            f"({mapped} episodes with resolution, {episodes} scanned)"
+        )
+    return buckets
 
 
 def _query_rating_keys(
@@ -608,15 +748,27 @@ class SectionIndex:
                     if is_show:
                         # Episode rows actually carry resolution. Map them onto the
                         # show (and season) via grandparent/parent so show posters stamp.
-                        try:
-                            members |= _query_rating_keys(
-                                plex,
-                                f"/library/sections/{sid}/all?type=4&resolution={choice}",
-                                include_ancestors=True,
-                            )
-                        except Exception:
-                            pass
+                        for extra in (
+                            f"/library/sections/{sid}/all?type=4&resolution={choice}",
+                            f"/library/sections/{sid}/all?type=4&episode.resolution={choice}",
+                        ):
+                            try:
+                                members |= _query_rating_keys(
+                                    plex,
+                                    extra,
+                                    include_ancestors=True,
+                                )
+                            except Exception:
+                                pass
                 idx.resolution_members[res_key] = members
+            if is_show:
+                # Filter queries miss show keys when Plex omits ancestors or
+                # rejects resolution= on type=4. Listing walk is the stats-builder path.
+                listing = _index_show_resolutions_from_episode_listing(
+                    plex, sid, progress=progress
+                )
+                for res_key, keys in listing.items():
+                    idx.resolution_members.setdefault(res_key, set()).update(keys)
             if progress:
                 counts = ", ".join(
                     f"{k}={len(v)}" for k, v in sorted(idx.resolution_members.items()) if v
@@ -638,6 +790,14 @@ class SectionIndex:
                     idx.hdr_members |= _query_rating_keys(
                         plex,
                         f"/library/sections/{sid}/all?type=4&hdr=1",
+                        include_ancestors=True,
+                    )
+                except Exception:
+                    pass
+                try:
+                    idx.hdr_members |= _query_rating_keys(
+                        plex,
+                        f"/library/sections/{sid}/all?type=4&episode.hdr=1",
                         include_ancestors=True,
                     )
                 except Exception:
