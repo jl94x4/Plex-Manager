@@ -1912,10 +1912,11 @@ def _update_collection_items_in_place(coll, matched_items, label):
             _remove_collection_item_keys(coll, removed_keys)
         except Exception as e:
             logging.warning(f"Failed to remove old items from '{coll.title}': {e}")
-    try:
-        coll.addLabel(label)
-    except Exception:
-        pass
+    if not _collection_has_label(coll, label):
+        try:
+            coll.addLabel(label)
+        except Exception:
+            pass
     return {
         'changed': bool(to_add or to_remove),
         'added': len(to_add),
@@ -1927,10 +1928,11 @@ def _update_collection_items_in_place(coll, matched_items, label):
 def _update_smart_collection_in_place(coll, matched_items, sort_order='custom', label='Collexions'):
     """Fallback when a smart collection cannot be converted to regular."""
     current = _item_rating_keys(list(coll.items() or []))
-    try:
-        coll.addLabel(label)
-    except Exception:
-        pass
+    if not _collection_has_label(coll, label):
+        try:
+            coll.addLabel(label)
+        except Exception:
+            pass
     logging.warning(
         "Left smart collection '%s' unchanged — convert it from Gallery → Repair Plex tab.",
         getattr(coll, 'title', '?'),
@@ -1958,39 +1960,125 @@ def _collection_has_label(coll, label):
     return False
 
 
-def _capture_collection_visibility(coll):
-    vis = {'home': False, 'shared': False, 'recommended': False}
+def _collection_section_id(coll):
+    sid = getattr(coll, 'librarySectionID', None)
+    if sid:
+        return str(sid)
     try:
-        hubs = coll.visibility()
-        if not isinstance(hubs, list):
-            hubs = [hubs] if hubs else []
-        for hub in hubs:
-            if not hub:
-                continue
-            vis['home'] = vis['home'] or bool(getattr(hub, 'promotedToOwnHome', False))
-            vis['shared'] = vis['shared'] or bool(getattr(hub, 'promotedToSharedHome', False))
-            vis['recommended'] = vis['recommended'] or bool(getattr(hub, 'promotedToRecommended', False))
+        key = str(getattr(coll.section(), 'key', '') or '')
+        return key.rstrip('/').split('/')[-1]
+    except Exception:
+        return ''
+
+
+def _iter_visibility_hubs(coll):
+    """Hubs that hold Show on Home / Friends / Recommended for this collection."""
+    if coll is None:
+        return []
+    hubs = []
+    try:
+        raw = coll.visibility()
+    except Exception:
+        raw = None
+    if isinstance(raw, list):
+        hubs.extend([hub for hub in raw if hub])
+    elif raw:
+        hubs.append(raw)
+    if hubs:
+        return hubs
+    try:
+        section = coll.section()
+        sid = _collection_section_id(coll)
+        rk = str(getattr(coll, 'ratingKey', '') or '')
+        want = f'custom.collection.{sid}.{rk}'
+        for hub in section.managedHubs() or []:
+            ident = str(getattr(hub, 'identifier', '') or '')
+            if ident == want or (rk and ident.endswith(f'.{rk}')):
+                return [hub]
     except Exception:
         pass
+    return []
+
+
+def _capture_collection_visibility(coll):
+    vis = {'home': False, 'shared': False, 'recommended': False}
+    for hub in _iter_visibility_hubs(coll):
+        vis['home'] = vis['home'] or bool(getattr(hub, 'promotedToOwnHome', False))
+        vis['shared'] = vis['shared'] or bool(getattr(hub, 'promotedToSharedHome', False))
+        vis['recommended'] = vis['recommended'] or bool(getattr(hub, 'promotedToRecommended', False))
     return vis
 
 
-def _restore_collection_visibility(coll, vis):
-    if not vis or not any(vis.values()):
-        return
+def _restore_visibility_via_manage_api(coll, vis):
+    server = getattr(coll, '_server', None)
+    sid = _collection_section_id(coll)
+    rk = str(getattr(coll, 'ratingKey', '') or '')
+    if not server or not sid or not rk:
+        return False
+    params = {'metadataItemId': rk}
+    if vis.get('recommended'):
+        params['promotedToRecommended'] = 1
+    if vis.get('home'):
+        params['promotedToOwnHome'] = 1
+    if vis.get('shared'):
+        params['promotedToSharedHome'] = 1
+    if len(params) == 1:
+        return False
     try:
-        hub = coll.visibility()
-        if vis.get('home'):
-            hub.promoteHome()
-        if vis.get('shared'):
-            hub.promoteShared()
-        if vis.get('recommended'):
-            try:
-                hub.promoteRecommended()
-            except Exception:
-                pass
+        server.query(
+            f"/hubs/sections/{sid}/manage{_join_query_args(params)}",
+            method=server._session.put,
+        )
+        return True
     except Exception as exc:
-        logging.warning("Could not restore pins for '%s': %s", getattr(coll, 'title', '?'), exc)
+        logging.warning(
+            "Could not restore home visibility for '%s' via manage API: %s",
+            getattr(coll, 'title', '?'),
+            exc,
+        )
+        return False
+
+
+def _restore_collection_visibility(coll, vis):
+    """Re-apply Show on Home / Friends after Plex clears them on collection writes."""
+    if coll is None or not vis or not any(vis.values()):
+        return
+    kwargs = {}
+    if vis.get('home'):
+        kwargs['home'] = True
+    if vis.get('shared'):
+        kwargs['shared'] = True
+    if vis.get('recommended'):
+        kwargs['recommended'] = True
+    for hub in _iter_visibility_hubs(coll):
+        if kwargs and hasattr(hub, 'updateVisibility'):
+            try:
+                hub.updateVisibility(**kwargs)
+                return
+            except Exception as exc:
+                logging.warning(
+                    "updateVisibility failed for '%s': %s",
+                    getattr(coll, 'title', '?'),
+                    exc,
+                )
+        try:
+            if vis.get('home') and hasattr(hub, 'promoteHome'):
+                hub.promoteHome()
+            if vis.get('shared') and hasattr(hub, 'promoteShared'):
+                hub.promoteShared()
+            if vis.get('recommended') and hasattr(hub, 'promoteRecommended'):
+                try:
+                    hub.promoteRecommended()
+                except Exception:
+                    pass
+            return
+        except Exception as exc:
+            logging.warning(
+                "Could not restore pins for '%s': %s",
+                getattr(coll, 'title', '?'),
+                exc,
+            )
+    _restore_visibility_via_manage_api(coll, vis)
 
 
 def _copy_collection_poster(src, dest):
@@ -2354,12 +2442,15 @@ def _ensure_random_smart_collection(library, title, matched_items, label='Collex
             f"(label '{tag}', old key {old_rk} → {getattr(coll, 'ratingKey', '?')})."
         )
     elif coll is not None:
-        # Already smart — repoint at our label filter + random sort. This also
-        # repairs legacy id-filter smarts (the crashy kind) in place.
-        try:
-            _update_random_smart_filter(library, coll, tag)
-        except Exception as e:
-            logging.warning("Could not update random smart filter on '%s': %s", title, e)
+        # Already smart. Membership is the label on titles — do not PUT the
+        # smart filter URI on every run. That rewrite clears Show on Home / Friends.
+        if not _smart_collection_is_label_based(coll):
+            vis = _capture_collection_visibility(coll)
+            try:
+                _update_random_smart_filter(library, coll, tag)
+            except Exception as e:
+                logging.warning("Could not update random smart filter on '%s': %s", title, e)
+            _restore_collection_visibility(coll, vis)
     else:
         coll = _create_random_smart_collection(library, title, tag)
         created_fresh = True
@@ -2383,10 +2474,13 @@ def _ensure_random_smart_collection(library, title, matched_items, label='Collex
             coll = fallback
             created_fresh = True
 
-    try:
-        coll.addLabel(label)
-    except Exception:
-        pass
+    if not _collection_has_label(coll, label):
+        vis_label = _capture_collection_visibility(coll)
+        try:
+            coll.addLabel(label)
+        except Exception:
+            pass
+        _restore_collection_visibility(coll, vis_label)
     return coll, created_fresh, _delta(created_fresh)
 
 
@@ -2450,11 +2544,14 @@ def _upsert_plex_collection(library, title, matched_items, sort_order='custom', 
             delta = _update_smart_collection_in_place(coll, matched_items, sort_order=sort_order, label=label)
             return coll, False, delta
 
+        vis = _capture_collection_visibility(coll)
         try:
             delta = _update_collection_items_in_place(coll, matched_items, label)
             _apply_collection_sort(coll, matched_items, sort_order, reorder=True)
+            _restore_collection_visibility(coll, vis)
             return coll, False, delta
         except Exception as e:
+            _restore_collection_visibility(coll, vis)
             if _as_live_collection(library, coll) is not None:
                 raise
             logging.warning("Collection '%s' vanished during update (%s) — recreating.", title, e)
@@ -2952,6 +3049,7 @@ def create_collection_from_source(library_name, title, source_type, source_id=''
             if not matched_items:
                 return {"success": False, "error": "No items matched your local library", "matched": 0, "total": len(items)}
 
+            vis = _capture_collection_visibility(_resolve_collection(library, title=title))
             coll, created_fresh, membership_delta = _upsert_plex_collection(
                 library,
                 title,
@@ -2971,6 +3069,7 @@ def create_collection_from_source(library_name, title, source_type, source_id=''
                 force=created_fresh,
             )
             web_fixes = _finalize_collection_for_plex_web(coll, library, config)
+            _restore_collection_visibility(coll, vis)
 
             job_id = None
             if auto_sync and source_type:
@@ -3171,6 +3270,8 @@ def run_sync_job(job_id=None):
             try:
                 with _collection_create_lock(lib_name, coll_name):
                     keep_key = str(job.get('rating_key') or job.get('ratingKey') or '').strip() or None
+                    existing = _resolve_collection(library, title=coll_name, rating_key=keep_key)
+                    vis = _capture_collection_visibility(existing)
                     coll, created_fresh, membership_delta = _upsert_plex_collection(
                         library,
                         coll_name,
@@ -3208,6 +3309,7 @@ def run_sync_job(job_id=None):
                         force=created_fresh,
                     )
                     _finalize_collection_for_plex_web(coll, library, config)
+                    _restore_collection_visibility(coll, vis)
                     if created_fresh:
                         log_action(f"Auto-Sync: Created '{coll_name}' with {len(plex_items)} items.")
                     else:
@@ -5716,7 +5818,8 @@ def create_custom_collection():
                     
             if not items:
                 return jsonify({"success": False, "error": "No matching items found in library"}), 404
-                
+
+            vis = _capture_collection_visibility(_resolve_collection(library, title=title))
             collection, created_fresh, membership_delta = _upsert_plex_collection(
                 library,
                 title,
@@ -5733,6 +5836,7 @@ def create_custom_collection():
                 force=created_fresh,
             )
             web_fixes = _finalize_collection_for_plex_web(collection, library, config)
+            _restore_collection_visibility(collection, vis)
             
             log_action(f"Created/updated collection '{title}' with {len(items)} items in {library_name} (Sort: {sort_order}).")
             
