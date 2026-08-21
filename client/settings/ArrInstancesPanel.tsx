@@ -3,7 +3,7 @@ import { Plus, Trash2, Star, Loader2 } from 'lucide-react';
 import type { ArrInstance } from '../shared/types';
 import { apiFetch } from '../shared/api';
 import { IntegrationTestButton } from '../shared/IntegrationTestButton';
-import { SettingsSwitch } from '../shared/ui';
+import { SettingsSwitch, CustomSelect } from '../shared/ui';
 
 const SECRET_MASK = '••••••••';
 type ArrAppType = ArrInstance['type'];
@@ -34,8 +34,10 @@ const hasCredentials = (
     saved?: ArrInstance,
 ) => {
     const effectiveUrl = String(instance.url || saved?.url || '').trim();
-    const effectiveKey = String(instance.apiKey || saved?.apiKey || '').trim();
-    return Boolean(effectiveUrl && effectiveKey && effectiveKey !== SECRET_MASK);
+    const draftKey = String(instance.apiKey || '').trim();
+    const savedKey = String(saved?.apiKey || '').trim();
+    const hasKey = (draftKey && draftKey !== SECRET_MASK) || !!savedKey;
+    return Boolean(effectiveUrl && hasKey);
 };
 
 const generateId = () => {
@@ -203,54 +205,49 @@ const ArrInstanceRoutingDefaults: React.FC<{
     const folderValue = instance.defaultRootFolder || '';
     const profileIds = new Set(options.profiles.map((profile) => String(profile.id)));
     const folderPaths = new Set(options.rootFolders.map((folder) => folder.path));
-
-    const selectClass = 'w-full p-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-sm';
+    const profileSelectOptions = [
+        { value: '', label: copy.useArrDefault },
+        ...options.profiles.map((profile) => ({ value: String(profile.id), label: profile.name })),
+        ...(profileValue && !profileIds.has(profileValue)
+            ? [{ value: profileValue, label: `Profile ${profileValue}` }]
+            : []),
+    ];
+    const folderSelectOptions = [
+        { value: '', label: copy.useArrDefault },
+        ...options.rootFolders.map((folder) => ({ value: folder.path, label: folder.path })),
+        ...(folderValue && !folderPaths.has(folderValue)
+            ? [{ value: folderValue, label: folderValue }]
+            : []),
+    ];
 
     return (
         <div className="space-y-3">
             <p className="text-[11px] text-muted">{copy.routingDefaultsHint}</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 ${!canLoad ? 'opacity-50 pointer-events-none' : ''}`}>
                 <div>
                     <label className="text-xs text-muted uppercase tracking-wider font-bold mb-1 flex items-center gap-2">
                         {copy.defaultQualityProfile}
                         {loading ? <Loader2 className="w-3 h-3 animate-spin text-plex" /> : null}
                     </label>
-                    <select
-                        className={selectClass}
-                        disabled={!canLoad || loading}
+                    <CustomSelect
+                        compact
                         value={profileValue}
-                        onChange={(event) => {
-                            const next = event.target.value;
+                        onChange={(next) => {
                             onChange({ defaultQualityProfileId: next ? Number(next) : null });
                         }}
-                    >
-                        <option value="">{copy.useArrDefault}</option>
-                        {options.profiles.map((profile) => (
-                            <option key={profile.id} value={String(profile.id)}>{profile.name}</option>
-                        ))}
-                        {profileValue && !profileIds.has(profileValue) ? (
-                            <option value={profileValue}>{`Profile ${profileValue}`}</option>
-                        ) : null}
-                    </select>
+                        options={profileSelectOptions}
+                    />
                 </div>
                 <div>
                     <label className="text-xs text-muted uppercase tracking-wider font-bold mb-1 block">
                         {copy.defaultRootFolder}
                     </label>
-                    <select
-                        className={selectClass}
-                        disabled={!canLoad || loading}
+                    <CustomSelect
+                        compact
                         value={folderValue}
-                        onChange={(event) => onChange({ defaultRootFolder: event.target.value })}
-                    >
-                        <option value="">{copy.useArrDefault}</option>
-                        {options.rootFolders.map((folder) => (
-                            <option key={folder.path} value={folder.path}>{folder.path}</option>
-                        ))}
-                        {folderValue && !folderPaths.has(folderValue) ? (
-                            <option value={folderValue}>{folderValue}</option>
-                        ) : null}
-                    </select>
+                        onChange={(next) => onChange({ defaultRootFolder: next })}
+                        options={folderSelectOptions}
+                    />
                 </div>
             </div>
             {!canLoad ? (
