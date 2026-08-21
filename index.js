@@ -75,7 +75,7 @@ import { registerProfileRoutes } from './lib/profile/http.js';
 import { registerSupportTicketRoutes } from './lib/support-tickets/http.js';
 import { createSupportTicketFromMediaIssue, attachTicketIdsToIssues } from './lib/support-tickets/fromIssue.js';
 import { mapTautulliHistoryRowToPlexItem } from './lib/achievements/tautulliHistory.js';
-import { isTautulliWatchHistorySource, buildAchievementsHomeRankContext, summarizeAchievementsBackfill } from './lib/achievements/index.js';
+import { isTautulliWatchHistorySource, buildAchievementsHomeRankContext, summarizeAchievementsBackfill, levelProgress } from './lib/achievements/index.js';
 import { loadAchievementsState, setLeaderboardOptOut } from './lib/achievements/store.js';
 import { resolveAchievementsAccountId } from './lib/profile/assemble.js';
 import { sanitizeProfileBio } from './lib/profile/social.js';
@@ -1000,6 +1000,49 @@ const personalAnalyticsDaysKey = (raw) => {
     if (raw === 'all') return 'all';
     const days = parseInt(String(raw || '30'), 10);
     return Number.isFinite(days) && days > 0 ? String(days) : '30';
+};
+
+/** Always stamp wrap-up rank/XP from the live achievements snapshot so Home cannot drift. */
+const overlayAchievementsXpOnWrapUp = async (payload, {
+    accountID,
+    config,
+    req,
+    usernameMap = {},
+} = {}) => {
+    if (!payload || !accountID || !config?.achievementsEnabled) return payload;
+    if (config.achievementsLeaderboardEnabled === false) return payload;
+    try {
+        const achievementsState = await loadAchievementsState();
+        const obfuscate = shouldObfuscateAnalyticsViewers(req?.user, config);
+        const xpRank = buildAchievementsHomeRankContext(achievementsState, {
+            accountId: accountID,
+            obfuscate,
+            usernameMap,
+        });
+        if (!xpRank || xpRank.myXp == null) return payload;
+        const users = await loadFile(USERS_PATH, []);
+        const neighbourhood = applyMemberNamePrivacyToRows(
+            xpRank.leaderboardNeighbourhood,
+            users,
+            { obfuscate, viewerIsAdmin: !!req?.user?.isAdmin },
+        );
+        return {
+            ...payload,
+            myXp: xpRank.myXp,
+            myLevel: xpRank.myLevel,
+            myLevelProgress: levelProgress(xpRank.myXp),
+            myPlaysOnLeaderboard: xpRank.myPlaysOnLeaderboard,
+            leaderboardRank: xpRank.leaderboardRank ?? payload.leaderboardRank,
+            totalActiveUsers: xpRank.totalActiveUsers || payload.totalActiveUsers,
+            leaderboardNeighbourhood: neighbourhood?.length
+                ? neighbourhood
+                : payload.leaderboardNeighbourhood,
+            leaderboardSource: 'achievements',
+            leaderboardMetric: 'xp',
+        };
+    } catch {
+        return payload;
+    }
 };
 
 /**
@@ -17104,6 +17147,7 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
         let leaderboardSource = 'period_plays';
         let leaderboardMetric = 'plays';
         let myXp = null;
+        let myLevel = null;
         // Canonical Home Server Rank = Achievements all-time XP when enabled.
         // Analytics period still drives streams / wrap stats — not this rank.
         if (config.achievementsEnabled && config.achievementsLeaderboardEnabled !== false) {
@@ -17126,6 +17170,7 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
                     );
                     leaderboardSource = xpRank.leaderboardSource;
                     leaderboardMetric = xpRank.leaderboardMetric;
+                    myLevel = xpRank.myLevel;
                 }
             } catch (e) {
                 log(`Achievements home rank fallback to period plays: ${e.message}`);
@@ -17151,6 +17196,8 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
             totalActiveUsers,
             myPlaysOnLeaderboard,
             myXp,
+            myLevel,
+            myLevelProgress: myXp != null ? levelProgress(myXp) : null,
             leaderboardNeighbourhood,
             leaderboardSource,
             leaderboardMetric,
@@ -17248,12 +17295,20 @@ app.get('/api/plex/analytics/me', requireAuth, requireMember, async (req, res) =
         }
 
         if (cacheFresh) {
-            return res.json({ ...cached.payload, fromCache: true, stale: false });
+            return res.json({
+                ...(await overlayAchievementsXpOnWrapUp(cached.payload, { accountID, config, req })),
+                fromCache: true,
+                stale: false,
+            });
         }
 
         // Stale-while-revalidate: paint instantly from last payload while we rebuild.
         if (cached?.payload) {
-            res.json({ ...cached.payload, fromCache: true, stale: true });
+            res.json({
+                ...(await overlayAchievementsXpOnWrapUp(cached.payload, { accountID, config, req })),
+                fromCache: true,
+                stale: true,
+            });
             if (!personalAnalyticsRefreshJobs.has(cacheKey)) {
                 const job = (async () => {
                     try {
@@ -17276,13 +17331,16 @@ app.get('/api/plex/analytics/me', requireAuth, requireMember, async (req, res) =
             return;
         }
 
-        const payload = await buildPersonalWrapUpAnalyticsPayload({
-            req,
-            config,
-            uri,
-            accountID,
-            daysKey,
-        });
+        const payload = await overlayAchievementsXpOnWrapUp(
+            await buildPersonalWrapUpAnalyticsPayload({
+                req,
+                config,
+                uri,
+                accountID,
+                daysKey,
+            }),
+            { accountID, config, req },
+        );
         personalAnalyticsCache.set(cacheKey, { at: Date.now(), payload });
         return res.json(payload);
     } catch (e) {

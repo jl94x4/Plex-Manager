@@ -7548,6 +7548,8 @@ export const UserDashboard: React.FC<{
             totalActiveUsers: data?.totalActiveUsers || 0,
             myPlaysOnLeaderboard: data?.myPlaysOnLeaderboard ?? null,
             myXp: data?.myXp ?? null,
+            myLevel: data?.myLevel ?? null,
+            myLevelProgress: data?.myLevelProgress ?? null,
             leaderboardNeighbourhood: data?.leaderboardNeighbourhood || [],
             leaderboardSource: data?.leaderboardSource || 'period_plays',
             leaderboardMetric: data?.leaderboardMetric || 'plays',
@@ -7590,7 +7592,7 @@ export const UserDashboard: React.FC<{
     const analyticsFetchGenRef = useRef(0);
     const analyticsLoadingGenRef = useRef(0);
 
-    const wrapUpClientCacheKey = (days: number | string) => `smp.wrapup.analytics.v2:${wrapUpSubjectId}:${days}`;
+    const wrapUpClientCacheKey = (days: number | string) => `smp.wrapup.analytics.v3:${wrapUpSubjectId}:${days}`;
     const readWrapUpClientCache = (days: number | string) => {
         try {
             const raw = sessionStorage.getItem(wrapUpClientCacheKey(days));
@@ -7692,7 +7694,7 @@ export const UserDashboard: React.FC<{
 
         let cancelled = false;
         const daysQs = analyticsDays === 'all' ? 'all' : String(analyticsDays || 30);
-        const cacheKey = `smp.wrapup.achievements.v1:${wrapUpSubjectId}:${daysQs}`;
+        const cacheKey = `smp.wrapup.achievements.v2:${wrapUpSubjectId}:${daysQs}`;
 
         const readCache = () => {
             try {
@@ -7813,6 +7815,21 @@ export const UserDashboard: React.FC<{
         analyticsDays,
         wrapUpSubjectId,
     ]);
+
+    const wrapUpAchievementsForDisplay = useMemo(() => {
+        if (!wrapUpAchievements) return null;
+        const snapshotXp = Number(analytics?.myXp);
+        const snapshotLevel = Number(analytics?.myLevel);
+        if (analytics?.leaderboardSource !== 'achievements' || !(snapshotXp > 0)) {
+            return wrapUpAchievements;
+        }
+        return {
+            ...wrapUpAchievements,
+            xp: snapshotXp,
+            level: snapshotLevel > 0 ? snapshotLevel : wrapUpAchievements.level,
+            levelProgress: analytics?.myLevelProgress || wrapUpAchievements.levelProgress,
+        };
+    }, [wrapUpAchievements, analytics?.myXp, analytics?.myLevel, analytics?.myLevelProgress, analytics?.leaderboardSource]);
 
     usePoll(() => { void fetchAnalytics({ silent: true }); }, 5 * 60 * 1000, { immediate: false });
 
@@ -8206,20 +8223,20 @@ export const UserDashboard: React.FC<{
                             >
                                 {sessionInfo.session.username}
                             </h1>
-                            {(sessionInfo.session.isAdmin || wrapUpAchievements) && (
+                            {(sessionInfo.session.isAdmin || wrapUpAchievementsForDisplay) && (
                                 <div className="mt-3 flex flex-wrap items-center justify-center md:justify-start gap-2">
                                     {sessionInfo.session.isAdmin && (
                                         <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black bg-plex/20 text-plex border border-plex/40 uppercase tracking-widest">
                                             Server Admin
                                         </span>
                                     )}
-                                    {wrapUpAchievements && (
+                                    {wrapUpAchievementsForDisplay && (
                                         <>
                                             <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black bg-black/40 text-text border border-white/20 uppercase tracking-widest backdrop-blur-sm">
-                                                Lv {Number(wrapUpAchievements.level) || 1}
+                                                Lv {Number(wrapUpAchievementsForDisplay.level) || 1}
                                             </span>
                                             <span className="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black bg-black/40 text-plex border border-plex/35 uppercase tracking-widest backdrop-blur-sm font-mono tabular-nums">
-                                                {(Number(wrapUpAchievements.xp) || 0).toLocaleString()} XP
+                                                {(Number(wrapUpAchievementsForDisplay.xp) || 0).toLocaleString()} XP
                                             </span>
                                         </>
                                     )}
@@ -8349,9 +8366,9 @@ export const UserDashboard: React.FC<{
                                         <ActivityHeatmap data={analytics.heatmapData} />
                                     </div>
                                 )}
-                                {wrapUpAchievements && (
+                                {wrapUpAchievementsForDisplay && (
                                     <AchievementsWrapUpSpotlight
-                                        me={wrapUpAchievements}
+                                        me={wrapUpAchievementsForDisplay}
                                         rank={wrapUpAchievementsRank}
                                         seed={wrapUpAchievementsSeed}
                                         minCardHeight={112}
