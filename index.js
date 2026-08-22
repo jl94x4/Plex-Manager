@@ -79,7 +79,7 @@ import { isTautulliWatchHistorySource, buildAchievementsHomeRankContext, summari
 import { loadAchievementsState, setLeaderboardOptOut } from './lib/achievements/store.js';
 import { resolveAchievementsAccountId } from './lib/profile/assemble.js';
 import { sanitizeProfileBio } from './lib/profile/social.js';
-import { wrapUpFromHistoryItems } from './lib/profile/wrapUp.js';
+import { wrapUpFromHistoryItems, buildWrapUpCompare, summarizeWrapUpHistoryWindow } from './lib/profile/wrapUp.js';
 import { mapJellyfinPlayedItemsToHistory } from './lib/achievements/jellyfinMap.js';
 import {
     applyMemberNamePrivacyToRows,
@@ -16445,6 +16445,40 @@ app.get('/api/jellystat/analytics', requireAuth, requireMember, async (req, res)
         const totalPlaybacks = libraryTypePlayTotal || contentTypePlayTotal || sumLibraryPlays(topLibraries);
         const libraryHealth = buildJellystatLibraryHealth(topLibraries, libraryOverview, libraryMetadata, libraryTypeTotals);
         const heatmapData = buildJellystatHeatmap(dailyViews);
+        const moviePlays = toNumber(libraryTypeTotals.Movie, 0);
+        const tvPlays = toNumber(libraryTypeTotals.Series, 0);
+        const musicPlays = toNumber(libraryTypeTotals.Audio, 0);
+        let wrapCompare = null;
+        if (String(requestedDays) !== 'all' && days < 36500) {
+            try {
+                const priorTotals = await fetchJellystatJson(config, '/stats/getViewsByLibraryType', {
+                    query: { days: Math.min(days * 2, 36500) },
+                });
+                const priorMovie = toNumber(priorTotals?.Movie, 0);
+                const priorTv = toNumber(priorTotals?.Series, 0);
+                const priorMusic = toNumber(priorTotals?.Audio, 0);
+                const priorTotal = Object.values(priorTotals || {}).reduce((sum, value) => sum + toNumber(value, 0), 0);
+                wrapCompare = buildWrapUpCompare(
+                    {
+                        totalPlays: totalPlaybacks,
+                        moviesCount: moviePlays,
+                        showsCount: tvPlays,
+                        musicCount: musicPlays,
+                        uniqueTitles: 0,
+                    },
+                    {
+                        totalPlays: Math.max(0, priorTotal - totalPlaybacks),
+                        moviesCount: Math.max(0, priorMovie - moviePlays),
+                        showsCount: Math.max(0, priorTv - tvPlays),
+                        musicCount: Math.max(0, priorMusic - musicPlays),
+                        uniqueTitles: 0,
+                    },
+                    requestedDays,
+                );
+            } catch (e) {
+                log(`Jellyfin wrap-up compare skipped: ${e.message}`);
+            }
+        }
 
         let leaderboardPayload = { ...leaderboardContext, leaderboardSource: 'period_plays', leaderboardMetric: 'plays' };
         if (config.achievementsEnabled && config.achievementsLeaderboardEnabled !== false) {
@@ -16481,7 +16515,7 @@ app.get('/api/jellystat/analytics', requireAuth, requireMember, async (req, res)
             maxConcurrentStreams: 0,
             maxDirectPlays: toNumber(playbackCounts.directplay, 0),
             maxTranscodes: toNumber(playbackCounts.transcode, 0),
-            compare: null,
+            compare: wrapCompare,
             libraryHealth,
             heatmapData,
             dayOfWeekCounts: buildDayOfWeekCountsFromHeatmap(heatmapData),
@@ -16909,24 +16943,27 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
         const portalUserForHistory = (await loadFile(USERS_PATH, [])).find((u) => String(u.plexAccountId || '') === String(accountID));
 
         // Scope history to the selected Wrap-Up period (heatmap title already matches the days filter).
-        // Previously Math.min(yearAgo, cutoff) always pulled ~365d even for Last 7 Days.
+        // Fetch the previous equal window too so cards can show vs last month / last year.
         const yearAgo = Math.floor(Date.now() / 1000) - (365 * 24 * 60 * 60);
-        let cutoffDate = 0;
-        if (daysKey !== 'all') {
-            const days = parseInt(daysKey, 10) || 30;
-            cutoffDate = Math.floor(Date.now() / 1000) - (days * 24 * 60 * 60);
-        }
-        const historyAfterUnixSec = daysKey === 'all' ? yearAgo : (cutoffDate || yearAgo);
         const daysNum = daysKey === 'all' ? 365 : (parseInt(daysKey, 10) || 30);
+        const compareEnabled = daysKey !== 'all';
+        let cutoffDate = 0;
+        let priorStart = 0;
+        if (compareEnabled) {
+            cutoffDate = Math.floor(Date.now() / 1000) - (daysNum * 24 * 60 * 60);
+            priorStart = cutoffDate - (daysNum * 24 * 60 * 60);
+        }
+        const historyAfterUnixSec = compareEnabled ? priorStart : yearAgo;
+        const fetchWindowDays = compareEnabled ? daysNum * 2 : daysNum;
         const historyMaxItems = daysKey === 'all'
             ? 60000
-            : daysNum <= 7
-                ? 2500
-                : daysNum <= 30
-                    ? 8000
-                    : daysNum <= 90
-                        ? 16000
-                        : 30000;
+            : fetchWindowDays <= 14
+                ? 4000
+                : fetchWindowDays <= 60
+                    ? 12000
+                    : fetchWindowDays <= 180
+                        ? 24000
+                        : 40000;
 
         let historyItems = [];
         let historySource = 'plex';
@@ -16967,6 +17004,7 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
                 topWatched: [],
                 topMusic: [],
                 recentHistory: [],
+                compare: null,
                 source: historySource,
                 fallback: historyFallback,
                 degraded: historyDegraded,
@@ -16989,7 +17027,10 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
             type: item.type,
             plexUrl: `https://app.plex.tv/desktop/#!/server/${config.serverIdentifier}/details?key=${encodeURIComponent(item.key)}`
         });
-        const recentHistory = historyItems.slice(0, 50).map(mapHistoryToRecent);
+        const currentHistoryItems = cutoffDate > 0
+            ? historyItems.filter((item) => (Number(item.viewedAt) || 0) >= cutoffDate)
+            : historyItems;
+        const recentHistory = currentHistoryItems.slice(0, 50).map(mapHistoryToRecent);
 
         let plexTotalHourOfDay = 0;
         let plexHourCount = 0;
@@ -17010,7 +17051,7 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
         const heatmapData = {};
 
         historyItems.forEach(item => {
-            if (item.viewedAt >= yearAgo) {
+            if (item.viewedAt >= (cutoffDate || yearAgo)) {
                 const dateStr = new Date(item.viewedAt * 1000).toISOString().split('T')[0];
                 heatmapData[dateStr] = (heatmapData[dateStr] || 0) + 1;
             }
@@ -17346,6 +17387,24 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
                 if (h.thumb) h.thumbUrl = plexImageUrl(h.thumb);
                 return h;
             }),
+            compare: compareEnabled
+                ? buildWrapUpCompare(
+                    {
+                        totalPlays,
+                        moviesCount,
+                        showsCount,
+                        musicCount,
+                        uniqueTitles,
+                        topMovie,
+                        topBinge,
+                    },
+                    summarizeWrapUpHistoryWindow(historyItems.filter((item) => {
+                        const at = Number(item.viewedAt) || 0;
+                        return at >= priorStart && at < cutoffDate;
+                    })),
+                    daysNum,
+                )
+                : null,
             source: historySource,
             fallback: historyFallback,
             degraded: historyDegraded,
@@ -17375,7 +17434,7 @@ app.get('/api/plex/analytics/me', requireAuth, requireMember, async (req, res) =
         }
 
         const daysKey = personalAnalyticsDaysKey(req.query.days);
-        const cacheKey = `v5:${accountID}:${daysKey}`;
+        const cacheKey = `v6:${accountID}:${daysKey}`;
         const lite = String(req.query.lite || '') === '1' || String(req.query.fields || '') === 'recent';
         const cached = !lite ? personalAnalyticsCache.get(cacheKey) : null;
         const cacheFresh = cached && (Date.now() - cached.at) < PERSONAL_ANALYTICS_CACHE_MS;
@@ -17528,7 +17587,7 @@ const runPersonalAnalyticsWarmJob = async (reason = 'scheduled') => {
         const fromCache = [];
         // Prefer accounts already in the Wrap-Up cache (recent Home visitors).
         for (const key of personalAnalyticsCache.keys()) {
-            const match = String(key).match(/^v5:([^:]+):/);
+            const match = String(key).match(/^v6:([^:]+):/);
             if (match) fromCache.push(match[1]);
         }
         const uniqueCached = [...new Set(fromCache)];
@@ -17542,7 +17601,7 @@ const runPersonalAnalyticsWarmJob = async (reason = 'scheduled') => {
         for (const accountID of candidates) {
             const user = (Array.isArray(users) ? users : []).find((u) => String(u.plexAccountId) === String(accountID)) || {};
             for (const daysKey of ['30', '7']) {
-                const cacheKey = `v5:${accountID}:${daysKey}`;
+                const cacheKey = `v6:${accountID}:${daysKey}`;
                 const cached = personalAnalyticsCache.get(cacheKey);
                 if (cached && (Date.now() - cached.at) < PERSONAL_ANALYTICS_CACHE_MS) continue;
                 try {
@@ -17781,7 +17840,7 @@ registerProfileRoutes(app, {
         if (!accountID) return null;
         const uri = await getPlexConnectionUri(config);
         if (!uri) return null;
-        const cacheKey = `v5:${accountID}:${daysKey}`;
+        const cacheKey = `v6:${accountID}:${daysKey}`;
         const cached = personalAnalyticsCache.get(cacheKey);
         if (cached?.payload) return cached.payload;
         // Cache the raw subject payload (real neighbourhood names). Profile HTTP

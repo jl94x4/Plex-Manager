@@ -30,6 +30,55 @@ export const periodLabel = (days: number | string, t?: DiscoverTranslate) => {
     return translate('wrapUp.lastNDays', { days: Number(days) || 0 });
 };
 
+export const isYearInReviewPeriod = (days: number | string) => String(days) === '365';
+
+export const wrapUpPriorPeriodLabel = (days: number | string | null | undefined, t?: DiscoverTranslate) => {
+    const translate = t || ((key: string, vars?: Record<string, string | number>) => {
+        if (key === 'wrapUp.priorPeriod7') return 'the previous 7 days';
+        if (key === 'wrapUp.priorPeriod30') return 'last month';
+        if (key === 'wrapUp.priorPeriod60') return 'the previous 60 days';
+        if (key === 'wrapUp.priorPeriod90') return 'the previous 90 days';
+        if (key === 'wrapUp.priorPeriod180') return 'the previous 180 days';
+        if (key === 'wrapUp.priorPeriod365') return 'last year';
+        if (key === 'wrapUp.priorPeriodN') return `the previous ${vars?.days ?? days} days`;
+        return key;
+    });
+    const value = String(days ?? '');
+    if (value === '7') return translate('wrapUp.priorPeriod7');
+    if (value === '30') return translate('wrapUp.priorPeriod30');
+    if (value === '60') return translate('wrapUp.priorPeriod60');
+    if (value === '90') return translate('wrapUp.priorPeriod90');
+    if (value === '180') return translate('wrapUp.priorPeriod180');
+    if (value === '365') return translate('wrapUp.priorPeriod365');
+    return translate('wrapUp.priorPeriodN', { days: value || 0 });
+};
+
+export const formatWrapUpDelta = (delta: { absolute?: number; percent?: number | null; previous?: number } | null | undefined, t?: DiscoverTranslate) => {
+    if (!delta) return null;
+    const absolute = Number(delta.absolute) || 0;
+    const previous = Number(delta.previous) || 0;
+    if (absolute === 0 && previous === 0) return null;
+    const translate = t || ((key: string) => (key === 'wrapUp.compareNew' ? 'New' : key));
+    if (delta.percent != null && Number.isFinite(Number(delta.percent))) {
+        const sign = absolute >= 0 ? '+' : '';
+        return `${sign}${delta.percent}%`;
+    }
+    if (previous === 0 && absolute > 0) return translate('wrapUp.compareNew');
+    const sign = absolute >= 0 ? '+' : '';
+    return `${sign}${absolute}`;
+};
+
+const WrapUpDeltaChip: React.FC<{ delta?: { absolute?: number; percent?: number | null; previous?: number } | null; t?: DiscoverTranslate }> = ({ delta, t }) => {
+    const label = formatWrapUpDelta(delta, t);
+    if (!label) return null;
+    const isUp = (Number(delta?.absolute) || 0) >= 0;
+    return (
+        <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-bold tracking-wide ${isUp ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}`}>
+            {label}
+        </span>
+    );
+};
+
 const FALLBACK_IMAGES = {
     rank: 'https://images.unsplash.com/photo-1755039466834-3322b29dc45e?auto=format&fit=crop&q=80&w=600',
     streams: 'https://images.unsplash.com/photo-1593784991095-a205069470b6?auto=format&fit=crop&q=80&w=600',
@@ -54,6 +103,7 @@ export type WrapUpCardDef = {
     icon: LucideIcon;
     value: React.ReactNode;
     subValue?: React.ReactNode;
+    delta?: React.ReactNode;
     valueClassName?: string;
 };
 
@@ -165,10 +215,11 @@ export const buildWrapUpCards = (analytics: any, t?: DiscoverTranslate): WrapUpC
             valueClassName: 'text-xl md:text-2xl font-black leading-none',
             value: analytics.totalPlays || 0,
             subValue: (
-                <span className="flex gap-2 justify-center flex-wrap">
+                <span className="flex gap-2 justify-center flex-wrap items-center">
                     <span>🎬 {analytics.moviesCount || 0}</span>
                     <span>📺 {analytics.showsCount || 0}</span>
                     {(analytics.musicCount || 0) > 0 && <span>🎵 {analytics.musicCount}</span>}
+                    <WrapUpDeltaChip delta={analytics.compare?.totalPlays} t={translate} />
                 </span>
             ),
         },
@@ -235,7 +286,12 @@ export const buildWrapUpCards = (analytics: any, t?: DiscoverTranslate): WrapUpC
             icon: Compass,
             valueClassName: 'text-sm font-bold leading-tight',
             value: analytics.watchStyle || translate('wrapUp.unknown'),
-            subValue: translate('wrapUp.uniqueTitles', { count: analytics.uniqueTitles || 0 }),
+            subValue: (
+                <span className="flex gap-1.5 justify-center items-center flex-wrap">
+                    <span>{translate('wrapUp.uniqueTitles', { count: analytics.uniqueTitles || 0 })}</span>
+                    <WrapUpDeltaChip delta={analytics.compare?.uniqueTitles} t={translate} />
+                </span>
+            ),
         },
         {
             metric: 'Streaming Habit',
@@ -537,6 +593,8 @@ const exportSubValue = (card: WrapUpCardDef, analytics: any): React.ReactNode =>
             `TV ${analytics.showsCount || 0}`,
         ];
         if ((analytics.musicCount || 0) > 0) parts.push(`Music ${analytics.musicCount}`);
+        const delta = formatWrapUpDelta(analytics.compare?.totalPlays);
+        if (delta) parts.push(delta);
         return parts.join(' · ');
     }
     return card.subValue;
@@ -617,6 +675,7 @@ export const WrapUpCardGrid: React.FC<WrapUpCardGridProps> = ({
                                     {subValue && (
                                         <p className={`text-[10px] font-bold tracking-wider ${card.metric === 'Top Binge' || card.metric === 'Top Movie' ? 'text-plex' : 'text-gray-400'}`}>{subValue}</p>
                                     )}
+                                    {card.delta ? <div className="mt-1">{card.delta}</div> : null}
                                 </div>
                             </>
                         ) : (
@@ -641,6 +700,7 @@ export const WrapUpCardGrid: React.FC<WrapUpCardGridProps> = ({
                                             {subValue}
                                         </p>
                                     )}
+                                    {card.delta ? <div className="mt-1">{card.delta}</div> : null}
                                 </div>
                             </>
                         )}

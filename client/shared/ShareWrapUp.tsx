@@ -1,7 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { X, Copy, Download, Share2 } from 'lucide-react';
 import html2canvas from 'html2canvas';
-import { WrapUpCardGrid, periodLabel } from './WrapUpCards';
+import { WrapUpCardGrid, periodLabel, isYearInReviewPeriod, wrapUpPriorPeriodLabel, formatWrapUpDelta } from './WrapUpCards';
 import { formatStreamingHour } from './format';
 import { getPublicOrigin } from './basePath';
 import { createDiscoverTranslate, useDiscoverI18n } from '../discovery/i18n';
@@ -23,6 +23,9 @@ const waitForExportImages = (root: HTMLElement) => Promise.all(
 export const buildWrapUpShareText = (analytics: any, days: number | string, serverName: string, username?: string, t?: DiscoverTranslate) => {
     const translate = t || createDiscoverTranslate('en');
     const period = periodLabel(days, translate);
+    const yearInReview = isYearInReviewPeriod(days);
+    const compareDelta = formatWrapUpDelta(analytics?.compare?.totalPlays, translate);
+    const comparePeriod = wrapUpPriorPeriodLabel(analytics?.compare?.previousPeriodDays || days, translate);
     const leaderboardRank = Number(analytics?.leaderboardRank);
     const hasRank = Number.isFinite(leaderboardRank) && leaderboardRank > 0;
     const rank = hasRank
@@ -34,11 +37,12 @@ export const buildWrapUpShareText = (analytics: any, days: number | string, serv
     const topDayStreams = dayCounts.length > 0 ? Math.max(...dayCounts) : 0;
 
     const lines = [
-        `📊 ${translate('wrapUp.shareTitle', { serverName })} (${period})`,
+        `📊 ${yearInReview ? translate('wrapUp.shareYearTitle', { serverName }) : translate('wrapUp.shareTitle', { serverName })} (${period})`,
         username ? `👤 ${username}` : '',
         '',
         `🏆 ${translate('wrapUp.serverRank')}: ${rank}`,
         `▶️ ${translate('wrapUp.totalStreams')}: ${analytics.totalPlays || 0} (🎬 ${analytics.moviesCount || 0} · 📺 ${analytics.showsCount || 0}${analytics.musicCount ? ` · 🎵 ${analytics.musicCount}` : ''})`,
+        ...(compareDelta ? [`📈 ${translate('wrapUp.vsPrior', { delta: compareDelta, period: comparePeriod })}`] : []),
         `📺 ${translate('wrapUp.topBinge')}: ${analytics.topBinge?.title || '—'} (${translate('wrapUp.episodePlays', { count: analytics.topBinge?.plays || 0 })})`,
         `🎬 ${translate('wrapUp.topMovie')}: ${analytics.topMovie?.title || '—'} (${translate('wrapUp.plays', { count: analytics.topMovie?.plays || 0 })})`,
         `🕐 ${translate('wrapUp.timeOfDay')}: ${analytics.timeOfDay || '—'} (${translate('wrapUp.peakTime', { time: formatStreamingHour(analytics.peakHour ?? analytics.avgHour) })})`,
@@ -74,6 +78,9 @@ export const ShareWrapUpModal: React.FC<ShareWrapUpModalProps> = ({
     const exportRef = useRef<HTMLDivElement>(null);
     const [busy, setBusy] = useState<'copy' | 'download' | 'share' | null>(null);
     const period = periodLabel(days, t);
+    const yearInReview = isYearInReviewPeriod(days);
+    const compareDelta = formatWrapUpDelta(analytics?.compare?.totalPlays, t);
+    const comparePeriod = wrapUpPriorPeriodLabel(analytics?.compare?.previousPeriodDays || days, t);
 
     const leaderboardRank = Number(analytics?.leaderboardRank);
     const hasRank = Number.isFinite(leaderboardRank) && leaderboardRank > 0;
@@ -199,7 +206,9 @@ export const ShareWrapUpModal: React.FC<ShareWrapUpModalProps> = ({
             }
 
             await navigator.share({
-                title: t('wrapUp.shareTitle', { serverName }),
+                title: yearInReview
+                    ? t('wrapUp.shareYearTitle', { serverName })
+                    : t('wrapUp.shareTitle', { serverName }),
                 text,
             });
             onToast?.(t('wrapUp.shareSuccess'), 'success');
@@ -224,8 +233,8 @@ export const ShareWrapUpModal: React.FC<ShareWrapUpModalProps> = ({
                     <X className="w-5 h-5" />
                 </button>
 
-                <h3 className="text-xl font-bold text-text mb-1 pr-10">{t('wrapUp.shareModalTitle')}</h3>
-                <p className="text-muted text-sm mb-4">{t('wrapUp.shareModalSubtitle')}</p>
+                <h3 className="text-xl font-bold text-text mb-1 pr-10">{yearInReview ? t('wrapUp.yearInReview') : t('wrapUp.shareModalTitle')}</h3>
+                <p className="text-muted text-sm mb-4">{yearInReview ? t('wrapUp.yearInReviewHint') : t('wrapUp.shareModalSubtitle')}</p>
 
                 <div className="overflow-y-auto overflow-x-hidden flex-1 min-h-0 custom-scrollbar mb-4">
                     <div
@@ -233,12 +242,15 @@ export const ShareWrapUpModal: React.FC<ShareWrapUpModalProps> = ({
                         className="w-full rounded-2xl border border-white/10 bg-[#0d0e10] p-5 pb-6 overflow-visible"
                     >
                         <div className="mb-4 pb-3 border-b border-white/10">
-                            <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-plex mb-1">{t('wrapUp.title')}</p>
+                            <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-plex mb-1">{yearInReview ? t('wrapUp.yearInReview') : t('wrapUp.title')}</p>
                             <h4 className="text-2xl font-black text-white">{serverName}</h4>
                             <p className="text-sm text-muted mt-1">
                                 {period}
                                 {username ? ` · ${username}` : ''}
                             </p>
+                            {compareDelta ? (
+                                <p className="text-xs font-bold text-plex mt-1">{t('wrapUp.vsPrior', { delta: compareDelta, period: comparePeriod })}</p>
+                            ) : null}
                         </div>
 
                         <WrapUpCardGrid analytics={analytics} variant="export" />
@@ -250,7 +262,7 @@ export const ShareWrapUpModal: React.FC<ShareWrapUpModalProps> = ({
                         <p className="font-bold text-text">{t('wrapUp.fullStatsSummary')}</p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-muted">
                             <p><span className="text-text font-semibold">{t('wrapUp.serverRank')}:</span> {hasRank ? `#${leaderboardRank}` : t('wrapUp.notRankedYet')}{rankPct ? ` (${t('wrapUp.topPct', { pct: rankPct })})` : ''}</p>
-                            <p><span className="text-text font-semibold">{t('wrapUp.totalStreams')}:</span> {analytics.totalPlays || 0} {t('wrapUp.total')}</p>
+                            <p><span className="text-text font-semibold">{t('wrapUp.totalStreams')}:</span> {analytics.totalPlays || 0} {t('wrapUp.total')}{compareDelta ? ` · ${t('wrapUp.vsPrior', { delta: compareDelta, period: comparePeriod })}` : ''}</p>
                             <p><span className="text-text font-semibold">{t('wrapUp.moviesTv')}:</span> {analytics.moviesCount || 0} / {analytics.showsCount || 0}</p>
                             <p><span className="text-text font-semibold">{t('wrapUp.topBinge')}:</span> {analytics.topBinge?.title || '—'}</p>
                             <p><span className="text-text font-semibold">{t('wrapUp.topMovie')}:</span> {analytics.topMovie?.title || '—'}</p>

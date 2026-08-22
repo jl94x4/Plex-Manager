@@ -30,7 +30,7 @@ import {
 import type { User, PlexConfig, AppSettings, PlexServer, ToastMessage, DeletedUser, AuditEntry, UserStatus } from './shared/types';
 import { ShareWrapUpModal } from './shared/ShareWrapUp';
 import { WrapUpModal } from './shared/WrapUpModal';
-import { WrapUpCardGrid, AchievementsWrapUpSpotlight, periodLabel } from './shared/WrapUpCards';
+import { WrapUpCardGrid, AchievementsWrapUpSpotlight, periodLabel, formatWrapUpDelta, wrapUpPriorPeriodLabel } from './shared/WrapUpCards';
 import { SetupWizard } from './setup/SetupWizard';
 import { DiscoveryDashboard } from './discovery/DiscoveryDashboard';
 import { AuthPageBackground, themeClasses, SlideshowBackground } from './shared/theme';
@@ -7576,6 +7576,7 @@ export const UserDashboard: React.FC<{
             periodLeaderboardRank: data?.periodLeaderboardRank ?? null,
             periodPlaysOnLeaderboard: data?.periodPlaysOnLeaderboard ?? null,
             periodActiveUsers: data?.periodActiveUsers ?? null,
+            compare: data?.compare || null,
             libraryHealth: data?.libraryHealth || null,
             heatmapData: data?.heatmapData || null,
         };
@@ -8352,7 +8353,17 @@ export const UserDashboard: React.FC<{
                         {(sessionInfo.session.isAdmin || user) && analytics && (
                             <div className="glass-card p-4 md:p-5 shadow-xl">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3 md:mb-4">
-                                    <h3 className="text-lg md:text-xl font-bold text-text">{t('wrapUp.title')}</h3>
+                                    <div className="min-w-0">
+                                        <h3 className="text-lg md:text-xl font-bold text-text">{t('wrapUp.title')}</h3>
+                                        {analytics.compare?.totalPlays && formatWrapUpDelta(analytics.compare.totalPlays, t) ? (
+                                            <p className="text-xs text-muted mt-0.5">
+                                                {t('wrapUp.vsPrior', {
+                                                    delta: formatWrapUpDelta(analytics.compare.totalPlays, t) as string,
+                                                    period: wrapUpPriorPeriodLabel(analytics.compare.previousPeriodDays || analyticsDays, t),
+                                                })}
+                                            </p>
+                                        ) : null}
+                                    </div>
                                     <div className="flex items-center gap-2">
                                         <button
                                             type="button"
@@ -8360,7 +8371,7 @@ export const UserDashboard: React.FC<{
                                             className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-plex/10 border border-plex/30 text-plex hover:bg-plex/20 transition-colors shadow-sm"
                                         >
                                             <Share2 className="w-4 h-4 flex-shrink-0" />
-                                            {t('wrapUp.share')}
+                                            {analyticsDays === 365 ? t('wrapUp.yearInReview') : t('wrapUp.share')}
                                         </button>
                                         <PeriodDropdown
                                             value={analyticsDays}
