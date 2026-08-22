@@ -96,6 +96,9 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
     const [notifyStatusUp, setNotifyStatusUp] = useState(user?.notifyStatusUp !== false);
     const [notifyMediaJobFailed, setNotifyMediaJobFailed] = useState(user?.notifyMediaJobFailed !== false);
     const [notifyMediaJobCompleted, setNotifyMediaJobCompleted] = useState(user?.notifyMediaJobCompleted === true);
+    const [notifySupportTicket, setNotifySupportTicket] = useState(user?.notifySupportTicket !== false);
+    const [notifySupportReply, setNotifySupportReply] = useState(user?.notifySupportReply !== false);
+    const [notifySupportMediaIssue, setNotifySupportMediaIssue] = useState(user?.notifySupportMediaIssue !== false);
     const [notifyWebPush, setNotifyWebPush] = useState(user?.notifyWebPush !== false);
     const [browserPushReady, setBrowserPushReady] = useState(false);
     const browserPushSupportedFlag = webPushSupported();
@@ -136,6 +139,9 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
         setNotifyStatusUp(user?.notifyStatusUp !== false);
         setNotifyMediaJobFailed(user?.notifyMediaJobFailed !== false);
         setNotifyMediaJobCompleted(user?.notifyMediaJobCompleted === true);
+        setNotifySupportTicket(user?.notifySupportTicket !== false);
+        setNotifySupportReply(user?.notifySupportReply !== false);
+        setNotifySupportMediaIssue(user?.notifySupportMediaIssue !== false);
         setNotifyWebPush(user?.notifyWebPush !== false);
         setOptOutNewsletter(!!user?.optOutNewsletter);
         setPrivacyShowName(user?.privacyShowName !== false);
@@ -171,6 +177,9 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
         user?.notifyStatusUp,
         user?.notifyMediaJobFailed,
         user?.notifyMediaJobCompleted,
+        user?.notifySupportTicket,
+        user?.notifySupportReply,
+        user?.notifySupportMediaIssue,
         user?.notifyWebPush,
         user?.optOutNewsletter,
         user?.privacyShowName,
@@ -263,6 +272,9 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                     notifyStatusUp,
                     notifyMediaJobFailed,
                     notifyMediaJobCompleted,
+                    notifySupportTicket,
+                    notifySupportReply,
+                    notifySupportMediaIssue,
                     notifyWebPush,
                 }),
             });
@@ -639,6 +651,30 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                     on={notifyMediaJobCompleted}
                                     onToggle={flip(setNotifyMediaJobCompleted)}
                                     ariaLabel={t('homeDashboard.toggleMediaJobCompletedAria')}
+                                    disabled={busy}
+                                />
+                                <PrefToggle
+                                    title={t('homeDashboard.supportTicketAlerts')}
+                                    hint={t('homeDashboard.supportTicketAlertsHint')}
+                                    on={notifySupportTicket}
+                                    onToggle={flip(setNotifySupportTicket)}
+                                    ariaLabel={t('homeDashboard.toggleSupportTicketAria')}
+                                    disabled={busy}
+                                />
+                                <PrefToggle
+                                    title={t('homeDashboard.supportReplyAlerts')}
+                                    hint={t('homeDashboard.supportReplyAlertsHint')}
+                                    on={notifySupportReply}
+                                    onToggle={flip(setNotifySupportReply)}
+                                    ariaLabel={t('homeDashboard.toggleSupportReplyAria')}
+                                    disabled={busy}
+                                />
+                                <PrefToggle
+                                    title={t('homeDashboard.supportMediaIssueAlerts')}
+                                    hint={t('homeDashboard.supportMediaIssueAlertsHint')}
+                                    on={notifySupportMediaIssue}
+                                    onToggle={flip(setNotifySupportMediaIssue)}
+                                    ariaLabel={t('homeDashboard.toggleSupportMediaIssueAria')}
                                     disabled={busy}
                                 />
                             </div>

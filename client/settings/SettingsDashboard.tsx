@@ -186,6 +186,9 @@ const DEFAULT_ALERT_RULES = {
     accessRevoked: true,
     newUserSynced: true,
     requestPending: true,
+    supportTicket: true,
+    supportReply: true,
+    supportMediaIssue: true,
     syncSuccess: false,
     syncFailure: true,
 };
@@ -708,6 +711,7 @@ export const SettingsDashboard: React.FC = () => {
         available: true, approved: true, declined: true, season: true, episode: false, admin_pending: true,
         collexions_failed: true, scanner_failed: true, scanner_deleted: true, scanner_upgrade: true, scanner_import: true, status_down: true, status_up: true,
         media_job_failed: true, media_job_completed: false,
+        support_ticket: true, support_reply: true, support_media_issue: true,
     });
     const [webhookEnabled, setWebhookEnabled] = useState(false);
     const [webhookUrl, setWebhookUrl] = useState('');
@@ -716,6 +720,7 @@ export const SettingsDashboard: React.FC = () => {
         available: true, approved: false, declined: false, season: false, episode: false, admin_pending: false,
         collexions_failed: false, scanner_failed: false, scanner_deleted: false, scanner_upgrade: false, scanner_import: false, status_down: false, status_up: false,
         media_job_failed: false, media_job_completed: false,
+        support_ticket: false, support_reply: false, support_media_issue: false,
     });
     const [watchHistorySource, setWatchHistorySource] = useState<'plex' | 'tautulli'>('plex');
     const [tautulliConfigured, setTautulliConfigured] = useState(false);
@@ -1619,12 +1624,14 @@ export const SettingsDashboard: React.FC = () => {
                         available: true, approved: true, declined: true, season: true, episode: false, admin_pending: true,
                         collexions_failed: true, scanner_failed: true, scanner_deleted: true, scanner_upgrade: true, scanner_import: true, status_down: true, status_up: true,
                         media_job_failed: true, media_job_completed: false,
+                        support_ticket: true, support_reply: true, support_media_issue: true,
                         ...initialSettings.ntfyEvents,
                     }
                     : {
                         available: true, approved: true, declined: true, season: true, episode: false, admin_pending: true,
                         collexions_failed: true, scanner_failed: true, scanner_deleted: true, scanner_upgrade: true, scanner_import: true, status_down: true, status_up: true,
                         media_job_failed: true, media_job_completed: false,
+                        support_ticket: true, support_reply: true, support_media_issue: true,
                     },
             );
             setWebhookEnabled(!!initialSettings.webhookEnabled);
@@ -1636,12 +1643,14 @@ export const SettingsDashboard: React.FC = () => {
                         available: true, approved: false, declined: false, season: false, episode: false, admin_pending: false,
                         collexions_failed: false, scanner_failed: false, scanner_deleted: false, scanner_upgrade: false, scanner_import: false, status_down: false, status_up: false,
                         media_job_failed: false, media_job_completed: false,
+                        support_ticket: false, support_reply: false, support_media_issue: false,
                         ...initialSettings.webhookEvents,
                     }
                     : {
                         available: true, approved: false, declined: false, season: false, episode: false, admin_pending: false,
                         collexions_failed: false, scanner_failed: false, scanner_deleted: false, scanner_upgrade: false, scanner_import: false, status_down: false, status_up: false,
                         media_job_failed: false, media_job_completed: false,
+                        support_ticket: false, support_reply: false, support_media_issue: false,
                     },
             );
             if (initialSettings.watchHistorySource !== undefined) {
@@ -2736,6 +2745,9 @@ export const SettingsDashboard: React.FC = () => {
                                             ['accessRevoked', 'Access Revoked', 'Alert when expired access is revoked automatically.'],
                                             ['newUserSynced', 'New Users During Sync', 'Alert when a Plex/Jellyfin sync discovers new users.'],
                                             ['requestPending', 'New Media Requests', 'Alert when a member submits a request that needs approval.'],
+                                            ['supportTicket', 'New Support Tickets', 'Alert when a member opens a support ticket.'],
+                                            ['supportReply', 'Support Ticket Replies', 'Alert when a member replies to a support ticket.'],
+                                            ['supportMediaIssue', 'Media Issue Reports', 'Alert when a member reports a media issue (creates a ticket).'],
                                             ['syncFailure', 'Sync Failures', 'Alert when a manual user sync fails.'],
                                             ['syncSuccess', 'Sync Success', 'Alert after every successful manual user sync.'],
                                         ].map(([key, title, description]) => (

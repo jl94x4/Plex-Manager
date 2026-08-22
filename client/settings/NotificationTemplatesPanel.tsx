@@ -19,6 +19,9 @@ const EVENT_LABEL_KEYS: Record<string, string> = {
     status_up: 'settings.notifications.templates.events.status_up',
     media_job_failed: 'settings.notifications.templates.events.media_job_failed',
     media_job_completed: 'settings.notifications.templates.events.media_job_completed',
+    support_ticket: 'settings.notifications.templates.events.support_ticket',
+    support_reply: 'settings.notifications.templates.events.support_reply',
+    support_media_issue: 'settings.notifications.templates.events.support_media_issue',
 };
 
 const FIELD_LABEL_KEYS: Record<string, string> = {

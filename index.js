@@ -1437,6 +1437,7 @@ import {
     applyStatusHealthNotifyState,
     normalizeStatusNotifyDownAfterMinutes,
 } from './lib/notifications/opsNotify.js';
+import { notifySupportAdmins } from './lib/notifications/supportNotify.js';
 import { enrichInAppNotificationItems } from './lib/notifications/mediaMeta.js';
 import { lookupJobNotificationPoster, resolveJobNotifySourcePath } from './lib/notifications/jobPoster.js';
 import { resolveScannerNotifyPoster } from './lib/notifications/scannerPoster.js';
@@ -1867,6 +1868,9 @@ const DEFAULT_ALERT_RULES = {
     syncSuccess: false,
     syncFailure: true,
     requestPending: true,
+    supportTicket: true,
+    supportReply: true,
+    supportMediaIssue: true,
 };
 
 const normalizeAlertRules = (rules = {}) => ({
@@ -4000,6 +4004,9 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             notifyStatusUp,
             notifyMediaJobFailed,
             notifyMediaJobCompleted,
+            notifySupportTicket,
+            notifySupportReply,
+            notifySupportMediaIssue,
             notifyWebPush,
             showDiscoverNowPlaying,
             uiLocale,
@@ -4060,6 +4067,9 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             notifyStatusUp,
             notifyMediaJobFailed,
             notifyMediaJobCompleted,
+            notifySupportTicket,
+            notifySupportReply,
+            notifySupportMediaIssue,
             notifyWebPush,
             showDiscoverNowPlaying,
             privacyShowName,
@@ -9808,21 +9818,22 @@ const openSupportTicketFromMediaIssue = async (req, config, issue, message) => {
             log,
         });
         if (!ticket) return null;
-        const skip = actor.id != null ? String(actor.id) : '';
+        const username = ticket.createdBy?.displayName || 'A member';
         const href = `/support?ticket=${encodeURIComponent(String(ticket.id))}`;
-        const admins = (Array.isArray(users) ? users : []).filter((u) => (
-            u && u.isAdmin && u.id && String(u.id) !== skip
-        ));
-        for (const admin of admins) {
-            await createInAppNotification({
-                userId: admin.id,
-                type: 'support_ticket',
-                title: 'New media issue ticket',
-                body: `${ticket.createdBy?.displayName || 'A member'}: ${ticket.subject}`,
-                href,
-                meta: { ticketId: ticket.id, linkedIssueId: issue?.id },
-            }).catch(() => null);
-        }
+        await notifySupportAdmins({
+            event: 'support_media_issue',
+            config,
+            title: ticket.subject,
+            body: `${username}: ${ticket.subject}`,
+            href,
+            excludeUserId: actor.id,
+            meta: { ticketId: ticket.id, linkedIssueId: issue?.id, username },
+            loadUsers: async () => users,
+            sendGotifyAlert,
+            alertRuleEnabled,
+            resolvePublicBaseUrl: resolvePublicBaseUrlFromConfig,
+            log,
+        });
         return ticket;
     } catch (error) {
         log(`[support] media issue ticket failed: ${error?.message || error}`);
@@ -17727,6 +17738,9 @@ registerSupportTicketRoutes(app, {
     dataDir: SUPPORT_TICKETS_DIR,
     createInAppNotification,
     appendAuditLog,
+    sendGotifyAlert,
+    alertRuleEnabled,
+    resolvePublicBaseUrl: resolvePublicBaseUrlFromConfig,
     resolveLocalUser: async (sessionUser) => {
         const users = await loadFile(USERS_PATH, []);
         return findLocalUserForSession(users, sessionUser);
