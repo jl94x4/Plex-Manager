@@ -151,9 +151,9 @@ export const buildWrapUpCards = (analytics: any, t?: DiscoverTranslate): WrapUpC
             label: translate('wrapUp.serverRank'),
             bgImage: FALLBACK_IMAGES.rank,
             icon: Trophy,
-            valueClassName: 'text-2xl font-black leading-none',
+            valueClassName: 'text-xl md:text-2xl font-black leading-none',
             value: hasRank ? (
-                <><span className="text-plex text-xl mr-0.5">#</span>{leaderboardRank}</>
+                <><span className="text-plex text-lg md:text-xl mr-0.5">#</span>{leaderboardRank}</>
             ) : translate('wrapUp.notRankedYet'),
             subValue: rankSub,
         },
@@ -162,7 +162,7 @@ export const buildWrapUpCards = (analytics: any, t?: DiscoverTranslate): WrapUpC
             label: translate('wrapUp.totalStreams'),
             bgImage: FALLBACK_IMAGES.streams,
             icon: PlayCircle,
-            valueClassName: 'text-2xl font-black leading-none',
+            valueClassName: 'text-xl md:text-2xl font-black leading-none',
             value: analytics.totalPlays || 0,
             subValue: (
                 <span className="flex gap-2 justify-center flex-wrap">
@@ -354,7 +354,7 @@ export const buildAchievementsWrapUpCards = (
             label: translate('wrapUp.level'),
             bgImage: FALLBACK_IMAGES.achievements,
             icon: Medal,
-            valueClassName: 'text-2xl font-black leading-none',
+            valueClassName: 'text-xl md:text-2xl font-black leading-none',
             value: level,
             subValue: translate('wrapUp.intoLevel', { into, need }),
         },
@@ -363,7 +363,7 @@ export const buildAchievementsWrapUpCards = (
             label: translate('wrapUp.totalXp'),
             bgImage: FALLBACK_IMAGES.xp,
             icon: Sparkles,
-            valueClassName: 'text-2xl font-black leading-none',
+            valueClassName: 'text-xl md:text-2xl font-black leading-none',
             value: xp.toLocaleString(),
             subValue: translate('wrapUp.pctToLevel', { pct: progressPct, level: level + 1 }),
         },
@@ -378,7 +378,7 @@ export const buildAchievementsWrapUpCards = (
             label: translate('wrapUp.periodXp'),
             bgImage: FALLBACK_IMAGES.xp,
             icon: Target,
-            valueClassName: 'text-2xl font-black leading-none',
+            valueClassName: 'text-xl md:text-2xl font-black leading-none',
             value: periodXp.toLocaleString(),
             subValue: hasDelta
                 ? translate('wrapUp.periodXpVsPrior', {
@@ -393,7 +393,7 @@ export const buildAchievementsWrapUpCards = (
                 label: translate('wrapUp.periodBadges'),
                 bgImage: FALLBACK_IMAGES.badges,
                 icon: Award,
-                valueClassName: 'text-2xl font-black leading-none',
+                valueClassName: 'text-xl md:text-2xl font-black leading-none',
                 value: periodBadges,
                 subValue: translate('wrapUp.periodBadgesSub'),
             });
@@ -406,7 +406,7 @@ export const buildAchievementsWrapUpCards = (
             label: translate('wrapUp.xpToNext'),
             bgImage: FALLBACK_IMAGES.xp,
             icon: Target,
-            valueClassName: 'text-2xl font-black leading-none',
+            valueClassName: 'text-xl md:text-2xl font-black leading-none',
             value: Math.max(0, need - into).toLocaleString(),
             subValue: translate('wrapUp.intoLevel', { into, need }),
         },
@@ -415,7 +415,7 @@ export const buildAchievementsWrapUpCards = (
             label: translate('wrapUp.badges'),
             bgImage: FALLBACK_IMAGES.badges,
             icon: Award,
-            valueClassName: 'text-2xl font-black leading-none',
+            valueClassName: 'text-xl md:text-2xl font-black leading-none',
             value: translate('wrapUp.badgesCount', { earned: earnedCount, total: totalBadges }),
             subValue: translate('wrapUp.badgesPct', {
                 pct: Math.round(totalBadges ? (earnedCount / totalBadges) * 100 : 0),
@@ -437,7 +437,7 @@ export const buildAchievementsWrapUpCards = (
             label: translate('wrapUp.currentStreak'),
             bgImage: FALLBACK_IMAGES.streak,
             icon: Flame,
-            valueClassName: 'text-2xl font-black leading-none',
+            valueClassName: 'text-xl md:text-2xl font-black leading-none',
             value: Number(stats.currentStreak) || 0,
             subValue: translate('wrapUp.daysCount', { count: Number(stats.currentStreak) || 0 }),
         },
@@ -446,7 +446,7 @@ export const buildAchievementsWrapUpCards = (
             label: translate('wrapUp.longestStreak'),
             bgImage: FALLBACK_IMAGES.streak,
             icon: Flame,
-            valueClassName: 'text-2xl font-black leading-none',
+            valueClassName: 'text-xl md:text-2xl font-black leading-none',
             value: Number(stats.longestStreak) || 0,
             subValue: translate('wrapUp.daysCount', { count: Number(stats.longestStreak) || 0 }),
         },
@@ -455,7 +455,7 @@ export const buildAchievementsWrapUpCards = (
             label: translate('wrapUp.hoursWatched'),
             bgImage: FALLBACK_IMAGES.time,
             icon: Clock,
-            valueClassName: 'text-2xl font-black leading-none',
+            valueClassName: 'text-xl md:text-2xl font-black leading-none',
             value: Number(stats.hoursWatched) || 0,
             subValue: translate('wrapUp.hoursCount', { count: Number(stats.hoursWatched) || 0 }),
         },
@@ -464,7 +464,7 @@ export const buildAchievementsWrapUpCards = (
             label: translate('wrapUp.activeDays'),
             bgImage: FALLBACK_IMAGES.day,
             icon: Calendar,
-            valueClassName: 'text-2xl font-black leading-none',
+            valueClassName: 'text-xl md:text-2xl font-black leading-none',
             value: Number(stats.activeDays) || 0,
             subValue: translate('wrapUp.daysCount', { count: Number(stats.activeDays) || 0 }),
         },
@@ -473,7 +473,7 @@ export const buildAchievementsWrapUpCards = (
             label: translate('wrapUp.uniqueCatalog'),
             bgImage: FALLBACK_IMAGES.style,
             icon: Compass,
-            valueClassName: 'text-2xl font-black leading-none',
+            valueClassName: 'text-xl md:text-2xl font-black leading-none',
             value: (Number(stats.uniqueMovies) || 0) + (Number(stats.uniqueShows) || 0),
             subValue: translate('wrapUp.moviesAndShows', {
                 movies: Number(stats.uniqueMovies) || 0,
@@ -488,9 +488,9 @@ export const buildAchievementsWrapUpCards = (
             label: translate('wrapUp.achievementsRank'),
             bgImage: FALLBACK_IMAGES.rank,
             icon: Trophy,
-            valueClassName: 'text-2xl font-black leading-none',
+            valueClassName: 'text-xl md:text-2xl font-black leading-none',
             value: (
-                <><span className="text-plex text-xl mr-0.5">#</span>{rank}</>
+                <><span className="text-plex text-lg md:text-xl mr-0.5">#</span>{rank}</>
             ),
             subValue: translate('wrapUp.levelXpSummary', { level, xp: xp.toLocaleString() }),
         });
@@ -573,7 +573,7 @@ export const WrapUpCardGrid: React.FC<WrapUpCardGridProps> = ({
                 const Icon = card.icon;
                 const valueClass = isExport
                     ? (isLargeMetric(card.metric)
-                        ? 'text-2xl font-black leading-normal'
+                        ? 'text-xl md:text-2xl font-black leading-normal'
                         : exportValueClassName)
                     : (card.valueClassName || defaultValueClassName);
                 const subValue = isExport ? exportSubValue(card, analytics) : card.subValue;
@@ -629,7 +629,7 @@ export const WrapUpCardGrid: React.FC<WrapUpCardGridProps> = ({
                                 />
                                 <div className="wrap-up-card-scrim absolute inset-0 bg-black/65 z-10" />
                                 <div className="relative z-20 p-3 md:p-4 flex-1 flex flex-col items-center justify-center text-center">
-                                    <Icon className="w-6 h-6 text-plex mb-2 flex-shrink-0" />
+                                    <Icon className="w-5 h-5 md:w-6 md:h-6 text-plex mb-1.5 md:mb-2 flex-shrink-0" />
                                     <p className="wrap-up-card-label text-[10px] uppercase tracking-widest font-bold mb-1 text-white/70">
                                         {card.label}
                                     </p>

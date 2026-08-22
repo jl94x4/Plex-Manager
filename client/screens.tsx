@@ -8174,8 +8174,8 @@ export const UserDashboard: React.FC<{
                     </div>
                 )}
 
-                <div className={`relative pt-14 px-4 md:pt-32 md:px-12 flex flex-col items-center md:items-start text-center md:text-left z-10 ${nowPlaying ? 'pb-12 md:pb-16' : 'pb-7 md:pb-12'}`}>
-                    <div className="flex flex-col md:flex-row items-center md:items-center gap-4 md:gap-6">
+                <div className={`relative pt-8 px-4 md:pt-32 md:px-12 flex flex-col items-center md:items-start text-center md:text-left z-10 ${nowPlaying ? 'pb-12 md:pb-16' : 'pb-5 md:pb-12'}`}>
+                    <div className="flex flex-col md:flex-row items-center md:items-center gap-3 md:gap-6">
                         {/* Avatar */}
                         {(() => {
                             const thumbUrl = user?.thumb || sessionInfo.session.thumb || (sessionInfo.session.isAdmin ? sessionInfo.adminThumb : null);
@@ -8185,14 +8185,14 @@ export const UserDashboard: React.FC<{
                                         <img
                                             src={resolveHomeImage(thumbUrl)}
                                             alt={sessionInfo.session.username}
-                                            className="relative w-28 h-28 md:w-32 md:h-32 rounded-full object-cover border-4 border-plex shadow-2xl bg-card"
+                                            className="relative w-20 h-20 md:w-32 md:h-32 rounded-full object-cover border-4 border-plex shadow-2xl bg-card"
                                             onError={(e) => {
                                                 (e.target as HTMLImageElement).style.display = 'none';
                                                 (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
                                                 (e.target as HTMLImageElement).nextElementSibling?.classList.add('flex');
                                             }}
                                         />
-                                        <div className={`hidden relative w-28 h-28 md:w-32 md:h-32 rounded-full bg-gradient-to-br from-plex/40 to-plex/10 border-4 border-plex items-center justify-center text-plex font-black text-5xl shadow-2xl overflow-hidden`}>
+                                        <div className={`hidden relative w-20 h-20 md:w-32 md:h-32 rounded-full bg-gradient-to-br from-plex/40 to-plex/10 border-4 border-plex items-center justify-center text-plex font-black text-4xl md:text-5xl shadow-2xl overflow-hidden`}>
                                             {sessionInfo.session.username?.[0]?.toUpperCase() || '?'}
                                         </div>
                                     </div>
@@ -8200,7 +8200,7 @@ export const UserDashboard: React.FC<{
                             }
                             return (
                                 <div className="relative">
-                                    <div className={`relative w-28 h-28 md:w-32 md:h-32 rounded-full bg-gradient-to-br from-plex/40 to-plex/10 border-4 border-plex items-center justify-center text-plex font-black text-5xl flex shadow-2xl overflow-hidden`}>
+                                    <div className={`relative w-20 h-20 md:w-32 md:h-32 rounded-full bg-gradient-to-br from-plex/40 to-plex/10 border-4 border-plex items-center justify-center text-plex font-black text-4xl md:text-5xl flex shadow-2xl overflow-hidden`}>
                                         {sessionInfo.session.username?.[0]?.toUpperCase() || '?'}
                                     </div>
                                 </div>
@@ -8208,7 +8208,7 @@ export const UserDashboard: React.FC<{
                         })()}
 
                         <div className="pb-1 md:pb-2 overflow-visible min-w-0 max-w-full">
-                            <p className="text-plex text-sm uppercase tracking-[4px] font-bold mb-1 drop-shadow-md">
+                            <p className="text-plex text-xs md:text-sm uppercase tracking-[0.2em] md:tracking-[4px] font-bold mb-1 drop-shadow-md">
                                 {(() => {
                                     const hour = new Date().getHours();
                                     if (hour >= 5 && hour < 12) return 'Good Morning';
@@ -8219,7 +8219,7 @@ export const UserDashboard: React.FC<{
                             </p>
                             <h1
                                 className="text-4xl md:text-5xl font-black text-text leading-normal pb-0.5"
-                                style={{ fontSize: 'clamp(1.6rem, 8vw, 3rem)', wordBreak: 'break-word' }}
+                                style={{ fontSize: 'clamp(1.35rem, 6.5vw, 3rem)', wordBreak: 'break-word' }}
                             >
                                 {sessionInfo.session.username}
                             </h1>
@@ -8332,7 +8332,7 @@ export const UserDashboard: React.FC<{
                         {(sessionInfo.session.isAdmin || user) && analytics && (
                             <div className="glass-card p-4 md:p-5 shadow-xl">
                                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3 md:mb-4">
-                                    <h3 className="text-xl font-bold text-text">{t('wrapUp.title')}</h3>
+                                    <h3 className="text-lg md:text-xl font-bold text-text">{t('wrapUp.title')}</h3>
                                     <div className="flex items-center gap-2">
                                         <button
                                             type="button"
@@ -12059,16 +12059,16 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             {/* Mobile Top Nav — height grows with safe-area so content clears the iOS status bar in PWA */}
             <div className="md:hidden fixed top-0 left-0 right-0 z-50 nav-shell border-b shadow-lg pt-[env(safe-area-inset-top,0px)] overflow-visible">
                 <div className="h-16 flex items-center justify-between page-x overflow-visible">
-                <div className="flex items-center gap-3 min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
                     <img
                         src={serverIcon}
                         alt="Logo"
-                        className={`w-10 h-10 shrink-0 ${customLogoUrl ? 'object-contain' : 'rounded-full object-cover'}`}
+                        className={`w-8 h-8 shrink-0 ${customLogoUrl ? 'object-contain' : 'rounded-full object-cover'}`}
                         onError={(e) => {
                             (e.target as HTMLImageElement).src = logoUrl();
                         }}
                     />
-                    <span className="font-bold text-text uppercase tracking-widest text-sm truncate">{serverName}</span>
+                    <span className="font-bold text-text uppercase tracking-widest text-xs truncate">{serverName}</span>
                 </div>
                 <div className="flex items-center gap-2 shrink-0 overflow-visible">
                     <InAppNotificationsBell

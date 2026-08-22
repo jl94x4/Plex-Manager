@@ -178,13 +178,14 @@
   }
 
   html {
-    overflow-x: clip;
-    max-width: 100%;
     height: 100%;
     /* iOS Safari: 100% alone can stay short after the URL bar collapses. */
     min-height: 100%;
     min-height: -webkit-fill-available;
     min-height: 100dvh;
+    /* Lock rem so Android Chrome / system font scaling cannot blow up the whole UI.
+       overflow-x on html makes some Android WebViews ignore device-width and look zoomed. */
+    font-size: 16px;
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
   }
