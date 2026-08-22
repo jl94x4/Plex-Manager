@@ -14,6 +14,7 @@ import {
 } from './requestSeasonUtils';
 import { resolveTmdbImageUrl } from './tmdbImageUrl';
 import { translateDiscoverStatus, useDiscoverI18n } from './i18n';
+import { mediaStatusChipClass } from './DiscoverStatusOverlay';
 
 type Props = {
     open: boolean;
@@ -845,7 +846,7 @@ export const RequestModal: React.FC<Props> = ({
                                     <span className="text-sm font-bold text-white truncate">
                                         {formatSeasonName(season.name, seasonNumber, t)}
                                     </span>
-                                    <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${seasonStatusBadgeClass(season.statusLabel, season.requestable)}`}>
+                                    <span className={`${mediaStatusChipClass} ${seasonStatusBadgeClass(season.statusLabel, season.requestable)}`}>
                                         {translateDiscoverStatus(t, season.statusLabel)}
                                     </span>
                                 </div>

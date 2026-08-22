@@ -6,7 +6,7 @@ import { MusicRequestModal } from './MusicRequestModal';
 import { discoveryTheme } from './discoveryThemeClasses';
 import { translateDiscoverAvailabilityDetail, translateDiscoverStatus, useDiscoverI18n } from './i18n';
 import { resolveMediaAvailabilityState } from './discoverAvailability';
-import { mediaStatusPanelClass } from './DiscoverStatusOverlay';
+import { mediaStatusPanelClass, mediaStatusChipClass } from './DiscoverStatusOverlay';
 import { formatRequestedByCopy } from './requestSeasonUtils';
 
 type ArtistAlbum = {
@@ -177,28 +177,28 @@ export const MusicArtistPage: React.FC<{
     const albumBadge = (album: ArtistAlbum) => {
         if (album.available) {
             return (
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-500/90 text-black text-[10px] font-black uppercase">
-                    <Check className="w-3 h-3" /> {t('music.albumAvailable')}
+                <span className={`inline-flex items-center gap-1 ${mediaStatusChipClass} bg-emerald-500/90 text-black border-transparent`}>
+                    <Check className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> {t('music.albumAvailable')}
                 </span>
             );
         }
         if (album.partial) {
             return (
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-plex/90 text-black text-[10px] font-black uppercase">
+                <span className={`${mediaStatusChipClass} bg-plex/90 text-black border-transparent`}>
                     {t('music.albumPartial')}
                 </span>
             );
         }
         if (requestedAlbumMbids.has(album.mbid) || artistRequested) {
             return (
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-sky-500/90 text-black text-[10px] font-black uppercase">
-                    <Clock className="w-3 h-3" /> {t('music.albumRequested')}
+                <span className={`inline-flex items-center gap-1 ${mediaStatusChipClass} bg-sky-500/90 text-black border-transparent`}>
+                    <Clock className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> {t('music.albumRequested')}
                 </span>
             );
         }
         if (album.monitored) {
             return (
-                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-white/20 text-text text-[10px] font-black uppercase">
+                <span className={`${mediaStatusChipClass} bg-white/20 text-text border-transparent`}>
                     {t('music.albumMonitored')}
                 </span>
             );
@@ -251,7 +251,7 @@ export const MusicArtistPage: React.FC<{
                         {availability.kind !== 'none' && (
                             <div className="mt-4 flex justify-center sm:justify-start">
                                 <span
-                                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-black uppercase tracking-wide ${mediaStatusPanelClass(availability.kind)}`}
+                                    className={`inline-flex items-center gap-1 ${mediaStatusChipClass} ${mediaStatusPanelClass(availability.kind)}`}
                                     title={availability.detail ? translateDiscoverAvailabilityDetail(t, availability.detail) : translateDiscoverStatus(t, availability.label)}
                                 >
                                     {translateDiscoverStatus(t, availability.label) || availability.label}

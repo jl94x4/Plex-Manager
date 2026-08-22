@@ -4,6 +4,7 @@ import { apiFetch } from '../shared/api';
 import { NoPosterPlaceholder } from '../shared/NoPosterPlaceholder';
 import { RequestCardActions, RequestCardShell, requestCardActionBtnClass } from '../requests/RequestCardShell';
 import type { PortalRequestItem } from '../requests/types';
+import { mediaStatusChipClass } from './DiscoverStatusOverlay';
 import {
     formatRequestRelativeTime,
     memberRequestDisplayStatus,
@@ -35,17 +36,17 @@ const RequestTypeBadge: React.FC<{
     show4k,
     t,
 }) => (
-    <span className="inline-flex items-center gap-1.5">
-        <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-white/5 border border-border text-muted">
+    <span className="inline-flex items-center gap-1">
+        <span className={`${mediaStatusChipClass} bg-white/5 border-border text-muted`}>
             {type === 'tv' ? t('mediaType.tv') : (type === 'music' ? t('mediaType.music') : t('mediaType.movie'))}
         </span>
         {showHd && (
-            <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-white/5 border border-border text-muted">
+            <span className={`${mediaStatusChipClass} bg-white/5 border-border text-muted`}>
                 HD
             </span>
         )}
         {show4k && (
-            <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-200">
+            <span className={`${mediaStatusChipClass} bg-amber-500/15 border-amber-500/30 text-amber-200`}>
                 4K
             </span>
         )}
@@ -354,7 +355,7 @@ export const MyRequestsPage: React.FC<Props> = ({ navigate, pushToast, onCountsC
                                                     t={t}
                                                 />
                                                 {!multi && sharedStatus ? (
-                                                    <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${memberRequestStatusClass(sharedStatus)}`}>
+                                                    <span className={`${mediaStatusChipClass} ${memberRequestStatusClass(sharedStatus)}`}>
                                                         {translateDiscoverStatus(t, sharedStatus)}
                                                     </span>
                                                 ) : null}
@@ -381,7 +382,7 @@ export const MyRequestsPage: React.FC<Props> = ({ navigate, pushToast, onCountsC
                                                                 >
                                                                     {requestQualityLabel(variant)}
                                                                 </span>
-                                                                <span className={`font-bold uppercase tracking-wide px-2 py-0.5 rounded-full border ${memberRequestStatusClass(statusLabel)}`}>
+                                                                <span className={`${mediaStatusChipClass} ${memberRequestStatusClass(statusLabel)}`}>
                                                                     {translateDiscoverStatus(t, statusLabel)}
                                                                 </span>
                                                             </div>

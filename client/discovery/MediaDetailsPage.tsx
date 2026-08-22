@@ -14,7 +14,7 @@ import { ReportIssueModal } from './ReportIssueModal';
 import { SeasonEpisodesModal } from './SeasonEpisodesModal';
 import { resolveMediaAvailabilityState } from './discoverAvailability';
 import { enrichDiscoverItemsWithAvailability } from './discoverAvailabilityEnrich';
-import { MediaStatusPanel } from './DiscoverStatusOverlay';
+import { MediaStatusPanel, mediaStatusChipClass } from './DiscoverStatusOverlay';
 import { DiscoveryLogo } from './DiscoveryLogo';
 import { readDiscoverDetailSeed, scrollPortalToTop } from './discoverNavigationUtils';
 import { MediaOverviewExtras } from './MediaOverviewExtras';
@@ -1123,7 +1123,7 @@ export const MediaDetailsPage: React.FC<{
                                     <div className="flex flex-col min-w-0 gap-1">
                                         <span className="font-bold text-text text-sm truncate">{season.name}</span>
                                         <span className="text-xs text-muted">{t('common.episodeCount', { count: season.episodeCount })}</span>
-                                        <span className={`self-start text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full border ${seasonStatusBadgeClass(season.statusLabel, season.requestable)}`}>
+                                        <span className={`self-start ${mediaStatusChipClass} ${seasonStatusBadgeClass(season.statusLabel, season.requestable)}`}>
                                             {translateDiscoverStatus(t, season.statusLabel)}
                                         </span>
                                     </div>

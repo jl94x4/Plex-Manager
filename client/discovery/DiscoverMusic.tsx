@@ -494,15 +494,13 @@ export const DiscoverMusic: React.FC<{
                                             key={`req-${artist.mbid || artist.id}`}
                                             type="button"
                                             onClick={() => openArtist(formatted)}
-                                            className="group text-left rounded-xl border border-border/60 bg-white/[0.02] overflow-hidden hover:border-plex/40 transition-colors relative"
+                                            className="group text-left rounded-xl border border-border/60 bg-white/[0.02] overflow-hidden hover:border-plex/40 transition-colors"
                                         >
-                                            {availability.kind !== 'none' && (
-                                                <div className="absolute top-2 left-2 z-10">
-                                                    <DiscoverStatusOverlay state={availability} />
-                                                </div>
-                                            )}
                                             <div className="aspect-square bg-white/5 relative">
                                                 <ArtistArt src={poster} title={formatted.name || formatted.title} />
+                                                {availability.kind !== 'none' && (
+                                                    <DiscoverStatusOverlay state={availability} />
+                                                )}
                                             </div>
                                             <div className="p-2.5">
                                                 <p className="font-bold text-sm leading-tight line-clamp-2 group-hover:text-plex transition-colors">
