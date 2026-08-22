@@ -187,7 +187,7 @@ export const MusicRequestModal: React.FC<Props> = ({
         <ModalPortal open={open}>
             <div className="fixed inset-0 z-[120] flex items-end sm:items-center justify-center p-0 sm:p-4">
                 <button type="button" className="absolute inset-0 bg-black/70" onClick={onClose} aria-label={t('common.close')} />
-                <div className="relative w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl border border-border bg-background shadow-2xl">
+                <div data-modal-scroll="" className="relative w-full sm:max-w-lg max-h-[min(92dvh,calc(100dvh-4.5rem))] overflow-y-auto overscroll-contain touch-pan-y rounded-t-2xl sm:rounded-2xl border border-border bg-background shadow-2xl">
                     <div className="sticky top-0 z-10 flex items-center justify-between gap-3 px-4 py-3 border-b border-border bg-background/95 backdrop-blur">
                         <div className="flex items-center gap-2 min-w-0">
                             <Music className="w-4 h-4 text-plex shrink-0" />

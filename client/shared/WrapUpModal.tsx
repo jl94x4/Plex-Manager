@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { Calendar, Clapperboard, Clock, Coffee, Compass, Film, Layers, PieChart, PlayCircle, Tv, X } from 'lucide-react';
 import { formatStreamingHour } from './format';
+import { lockBackgroundScroll } from './lockBackgroundScroll';
 
 export const WrapUpModal: React.FC<{
     metric: string;
@@ -18,25 +19,7 @@ export const WrapUpModal: React.FC<{
         return () => window.removeEventListener('keydown', handleEsc);
     }, [onClose]);
 
-    // Keep background (#main-scroll-container) from eating touch-scroll while the sheet is open.
-    useEffect(() => {
-        const scroller = document.getElementById('main-scroll-container');
-        const prevOverflow = scroller?.style.overflow || '';
-        const prevTouchAction = scroller?.style.touchAction || '';
-        if (scroller) {
-            scroller.style.overflow = 'hidden';
-            scroller.style.touchAction = 'none';
-        }
-        const prevBodyOverscroll = document.body.style.overscrollBehavior;
-        document.body.style.overscrollBehavior = 'none';
-        return () => {
-            if (scroller) {
-                scroller.style.overflow = prevOverflow;
-                scroller.style.touchAction = prevTouchAction;
-            }
-            document.body.style.overscrollBehavior = prevBodyOverscroll;
-        };
-    }, []);
+    useEffect(() => lockBackgroundScroll(), []);
 
     const renderContent = () => {
         switch (metric) {
@@ -728,7 +711,10 @@ export const WrapUpModal: React.FC<{
                 >
                     <X className="w-4 h-4 group-hover:rotate-90 transition-transform duration-300" />
                 </button>
-                <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y custom-scrollbar [-webkit-overflow-scrolling:touch]">
+                <div
+                    data-modal-scroll=""
+                    className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y custom-scrollbar [-webkit-overflow-scrolling:touch]"
+                >
                     {renderContent()}
                 </div>
             </div>

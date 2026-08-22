@@ -805,7 +805,10 @@ export const RequestModal: React.FC<Props> = ({
                 )}
             </div>
             {/* #170: cap on mobile too — an uncapped list pushed Advanced off-screen. */}
-            <div className="flex flex-col gap-2 max-h-[min(40vh,20rem)] overflow-y-auto overscroll-y-auto custom-scrollbar pr-1">
+            <div
+                data-modal-scroll=""
+                className="flex flex-col gap-2 max-h-[min(40vh,20rem)] overflow-y-auto overscroll-contain custom-scrollbar pr-1"
+            >
                 {(options?.seasons || []).map((season) => {
                     const seasonNumber = Number(season.seasonNumber);
                     const selected = selectedSeasons.includes(seasonNumber);
@@ -861,22 +864,22 @@ export const RequestModal: React.FC<Props> = ({
 
     return (
         <ModalPortal open={open}>
-        <div className="fixed inset-x-0 top-0 z-[340] flex items-end sm:items-center justify-center p-0 sm:p-4 bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] sm:inset-0 sm:bottom-0 h-[calc(100dvh-4rem-env(safe-area-inset-bottom,0px))] sm:h-full">
+        {/* #170: size with top + bottom only. A second h-[calc(100dvh-…)] fights
+            the insets on iOS (height wins, bottom is ignored) and the sheet
+            becomes taller than the visible viewport, so Advanced never scrolls. */}
+        <div className="fixed inset-x-0 top-0 z-[340] flex min-h-0 items-end overflow-hidden sm:items-center justify-center p-0 sm:p-4 bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] sm:inset-0">
             <button
                 type="button"
                 aria-label={t('request.closeAria')}
-                className="absolute inset-0 bg-black/80 backdrop-blur-sm"
+                className="absolute inset-0 bg-black/80 backdrop-blur-sm touch-none"
                 onClick={() => { if (!submitting) onClose(); }}
             />
-            {/* #170: size the sheet with insets, not height:100%. The overlay is
-                stretched via top/bottom with height:auto, so h-full/max-h-full never
-                resolve on iOS and the inner scroller never gets a bounded height. */}
             <div
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="request-modal-title"
                 onMouseDown={(event) => event.stopPropagation()}
-                className="absolute inset-0 sm:relative sm:inset-auto w-full sm:max-w-3xl lg:max-w-4xl sm:max-h-[85vh] min-h-0 bg-card border border-white/10 rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+                className="absolute inset-0 sm:relative sm:inset-auto h-full w-full sm:h-auto sm:max-w-3xl lg:max-w-4xl sm:max-h-[85vh] min-h-0 bg-card border border-white/10 rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden"
             >
                 <div className="flex items-start justify-between gap-4 p-5 border-b border-white/10 bg-black/20 shrink-0">
                     <div className="flex items-start gap-4 min-w-0">
@@ -929,7 +932,8 @@ export const RequestModal: React.FC<Props> = ({
 
                 <div
                     ref={scrollBodyRef}
-                    className="flex-1 min-h-0 overflow-y-auto overscroll-y-contain touch-pan-y custom-scrollbar [-webkit-overflow-scrolling:touch] p-5 pb-8 space-y-5"
+                    data-modal-scroll=""
+                    className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y custom-scrollbar [-webkit-overflow-scrolling:touch] p-5 pb-8 space-y-5"
                 >
                     {loading ? (
                         <div className="flex flex-col items-center justify-center gap-3 py-10">

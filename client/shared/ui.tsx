@@ -112,7 +112,8 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({ id, value, onChange,
                 maxWidth: 'calc(100vw - 16px)',
                 zIndex: 99999,
             }}
-            className="bg-card border border-border rounded-lg shadow-2xl py-1 max-h-64 overflow-y-auto custom-scrollbar"
+            data-modal-scroll=""
+            className="bg-card border border-border rounded-lg shadow-2xl py-1 max-h-64 overflow-y-auto overscroll-contain custom-scrollbar"
         >
             {options.map((opt, index) => {
                 if (opt.isGroup) {
