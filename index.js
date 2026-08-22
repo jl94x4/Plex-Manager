@@ -1438,6 +1438,7 @@ import {
     normalizeStatusNotifyDownAfterMinutes,
 } from './lib/notifications/opsNotify.js';
 import { notifySupportAdmins } from './lib/notifications/supportNotify.js';
+import { mapLibraryIdsToPlexTvSectionIds, parsePlexTvServerSections } from './lib/plex/plexTvSections.js';
 import { enrichInAppNotificationItems } from './lib/notifications/mediaMeta.js';
 import { lookupJobNotificationPoster, resolveJobNotifySourcePath } from './lib/notifications/jobPoster.js';
 import { resolveScannerNotifyPoster } from './lib/notifications/scannerPoster.js';
@@ -2900,6 +2901,39 @@ const normalizeLibraryIds = (libraryIds) => {
     return [...new Set(libraryIds.map((id) => String(id)).filter(Boolean))];
 };
 
+let plexTvSectionsCache = { serverId: '', at: 0, sections: [] };
+
+const listPlexTvServerSections = async (config) => {
+    const serverId = String(config?.serverIdentifier || '');
+    if (!serverId || !config?.plexToken) return [];
+    const now = Date.now();
+    if (plexTvSectionsCache.serverId === serverId && (now - plexTvSectionsCache.at) < 60_000) {
+        return plexTvSectionsCache.sections;
+    }
+    const res = await apiFetch(`https://plex.tv/api/servers/${serverId}`, config.plexToken);
+    if (!res.ok) {
+        log(`plex.tv server sections failed: HTTP ${res.status}`);
+        return [];
+    }
+    const sections = parsePlexTvServerSections(await res.text());
+    plexTvSectionsCache = { serverId, at: now, sections };
+    return sections;
+};
+
+/** Local PMS keys → numeric plex.tv section ids for shared_servers invite/update. */
+const resolvePlexTvLibrarySectionIds = async (config, libraryIds) => {
+    const selected = normalizeLibraryIds(libraryIds);
+    if (selected.length === 0) return [];
+    const sections = await listPlexTvServerSections(config).catch(() => []);
+    return mapLibraryIdsToPlexTvSectionIds(selected, sections);
+};
+
+const plexInvitedAccountId = (user) => {
+    const raw = String(user?.plexId || user?.plexAccountId || '').trim();
+    if (!/^\d+$/.test(raw)) return null;
+    return Number(raw);
+};
+
 /** Resolve library ids for invites: empty array / null / undefined = share all (omit section filter). */
 const resolveInviteLibraryIds = (user, config) => {
     if (Array.isArray(user?.libraryIds)) return normalizeLibraryIds(user.libraryIds);
@@ -3053,9 +3087,40 @@ const getPlexShareLibraryIds = async (user, config) => {
     return Array.isArray(share.libraryIds) ? share.libraryIds : [];
 };
 
+const putPlexShareLibraryIds = async (config, user, shareId, plexTvSectionIds) => {
+    log(`Updating Plex share libraries for ${user.username} (share ${shareId}): ${plexTvSectionIds.join(',') || '(none)'}`);
+    const res = await apiFetch(
+        `https://plex.tv/api/servers/${config.serverIdentifier}/shared_servers/${shareId}`,
+        config.plexToken,
+        {
+            method: 'PUT',
+            body: JSON.stringify({
+                server_id: config.serverIdentifier,
+                shared_server: { library_section_ids: plexTvSectionIds },
+            }),
+            headers: { 'Content-Type': 'application/json' },
+        }
+    );
+    if (!res.ok) {
+        const errText = await res.text();
+        log(`Error: Failed to update share libraries for ${user.username}. Status: ${res.status}. Response: ${errText}`);
+        return {
+            ok: false,
+            error: `Plex rejected the library update (HTTP ${res.status}). Check portal logs for details.`,
+        };
+    }
+    return { ok: true };
+};
+
+const localIdsForShareUpdate = async (config, selected) => {
+    if (selected.length > 0) return selected;
+    const libs = await listPlexLibrariesForConfig(config).catch(() => []);
+    return normalizeLibraryIds((libs || []).map((l) => l.id));
+};
+
 /**
- * Update live share libraries. Empty libraryIds = share all (sends every local section id on PUT).
- * If no share exists, falls back to inviteUserToPlex.
+ * Update live share libraries. Empty libraryIds = share all.
+ * If no share exists, falls back to inviteUserToPlex (maps local keys to plex.tv section ids).
  * @returns {{ ok: boolean, error?: string }}
  */
 const updatePlexShareLibraries = async (user, config, libraryIds = []) => {
@@ -3066,49 +3131,49 @@ const updatePlexShareLibraries = async (user, config, libraryIds = []) => {
     }
 
     const selected = normalizeLibraryIds(libraryIds);
+    const inviteFailedError = () => {
+        if (!plexInvitedAccountId(user) && !String(user.email || '').trim()) {
+            return 'No Plex share found and this user has no Plex account id or email — add an email before sharing libraries.';
+        }
+        return 'No Plex friend share found for this user and the invite failed. They may be a Plex Home user (managed in Plex, not via sharing) or already invited under another email.';
+    };
+
     try {
         const share = await findPlexShare(user, config);
         if (share?.shareId) {
-            let sectionIds = selected;
+            const localIds = await localIdsForShareUpdate(config, selected);
+            const plexTvIds = await resolvePlexTvLibrarySectionIds(config, localIds);
+            const sectionIds = plexTvIds.length > 0
+                ? plexTvIds
+                : localIds.map((id) => Number(id)).filter((n) => Number.isFinite(n));
             if (sectionIds.length === 0) {
-                const libs = await listPlexLibrariesForConfig(config).catch(() => []);
-                sectionIds = normalizeLibraryIds((libs || []).map((l) => l.id));
+                return { ok: false, error: 'Could not match libraries on plex.tv. Try sharing all libraries, then save again.' };
             }
-            log(`Updating Plex share libraries for ${user.username} (share ${share.shareId}): ${sectionIds.join(',') || '(none)'}`);
-            const res = await apiFetch(
-                `https://plex.tv/api/servers/${config.serverIdentifier}/shared_servers/${share.shareId}`,
-                config.plexToken,
-                {
-                    method: 'PUT',
-                    body: JSON.stringify({
-                        server_id: config.serverIdentifier,
-                        shared_server: { library_section_ids: sectionIds },
-                    }),
-                    headers: { 'Content-Type': 'application/json' },
-                }
-            );
-            if (!res.ok) {
-                const errText = await res.text();
-                log(`Error: Failed to update share libraries for ${user.username}. Status: ${res.status}. Response: ${errText}`);
-                return {
-                    ok: false,
-                    error: `Plex rejected the library update (HTTP ${res.status}). Check portal logs for details.`,
-                };
-            }
-            return { ok: true };
+            return putPlexShareLibraryIds(config, user, share.shareId, sectionIds);
         }
 
-        // No existing share — invite (empty selected = all libraries)
+        // No existing share — invite (empty selected = all libraries).
         const invited = await inviteUserToPlex(user, config, selected.length > 0 ? selected : null);
-        if (!invited) {
-            return {
-                ok: false,
-                error: user.email
-                    ? 'No Plex friend share found for this user and the invite failed. They may be a Plex Home user (managed in Plex, not via sharing) or already invited under another email.'
-                    : 'No Plex share found and this user has no email — add an email before sharing libraries.',
-            };
+        if (invited) return { ok: true };
+
+        // plex.tv often accepts "share all" after revoke but rejects a subset invite.
+        // Recreate the share, then restrict libraries with a PUT.
+        if (selected.length > 0) {
+            log(`Subset invite failed for ${user.username}; retrying share-all then restricting libraries.`);
+            const invitedAll = await inviteUserToPlex(user, config, null);
+            if (invitedAll) {
+                const created = await findPlexShare(user, config);
+                if (created?.shareId) {
+                    const plexTvIds = await resolvePlexTvLibrarySectionIds(config, selected);
+                    if (plexTvIds.length > 0) {
+                        return putPlexShareLibraryIds(config, user, created.shareId, plexTvIds);
+                    }
+                }
+                return { ok: true };
+            }
         }
-        return { ok: true };
+
+        return { ok: false, error: inviteFailedError() };
     } catch (error) {
         log(`An exception occurred while updating libraries for ${user?.username}: ${error.message}`);
         return { ok: false, error: error.message || 'Failed to update Plex library access.' };
@@ -3159,17 +3224,32 @@ const revokePlexAccess = async (user, config) => {
 };
 
 const inviteUserToPlex = async (user, config, libraryIds = null) => {
-    if (!user.email || !config.serverIdentifier) {
-        log(`Error: Cannot invite ${user.username} due to missing email or server ID.`);
+    if (!config.serverIdentifier) {
+        log(`Error: Cannot invite ${user.username} due to missing server ID.`);
         return false;
     }
-    log(`Inviting user to Plex: ${user.username} (${user.email})`);
+    const invitedId = plexInvitedAccountId(user);
+    const invitedEmail = String(user.email || '').trim();
+    if (!invitedId && !invitedEmail) {
+        log(`Error: Cannot invite ${user.username} due to missing Plex account id and email.`);
+        return false;
+    }
     try {
-        const sharedServer = { invited_email: user.email };
+        const sharedServer = {};
+        if (invitedId) sharedServer.invited_id = invitedId;
+        if (invitedEmail) sharedServer.invited_email = invitedEmail;
+
         const normalized = normalizeLibraryIds(libraryIds);
         if (normalized.length > 0) {
-            sharedServer.library_section_ids = normalized;
+            const mapped = await resolvePlexTvLibrarySectionIds(config, normalized);
+            if (mapped.length === 0) {
+                log(`Invite for ${user.username} could not map local libraries ${normalized.join(',')} to plex.tv section ids.`);
+                return false;
+            }
+            sharedServer.library_section_ids = mapped;
         }
+
+        log(`Inviting user to Plex: ${user.username} (${invitedEmail || invitedId})${sharedServer.library_section_ids ? ` libs=${sharedServer.library_section_ids.join(',')}` : ' (all libraries)'}`);
 
         const inviteRes = await apiFetch(`https://plex.tv/api/servers/${config.serverIdentifier}/shared_servers`, config.plexToken, {
             method: 'POST',

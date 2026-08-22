@@ -249,10 +249,16 @@ const UserCard: React.FC<{
     providerLabel?: string;
 }> = ({ user, onEdit, onDelete, onRevoke, onViewAs, onViewAnalytics, onViewProfile, isConfigured, isSelected, onSelect, providerLabel = 'Plex' }) => {
     const { t } = useDiscoverI18n();
-    const { status, statusText, daysRemainingText, pillClass, borderClass, glowClass } = useMemo(() => {
+    const isPlexRevoked = user.plexAccessStatus === 'revoked' && !(user.isServerOwner || user.isAdmin);
+    const plexAccessStatus = (user.isServerOwner || user.isAdmin)
+        ? 'active'
+        : (user.plexAccessStatus || 'unknown');
+
+    const { status, statusText, statusHint, daysRemainingText, pillClass, borderClass, glowClass } = useMemo(() => {
         const days = getDaysUntilExpiry(user.expiryDate);
-        let status: UserStatus = 'active';
+        let status: UserStatus | 'revoked' = 'active';
         let statusText = t('usersAdmin.status.active');
+        let statusHint = t('usersAdmin.statusHints.active');
         let daysRemainingText = '';
         let pillClass = 'bg-green-500/10 text-green-400 border border-green-500/20';
         let borderClass = 'border-green-500/30';
@@ -265,6 +271,7 @@ const UserCard: React.FC<{
         } else if (days < 0) {
             status = 'expired';
             statusText = t('usersAdmin.status.expired');
+            statusHint = t('usersAdmin.statusHints.expired');
             daysRemainingText = t('usersAdmin.card.expiredDaysAgo', { count: Math.abs(days) });
             pillClass = 'bg-red-500/10 text-red-400 border border-red-500/20';
             borderClass = 'border-red-500/30';
@@ -272,6 +279,7 @@ const UserCard: React.FC<{
         } else if (days <= 30) {
             status = 'expiring';
             statusText = t('usersAdmin.status.expiring');
+            statusHint = t('usersAdmin.statusHints.expiring');
             daysRemainingText = days === 0 ? t('usersAdmin.card.expiresToday') : t('usersAdmin.card.expiresInDays', { count: days });
             pillClass = 'bg-orange-500/10 text-orange-400 border border-orange-500/20';
             borderClass = 'border-orange-500/30';
@@ -280,8 +288,17 @@ const UserCard: React.FC<{
             daysRemainingText = t('usersAdmin.card.expiresInDays', { count: days });
         }
 
-        return { status, statusText, daysRemainingText, pillClass, borderClass, glowClass };
-    }, [user.expiryDate, t]);
+        if (isPlexRevoked) {
+            status = 'revoked';
+            statusText = t('usersAdmin.status.revoked');
+            statusHint = t('usersAdmin.statusHints.revoked');
+            pillClass = 'bg-zinc-500/15 text-zinc-300 border border-zinc-500/25';
+            borderClass = 'border-zinc-500/40';
+            glowClass = 'hover:border-zinc-400/50 hover:shadow-[0_0_15px_rgba(161,161,170,0.12)]';
+        }
+
+        return { status, statusText, statusHint, daysRemainingText, pillClass, borderClass, glowClass };
+    }, [user.expiryDate, isPlexRevoked, t]);
 
     const handleCardClick = () => {
         onSelect(user.id);
@@ -310,7 +327,10 @@ const UserCard: React.FC<{
                         {user.email && <span className="text-[10px] text-muted truncate mt-0.5" title={user.email}>{user.email}</span>}
                     </div>
                 </div>
-                <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider whitespace-nowrap ${pillClass}`}>{statusText}</span>
+                <span
+                    className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider whitespace-nowrap ${pillClass}`}
+                    title={statusHint}
+                >{statusText}</span>
             </div>
             <div className="relative flex flex-col gap-2 mt-3 flex-grow">
                 <div className="flex justify-between items-center text-xs pb-1.5 border-b border-white/5 last:border-0 last:pb-0">
@@ -325,20 +345,14 @@ const UserCard: React.FC<{
                     </span>
                 </div>
                 <div className="flex justify-between items-center text-xs pb-1.5 border-b border-white/5 last:border-0 last:pb-0">
-                    <span className="text-muted text-[10px] uppercase tracking-wider font-bold">{providerLabel}</span>
-                    <span className="info-value plex-status flex items-center gap-1.5">
-                        {(() => {
-                            const accessStatus = (user.isServerOwner || user.isAdmin)
-                                ? 'active'
-                                : (user.plexAccessStatus || 'unknown');
-                            const label = t(`usersAdmin.status.${accessStatus}` as any);
-                            return (
-                                <>
-                                    <span className={`plex-status-dot ${accessStatus}`}></span>
-                                    <span className="text-text font-medium text-xs">{label}</span>
-                                </>
-                            );
-                        })()}
+                    <span className="text-muted text-[10px] uppercase tracking-wider font-bold">{t('usersAdmin.card.share', { provider: providerLabel })}</span>
+                    <span className="info-value plex-status flex items-center gap-1.5" title={t(`usersAdmin.accessHints.${plexAccessStatus}` as any)}>
+                        <span className={`inline-block h-1.5 w-1.5 rounded-full ${
+                            plexAccessStatus === 'active' ? 'bg-emerald-400' :
+                            plexAccessStatus === 'pending' ? 'bg-amber-400' :
+                            plexAccessStatus === 'revoked' ? 'bg-zinc-400' : 'bg-muted'
+                        }`} />
+                        <span className="text-text font-medium text-xs">{t(`usersAdmin.access.${plexAccessStatus}` as any)}</span>
                     </span>
                 </div>
                 <div className="flex justify-between items-center text-xs pb-1.5 border-b border-white/5 last:border-0 last:pb-0">
@@ -373,9 +387,9 @@ const UserCard: React.FC<{
                         {t('usersAdmin.actions.viewAs')}
                     </button>
                 )}
-                <button className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5" onClick={onEdit}>{t('usersAdmin.actions.edit')}</button>
+                <button className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5" onClick={onEdit}>{isPlexRevoked ? t('usersAdmin.actions.restoreAccess') : t('usersAdmin.actions.edit')}</button>
                 <button className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5" onClick={onDelete}>{t('common.delete')}</button>
-                {status === 'expired' && user.plexAccessStatus !== 'revoked' && (
+                {status === 'expired' && !isPlexRevoked && (
                     <button className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5" onClick={onRevoke} disabled={!isConfigured}>{t('usersAdmin.actions.revoke')}</button>
                 )}
             </div>
@@ -5986,6 +6000,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                                     <button
                                         key={status}
                                         type="button"
+                                        title={status === 'all' ? t('usersAdmin.filters.subtitle') : t(`usersAdmin.statusHints.${status}` as any)}
                                         className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors border-none outline-none cursor-pointer sm:text-sm ${dashboardSubnavLinkClass(statusFilter === status)}`}
                                         onClick={() => setStatusFilter(status)}
                                     >
@@ -5993,6 +6008,11 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                                     </button>
                                 ))}
                             </div>
+                            {statusFilter !== 'all' && (
+                                <p className="text-xs text-muted leading-relaxed">
+                                    {t(`usersAdmin.statusHints.${statusFilter}` as any)}
+                                </p>
+                            )}
                         </div>
                     </DashboardPanel>
                 )}
