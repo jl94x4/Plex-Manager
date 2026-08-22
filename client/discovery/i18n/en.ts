@@ -1999,6 +1999,8 @@ export const en = {
         cancelled: 'Request cancelled.',
         cancelFailed: 'Failed to cancel request',
         loadFailed: 'Failed to load your requests',
+        showing: 'Showing {shown} of {total}',
+        loadMore: 'Load more',
     },
     issues: {
         title: 'My Issues',

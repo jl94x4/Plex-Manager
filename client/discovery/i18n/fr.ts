@@ -1758,6 +1758,8 @@ export const fr: DeepPartial<EnCatalog> = {
         cancelled: 'Demande annulée.',
         cancelFailed: 'Échec de l’annulation',
         loadFailed: 'Échec du chargement des demandes',
+        showing: 'Affichage de {shown} sur {total}',
+        loadMore: 'Charger plus',
     },
     issues: {
         title: 'Mes signalements',

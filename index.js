@@ -9747,7 +9747,7 @@ app.get('/api/discovery/my-requests', requireAuth, requireMember, async (req, re
     try {
         const config = await loadFile(CONFIG_PATH, {});
         const filter = String(req.query.filter || 'all').toLowerCase();
-        const take = Math.min(50, Math.max(1, Number(req.query.take) || 20));
+        const take = Math.min(200, Math.max(1, Number(req.query.take) || 20));
         const skip = Math.max(0, Number(req.query.skip) || 0);
 
         if (getRequestEngine(config) === 'portal') {

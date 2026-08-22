@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Film, Loader2, RotateCcw, Trash2, Tv } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { NoPosterPlaceholder } from '../shared/NoPosterPlaceholder';
@@ -15,6 +15,8 @@ import { discoveryTheme } from './discoveryThemeClasses';
 import { useDiscoverI18n, translateDiscoverStatus } from './i18n';
 
 type RequestFilter = 'pending' | 'approved' | 'available' | 'declined' | 'failed';
+
+const PAGE_SIZE = 40;
 
 type Props = {
     navigate: (path: string) => void;
@@ -78,19 +80,34 @@ export const MyRequestsPage: React.FC<Props> = ({ navigate, pushToast, onCountsC
         userMapped: true,
     });
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [actionId, setActionId] = useState<number | null>(null);
     const [cancelTarget, setCancelTarget] = useState<PortalRequestItem | null>(null);
+    const [filterTotal, setFilterTotal] = useState(0);
+    const [gotFullPage, setGotFullPage] = useState(false);
+    const requestsRef = useRef<PortalRequestItem[]>([]);
+    const loadingMoreRef = useRef(false);
+    const sentinelRef = useRef<HTMLDivElement>(null);
+    requestsRef.current = requests;
 
-    const loadData = useCallback(async (opts?: { silent?: boolean }) => {
-        if (!opts?.silent) setLoading(true);
-        else setRefreshing(true);
+    const loadData = useCallback(async (opts?: { silent?: boolean; append?: boolean }) => {
+        const append = !!opts?.append;
+        if (append) {
+            if (loadingMoreRef.current) return;
+            loadingMoreRef.current = true;
+            setLoadingMore(true);
+        } else if (!opts?.silent) {
+            setLoading(true);
+        } else {
+            setRefreshing(true);
+        }
         setError(null);
         try {
-            // One round-trip — list payload includes counts (avoids double store scan).
+            const skip = append ? requestsRef.current.length : 0;
             const listData = await apiFetch(
-                `/api/discovery/my-requests?filter=${encodeURIComponent(filter)}&take=40`,
+                `/api/discovery/my-requests?filter=${encodeURIComponent(filter)}&take=${PAGE_SIZE}&skip=${skip}`,
             );
 
             setCounts({
@@ -105,17 +122,33 @@ export const MyRequestsPage: React.FC<Props> = ({ navigate, pushToast, onCountsC
 
             if (listData?.userMapped === false) {
                 setRequests([]);
+                setFilterTotal(0);
+                setGotFullPage(false);
                 setError(listData?.error || t('requestsPage.accountNotLinked'));
                 return;
             }
 
-            setRequests(Array.isArray(listData?.results) ? listData.results : []);
+            const incoming = Array.isArray(listData?.results) ? listData.results : [];
+            const pageTotal = Number(listData?.pageInfo?.total);
+            if (Number.isFinite(pageTotal) && pageTotal >= 0) setFilterTotal(pageTotal);
+            setGotFullPage(incoming.length >= PAGE_SIZE);
+
+            if (append) {
+                setRequests((prev) => {
+                    const seen = new Set(prev.map((row) => row.id));
+                    return [...prev, ...incoming.filter((row) => !seen.has(row.id))];
+                });
+            } else {
+                setRequests(incoming);
+            }
         } catch (e: any) {
             setError(e?.message || t('requestsPage.loadFailed'));
-            setRequests([]);
+            if (!append) setRequests([]);
         } finally {
             setLoading(false);
             setRefreshing(false);
+            setLoadingMore(false);
+            loadingMoreRef.current = false;
         }
     }, [filter, t]);
 
@@ -141,6 +174,23 @@ export const MyRequestsPage: React.FC<Props> = ({ navigate, pushToast, onCountsC
     ]), [counts, t]);
 
     const mergedRequests = useMemo(() => mergeHd4kMemberRequests(requests), [requests]);
+    const knownTotal = Math.max(filterTotal, Number(counts[filter]) || 0);
+    const hasMore = knownTotal > 0
+        ? requests.length < knownTotal
+        : gotFullPage;
+
+    useEffect(() => {
+        if (loading || loadingMore || !hasMore || mergedRequests.length === 0) return;
+        const node = sentinelRef.current;
+        if (!node) return;
+        const observer = new IntersectionObserver((entries) => {
+            if (entries.some((entry) => entry.isIntersecting)) {
+                void loadData({ append: true, silent: true });
+            }
+        }, { rootMargin: '240px' });
+        observer.observe(node);
+        return () => observer.disconnect();
+    }, [hasMore, loadData, loading, loadingMore, mergedRequests.length]);
 
     const handleCancel = async (item: PortalRequestItem) => {
         setActionId(item.id);
@@ -220,6 +270,15 @@ export const MyRequestsPage: React.FC<Props> = ({ navigate, pushToast, onCountsC
                     </button>
                 ))}
             </div>
+
+            {knownTotal > 0 && requests.length > 0 && (
+                <p className="px-2 text-xs text-muted">
+                    {t('requestsPage.showing', {
+                        shown: requests.length,
+                        total: knownTotal,
+                    })}
+                </p>
+            )}
 
             {loading && requests.length === 0 ? (
                 <div className="flex items-center justify-center py-20">
@@ -396,6 +455,32 @@ export const MyRequestsPage: React.FC<Props> = ({ navigate, pushToast, onCountsC
                             </RequestCardShell>
                         );
                     })}
+                </div>
+            )}
+
+            {mergedRequests.length > 0 && (
+                <div className="flex flex-col items-center justify-center min-h-[72px] mt-2 mb-8 gap-3 px-2">
+                    <div ref={sentinelRef} className="h-4 w-full" aria-hidden />
+                    {loadingMore && (
+                        <div className="inline-flex items-center gap-2 text-xs text-muted">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            {t('common.loadingMore')}
+                        </div>
+                    )}
+                    {hasMore && !loadingMore && (
+                        <button
+                            type="button"
+                            onClick={() => void loadData({ append: true, silent: true })}
+                            className="text-xs font-semibold text-plex hover:underline"
+                        >
+                            {t('requestsPage.loadMore')}
+                        </button>
+                    )}
+                    {!hasMore && !loadingMore && knownTotal > PAGE_SIZE && (
+                        <p className="text-xs font-semibold uppercase tracking-wider text-muted/70">
+                            {t('common.endOfResults')}
+                        </p>
+                    )}
                 </div>
             )}
 
