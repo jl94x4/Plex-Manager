@@ -79,7 +79,7 @@ import { isTautulliWatchHistorySource, buildAchievementsHomeRankContext, summari
 import { loadAchievementsState, setLeaderboardOptOut } from './lib/achievements/store.js';
 import { resolveAchievementsAccountId } from './lib/profile/assemble.js';
 import { sanitizeProfileBio } from './lib/profile/social.js';
-import { wrapUpFromHistoryItems, buildWrapUpCompare, summarizeWrapUpHistoryWindow } from './lib/profile/wrapUp.js';
+import { wrapUpFromHistoryItems, buildWrapUpCompare, summarizeWrapUpHistoryWindow, formatWrapUpNewsletterHtml } from './lib/profile/wrapUp.js';
 import { mapJellyfinPlayedItemsToHistory } from './lib/achievements/jellyfinMap.js';
 import {
     applyMemberNamePrivacyToRows,
@@ -8006,6 +8006,7 @@ const generateNewsletterHtml = async (config, options = {}) => {
                                 </p>
                             </td>
                         </tr>
+                        {{WRAP_MONTH}}
 
                         <!-- Recently Added -->
                         <tr>
@@ -8048,8 +8049,19 @@ const generateNewsletterHtml = async (config, options = {}) => {
     return { html: finalHtml, attachments };
 };
 
+const personalizeNewsletterHtml = (html, user = {}) => {
+    let output = String(html || '').replace(
+        /{{USERNAME}}/g,
+        escapeHtmlAttr(user.username || user.name || 'User'),
+    );
+    const plexId = String(user.plexAccountId || '').trim();
+    const cached = plexId ? personalAnalyticsCache.get(`v6:${plexId}:30`) : null;
+    output = output.replace(/{{WRAP_MONTH}}/g, formatWrapUpNewsletterHtml(cached?.payload || null));
+    return output;
+};
+
 const renderNewsletterHtmlForBrowser = (html, attachments = [], username = 'Preview User') => {
-    let output = String(html || '').replace(/{{USERNAME}}/g, escapeHtmlAttr(username));
+    let output = personalizeNewsletterHtml(html, { username });
     for (const attachment of attachments || []) {
         if (!attachment?.cid || !attachment?.content) continue;
         const ext = String(attachment.filename || '').split('.').pop()?.toLowerCase();
@@ -8112,7 +8124,7 @@ app.post('/api/newsletter/test', requireAdmin, async (req, res) => {
             auth: { user: config.smtpUser, pass: config.smtpPass }
         });
 
-        const personalizedHtml = html.replace(/{{USERNAME}}/g, 'Admin');
+        const personalizedHtml = personalizeNewsletterHtml(html, { username: 'Admin', plexAccountId: req.user?.plexAccountId });
 
         await transporter.sendMail({
             from: config.smtpFrom || config.smtpUser,
@@ -8152,7 +8164,7 @@ app.post('/api/newsletter/send-now', requireAdmin, async (req, res) => {
         log(`Manual newsletter trigger initiated for ${validUsers.length} users.`);
         for (const user of validUsers) {
             try {
-                const personalizedHtml = html.replace(/{{USERNAME}}/g, escapeHtmlAttr(user.username || user.name || 'User'));
+                const personalizedHtml = personalizeNewsletterHtml(html, user);
                 await transporter.sendMail({
                     from: config.smtpFrom || config.smtpUser,
                     to: user.email,
@@ -16689,6 +16701,7 @@ const slimPlexHistoryItem = (item) => {
         viewOffset: item.viewOffset,
         watchedStatus: item.watchedStatus,
         percentComplete: item.percentComplete,
+        videoResolution: item.Media?.[0]?.videoResolution || item.videoResolution || null,
     };
     if (Array.isArray(item.Guid) && item.Guid.length) {
         slim.Guid = item.Guid.map((g) => (g && g.id ? { id: g.id } : null)).filter(Boolean);
@@ -17403,6 +17416,14 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
                         return at >= priorStart && at < cutoffDate;
                     })),
                     daysNum,
+                    {
+                        currentItems: currentHistoryItems,
+                        previousItems: historyItems.filter((item) => {
+                            const at = Number(item.viewedAt) || 0;
+                            return at >= priorStart && at < cutoffDate;
+                        }),
+                        dayOfWeekCounts,
+                    },
                 )
                 : null,
             source: historySource,
@@ -18665,7 +18686,7 @@ const checkAndSendNewsletter = async (config, force = false) => {
 
         let sentCount = 0;
         for (const user of recipients) {
-            const personalizedHtml = html.replace(/{{USERNAME}}/g, escapeHtmlAttr(user.username || 'User'));
+            const personalizedHtml = personalizeNewsletterHtml(html, user);
 
             try {
                 await transporter.sendMail({

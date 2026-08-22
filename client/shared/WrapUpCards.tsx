@@ -126,6 +126,7 @@ export const buildWrapUpCards = (analytics: any, t?: DiscoverTranslate): WrapUpC
             'wrapUp.notRankedYet': 'Not ranked yet',
             'wrapUp.topPctOfUsers': `Top ${vars?.pct ?? ''}% of users`,
             'wrapUp.nothingYet': 'Nothing yet',
+            'wrapUp.wasTitle': `was ${vars?.title ?? ''}`,
             'wrapUp.episodePlays': `${vars?.count ?? 0} episodes`,
             'wrapUp.plays': `${vars?.count ?? 0} plays`,
             'wrapUp.peakTime': `Peak Time: ${vars?.time ?? ''}`,
@@ -230,7 +231,16 @@ export const buildWrapUpCards = (analytics: any, t?: DiscoverTranslate): WrapUpC
             icon: Tv,
             valueClassName: 'text-sm font-bold line-clamp-2 leading-tight',
             value: analytics.topBinge?.title || translate('wrapUp.nothingYet'),
-            subValue: translate('wrapUp.episodePlays', { count: analytics.topBinge?.plays || 0 }),
+            subValue: (
+                <span className="flex flex-col items-center gap-0.5">
+                    <span>{translate('wrapUp.episodePlays', { count: analytics.topBinge?.plays || 0 })}</span>
+                    {analytics.compare?.swaps?.topBinge?.from?.title ? (
+                        <span className="text-[10px] font-semibold text-white/55 normal-case tracking-normal">
+                            {translate('wrapUp.wasTitle', { title: analytics.compare.swaps.topBinge.from.title })}
+                        </span>
+                    ) : null}
+                </span>
+            ),
         },
         {
             metric: 'Top Movie',
@@ -239,7 +249,16 @@ export const buildWrapUpCards = (analytics: any, t?: DiscoverTranslate): WrapUpC
             icon: Clapperboard,
             valueClassName: 'text-sm font-bold line-clamp-2 leading-tight',
             value: analytics.topMovie?.title || translate('wrapUp.nothingYet'),
-            subValue: translate('wrapUp.plays', { count: analytics.topMovie?.plays || 0 }),
+            subValue: (
+                <span className="flex flex-col items-center gap-0.5">
+                    <span>{translate('wrapUp.plays', { count: analytics.topMovie?.plays || 0 })}</span>
+                    {analytics.compare?.swaps?.topMovie?.from?.title ? (
+                        <span className="text-[10px] font-semibold text-white/55 normal-case tracking-normal">
+                            {translate('wrapUp.wasTitle', { title: analytics.compare.swaps.topMovie.from.title })}
+                        </span>
+                    ) : null}
+                </span>
+            ),
         },
         {
             metric: 'Time of Day',

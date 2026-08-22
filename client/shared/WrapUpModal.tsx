@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { Calendar, Clapperboard, Clock, Coffee, Compass, Film, Layers, PieChart, PlayCircle, Tv, X } from 'lucide-react';
 import { formatStreamingHour } from './format';
+import { resolvePortalAssetUrl } from './basePath';
 import { lockBackgroundScroll } from './lockBackgroundScroll';
 
 export const WrapUpModal: React.FC<{
@@ -244,7 +245,7 @@ export const WrapUpModal: React.FC<{
                 return (
                     <div className="flex flex-col items-center justify-center text-center p-6 relative">
                         {analytics.topBinge?.artUrl || analytics.topBinge?.thumbUrl ? (
-                            <div className="w-full h-40 bg-cover bg-center rounded-xl shadow-lg mb-6 border border-white/10 relative overflow-hidden" style={{ backgroundImage: `url('${resolvePortalAssetUrl(analytics.topBinge.artUrl) || 'https://images.unsplash.com/photo-1594909122845-11baa439b7bf?auto=format&fit=crop&q=80&w=600'}')` }}>
+                            <div className="w-full h-40 bg-cover bg-center rounded-xl shadow-lg mb-6 border border-white/10 relative overflow-hidden" style={{ backgroundImage: `url('${resolvePortalAssetUrl(analytics.topBinge.artUrl || analytics.topBinge.thumbUrl) || 'https://images.unsplash.com/photo-1594909122845-11baa439b7bf?auto=format&fit=crop&q=80&w=600'}')` }}>
                                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
                                 <div className="absolute bottom-4 left-0 right-0 px-4 flex flex-col items-center">
                                     <h2 className="text-2xl font-black text-white mb-1 line-clamp-1 drop-shadow-md">{analytics.topBinge?.title || 'Nothing yet'}</h2>
@@ -715,7 +716,19 @@ export const WrapUpModal: React.FC<{
                     data-modal-scroll=""
                     className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y custom-scrollbar [-webkit-overflow-scrolling:touch]"
                 >
-                    {renderContent()}
+                    {(() => {
+                        try {
+                            return renderContent();
+                        } catch (error) {
+                            console.error('WrapUpModal failed to render', error);
+                            return (
+                                <div className="flex flex-col items-center justify-center text-center p-8 min-h-[16rem]">
+                                    <p className="text-white font-bold mb-2">Could not load this wrap-up</p>
+                                    <p className="text-sm text-muted">Close and try another card, or refresh the page.</p>
+                                </div>
+                            );
+                        }
+                    })()}
                 </div>
             </div>
         </div>,

@@ -30,6 +30,7 @@ import {
 import type { User, PlexConfig, AppSettings, PlexServer, ToastMessage, DeletedUser, AuditEntry, UserStatus } from './shared/types';
 import { ShareWrapUpModal } from './shared/ShareWrapUp';
 import { WrapUpModal } from './shared/WrapUpModal';
+import { WrapUpRecapModal } from './shared/WrapUpRecapModal';
 import { WrapUpCardGrid, AchievementsWrapUpSpotlight, periodLabel, formatWrapUpDelta, wrapUpPriorPeriodLabel } from './shared/WrapUpCards';
 import { SetupWizard } from './setup/SetupWizard';
 import { DiscoveryDashboard } from './discovery/DiscoveryDashboard';
@@ -7455,6 +7456,7 @@ export const UserDashboard: React.FC<{
     const [reportItem, setReportItem] = useState<any>(null);
     const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
     const [shareWrapUpOpen, setShareWrapUpOpen] = useState(false);
+    const [recapWrapUpOpen, setRecapWrapUpOpen] = useState(false);
     const [recentLimit, setRecentLimit] = useState(24);
     const [detailsItem, setDetailsItem] = useState<any>(null);
     const [wrapUpAchievements, setWrapUpAchievements] = useState<any>(null);
@@ -8324,6 +8326,17 @@ export const UserDashboard: React.FC<{
                     onToast={(message, type) => setToast({ id: Date.now(), message, type })}
                 />
             )}
+            {recapWrapUpOpen && analytics && (
+                <WrapUpRecapModal
+                    analytics={analytics}
+                    days={analyticsDays}
+                    onClose={() => setRecapWrapUpOpen(false)}
+                    onShare={() => {
+                        setRecapWrapUpOpen(false);
+                        setShareWrapUpOpen(true);
+                    }}
+                />
+            )}
 
             <DetailsModal item={detailsItem} onClose={() => setDetailsItem(null)} />
 
@@ -8365,6 +8378,16 @@ export const UserDashboard: React.FC<{
                                         ) : null}
                                     </div>
                                     <div className="flex items-center gap-2">
+                                        {analytics.compare ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => setRecapWrapUpOpen(true)}
+                                                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-white/5 border border-white/15 text-text hover:border-plex/50 hover:text-plex transition-colors shadow-sm"
+                                            >
+                                                <Sparkles className="w-4 h-4 flex-shrink-0" />
+                                                {t('wrapUp.recap')}
+                                            </button>
+                                        ) : null}
                                         <button
                                             type="button"
                                             onClick={() => setShareWrapUpOpen(true)}
