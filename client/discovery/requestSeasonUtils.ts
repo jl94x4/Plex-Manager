@@ -228,10 +228,28 @@ export const canMarkTvAsAvailable = (details: any): boolean => {
 /** True when this season has at least one aired episode. */
 export const hasSeasonAired = (details: any, seasonNumber: number): boolean => {
     if (!hasAnyEpisodeAired(details)) return false;
-    const lastSeason = Number(details.lastEpisodeToAir.seasonNumber);
-    if (seasonNumber < lastSeason) return true;
-    if (seasonNumber > lastSeason) return false;
-    return Number(details.lastEpisodeToAir.episodeNumber) > 0;
+
+    const last = details?.lastEpisodeToAir;
+    const lastSeason = Number(last?.seasonNumber);
+    const lastEpisode = Number(last?.episodeNumber);
+
+    if (Number.isFinite(lastSeason) && lastSeason > 0 && Number.isFinite(lastEpisode) && lastEpisode > 0) {
+        if (seasonNumber < lastSeason) return true;
+        if (seasonNumber > lastSeason) return false;
+        return lastEpisode > 0;
+    }
+
+    // Watchlist / browse rows often omit lastEpisodeToAir — infer from Sonarr aired counts.
+    const sonarr = details?.sonarrLibraryStatus;
+    if (sonarr?.matched) {
+        const row = (sonarr.seasons || []).find(
+            (s: any) => Number(s?.seasonNumber) === seasonNumber,
+        );
+        if (row && Number(row.airedTotal) > 0) return true;
+        if (sonarr.showComplete && isMainSeasonNumber(seasonNumber)) return true;
+    }
+
+    return false;
 };
 
 export const isSeasonStillAiring = (details: any, seasonNumber: number): boolean => {
