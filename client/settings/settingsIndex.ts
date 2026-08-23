@@ -15,7 +15,7 @@ export type SettingsIndexEntry = {
 };
 
 export const SETTINGS_INDEX: SettingsIndexEntry[] = [
-    { id: 'branding', tabId: 'branding', label: 'Portal UI', group: 'Portal', keywords: ['theme', 'logo', 'color', 'branding', 'ui', 'public url', 'public base url', 'invite link'] },
+    { id: 'branding', tabId: 'branding', label: 'Portal UI', group: 'Portal', keywords: ['theme', 'logo', 'color', 'branding', 'ui', 'public url', 'public base url', 'invite link', 'chat', 'community'] },
     { id: 'branding/public-base-url', tabId: 'branding', sectionId: 'public-base-url', label: 'Public Base URL', group: 'Portal', keywords: ['public', 'url', 'domain', 'invite', 'email', 'newsletter', 'base url', 'https', 'reverse proxy'] },
     { id: 'branding/logo', tabId: 'branding', sectionId: 'logo', label: 'Custom Logo', group: 'Portal', keywords: ['logo', 'icon', 'favicon', 'upload'] },
     { id: 'branding/theme', tabId: 'branding', sectionId: 'theme', label: 'Portal Theme', group: 'Portal', keywords: ['theme', 'light', 'plex dark', 'slate', 'jellyfin purple', 'ocean', 'rose', 'royal', 'graphite', 'cyber lime', 'aurora'] },
@@ -23,6 +23,8 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
     { id: 'branding/poster-badges', tabId: 'branding', sectionId: 'poster-badges', label: 'Poster Quality Badges', group: 'Portal', keywords: ['poster', 'quality', 'badges', 'hdr', '4k', 'codec'] },
     { id: 'branding/dashboard-watching-badge', tabId: 'branding', sectionId: 'dashboard-watching-badge', label: 'Dashboard Watching Badge', group: 'Portal', keywords: ['dashboard', 'watching', 'streams', 'sidebar', 'badge', 'nav', 'poll', 'interval', 'seconds'] },
     { id: 'branding/slideshow', tabId: 'branding', sectionId: 'slideshow', label: 'TMDB Trending Slideshow', group: 'Portal', keywords: ['slideshow', 'tmdb', 'trending', 'background', 'splash'] },
+    { id: 'branding/community-chat', tabId: 'branding', sectionId: 'community-chat', label: 'Community chat', group: 'Portal', keywords: ['chat', 'community', 'channels', 'discord', 'messaging', 'live chat', 'rooms', 'mention', 'mentions', '@'] },
+    { id: 'branding/chat-mention-notify', tabId: 'branding', sectionId: 'community-chat', label: 'Chat @mention notifications', group: 'Portal', keywords: ['chat', 'mention', 'mentions', '@', 'notify', 'notification', 'bell'] },
 
     { id: 'contact', tabId: 'contact', label: 'Contact Details', group: 'Portal', keywords: ['contact', 'support', 'help'] },
     { id: 'contact/whatsapp', tabId: 'contact', sectionId: 'whatsapp', label: 'WhatsApp Number', group: 'Portal', keywords: ['whatsapp', 'phone', 'number'] },
@@ -95,8 +97,6 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
     { id: 'overlays', tabId: 'overlays', label: 'Overlays', group: 'Automation', keywords: ['overlays', 'new season', 'banner', 'layer', 'poster overlay', 'season overlay'] },
     { id: 'editions', tabId: 'editions', label: 'Editions', group: 'Automation', keywords: ['editions', 'edition manager', 'plex edition', 'cut', 'remux', 'hdr', 'audio codec', 'webhook'] },
     { id: 'system', tabId: 'system', label: 'System', group: 'Automation', keywords: ['system', 'diagnostics', 'backup'] },
-    { id: 'system/community-chat', tabId: 'system', sectionId: 'community-chat', label: 'Community chat', group: 'Automation', keywords: ['chat', 'community', 'channels', 'discord', 'messaging', 'live chat', 'rooms', 'mention', 'mentions', '@'] },
-    { id: 'system/chat-mention-notify', tabId: 'system', sectionId: 'community-chat', label: 'Chat @mention notifications', group: 'Automation', keywords: ['chat', 'mention', 'mentions', '@', 'notify', 'notification', 'bell'] },
     { id: 'system/support-tickets', tabId: 'system', sectionId: 'support-tickets', label: 'Support tickets', group: 'Automation', keywords: ['support', 'tickets', 'inbox', 'messaging', 'help', 'contact admin'] },
     { id: 'system/health', tabId: 'system', sectionId: 'health', label: 'Health Dashboard', group: 'Automation', keywords: ['health', 'score', 'alerts', 'integrations'] },
     { id: 'system/maintenance', tabId: 'system', sectionId: 'maintenance', label: 'Cleaner Experimental Mode', group: 'Automation', keywords: ['cleaner', 'maintenance', 'experimental'] },

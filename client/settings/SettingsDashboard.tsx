@@ -4253,6 +4253,44 @@ export const SettingsDashboard: React.FC = () => {
                                         </div>
                                     </section>
 
+                                    <section id={getSettingsSectionElementId('community-chat')} className="scroll-mt-24 rounded-xl border border-border/70 p-4">
+                                        <div className="flex flex-col lg:flex-row lg:items-start gap-4">
+                                            <div className="lg:w-52 shrink-0">
+                                                <h4 className="font-bold text-text">Community chat</h4>
+                                                <p className="text-xs text-muted mt-1">Discord-style text channels for members.</p>
+                                            </div>
+                                            <div className="flex-1 min-w-0 divide-y divide-border/40">
+                                                <SettingsToggleRow
+                                                    title="Community chat"
+                                                    hint={<SettingHint>Let members talk in Discord-style text channels. Admins can create rooms; everyone logged in can chat. Messages refresh automatically while the page is open.</SettingHint>}
+                                                    checked={chatEnabled}
+                                                    onChange={setChatEnabled}
+                                                    border={false}
+                                                />
+                                                {chatEnabled ? (
+                                                    <>
+                                                        <SettingsToggleRow
+                                                            title="Chat @mention notifications"
+                                                            hint={<SettingHint>Send in-app bell notifications when someone @mentions a member in live chat. Members can turn this off in Preferences.</SettingHint>}
+                                                            checked={chatMentionNotifyInApp}
+                                                            onChange={setChatMentionNotifyInApp}
+                                                            border={false}
+                                                        />
+                                                        <div className="pt-4">
+                                                            <button
+                                                                type="button"
+                                                                className="px-4 py-2 rounded-md font-bold transition-all bg-plex text-background hover:bg-plex-hover"
+                                                                onClick={() => window.location.assign(portalUrl('/chat'))}
+                                                            >
+                                                                Open live chat
+                                                            </button>
+                                                        </div>
+                                                    </>
+                                                ) : null}
+                                            </div>
+                                        </div>
+                                    </section>
+
                                     <section id={getSettingsSectionElementId('announcement')} className="scroll-mt-24 rounded-xl border border-border/70 p-4">
                                         <div className="flex flex-col lg:flex-row lg:items-start gap-4">
                                             <div className="lg:w-52 shrink-0">
@@ -4699,31 +4737,6 @@ export const SettingsDashboard: React.FC = () => {
                     {activeTab === 'system' && (
                         <div className="mb-8 animate-fade-in space-y-6">
                             <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">System</h3>
-                            <section id={getSettingsSectionElementId('community-chat')} className="space-y-3 scroll-mt-24">
-                                <SettingsToggleRow
-                                    title="Community chat"
-                                    hint={<SettingHint>Let members talk in Discord-style text channels. Admins can create rooms; everyone logged in can chat. Messages refresh automatically while the page is open.</SettingHint>}
-                                    checked={chatEnabled}
-                                    onChange={setChatEnabled}
-                                />
-                                {chatEnabled && (
-                                    <>
-                                        <SettingsToggleRow
-                                            title="Chat @mention notifications"
-                                            hint={<SettingHint>Send in-app bell notifications when someone @mentions a member in live chat. Members can turn this off in Preferences.</SettingHint>}
-                                            checked={chatMentionNotifyInApp}
-                                            onChange={setChatMentionNotifyInApp}
-                                        />
-                                        <button
-                                            type="button"
-                                            className="mt-1 px-4 py-2 rounded-md font-bold transition-all bg-plex text-background hover:bg-plex-hover"
-                                            onClick={() => window.location.assign(portalUrl('/chat'))}
-                                        >
-                                            Open live chat
-                                        </button>
-                                    </>
-                                )}
-                            </section>
                             <section id={getSettingsSectionElementId('support-tickets')} className="space-y-3 scroll-mt-24">
                                 <SettingsToggleRow
                                     title="Support tickets"
