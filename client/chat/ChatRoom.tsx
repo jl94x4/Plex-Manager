@@ -2,7 +2,7 @@ import React, {
     useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
 } from 'react';
 import {
-    Hash, Loader2, MessageSquare, Plus, Send, Trash2, X,
+    GripVertical, Hash, Loader2, MessageSquare, Plus, Send, Trash2, X,
 } from 'lucide-react';
 import { ChatEmojiPicker } from './ChatEmojiPicker';
 import { insertAtCursor } from './insertAtCursor';
@@ -127,6 +127,8 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
     const [emojiOpen, setEmojiOpen] = useState(false);
     const [composeFocused, setComposeFocused] = useState(false);
     const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
+    const [dragRoomId, setDragRoomId] = useState<string | null>(null);
+    const [reorderingRooms, setReorderingRooms] = useState(false);
     const confirmActionRef = useRef<(() => void | Promise<void>) | null>(null);
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const draftRef = useRef<HTMLTextAreaElement | null>(null);
@@ -229,6 +231,34 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
         }
         return nextRooms;
     }, [initialRoomId]);
+
+    const reorderChannels = useCallback(async (fromId: string, toId: string) => {
+        if (!isAdmin || fromId === toId || reorderingRooms) return;
+        const ids = rooms.map((room) => String(room.id));
+        const fromIndex = ids.indexOf(fromId);
+        const toIndex = ids.indexOf(toId);
+        if (fromIndex < 0 || toIndex < 0) return;
+        const nextIds = [...ids];
+        nextIds.splice(fromIndex, 1);
+        nextIds.splice(toIndex, 0, fromId);
+        const previous = rooms;
+        const roomMap = new Map(rooms.map((room) => [String(room.id), room]));
+        setRooms(nextIds.map((id) => roomMap.get(id)).filter(Boolean) as ChatRoom[]);
+        setReorderingRooms(true);
+        try {
+            const data = await apiFetch('/api/chat/rooms/reorder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ roomIds: nextIds }),
+            });
+            if (Array.isArray(data?.rooms)) setRooms(data.rooms as ChatRoom[]);
+        } catch (error) {
+            setRooms(previous);
+            toast(error instanceof Error ? error.message : 'Failed to reorder channels', 'error');
+        } finally {
+            setReorderingRooms(false);
+        }
+    }, [isAdmin, rooms, reorderingRooms, toast]);
 
     const loadMessages = useCallback(async (roomId: string, { after = 0, replace = false } = {}) => {
         if (!roomId) return;
@@ -551,7 +581,12 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/20 md:min-h-[80vh] lg:min-h-[calc(100dvh-13rem)] lg:flex-row">
                 <aside className="flex w-full shrink-0 flex-col border-b border-white/10 lg:w-64 lg:border-b-0 lg:border-r">
                     <div className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
-                        <p className="text-xs font-bold uppercase tracking-wide text-muted">Channels</p>
+                        <div className="min-w-0">
+                            <p className="text-xs font-bold uppercase tracking-wide text-muted">Channels</p>
+                            {isAdmin ? (
+                                <p className="mt-0.5 text-[10px] text-muted/80">Drag to reorder</p>
+                            ) : null}
+                        </div>
                         {isAdmin ? (
                             <button
                                 type="button"
@@ -566,23 +601,58 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                     <div className="max-h-48 overflow-y-auto lg:max-h-none lg:flex-1">
                         {rooms.map((room) => {
                             const active = String(room.id) === String(activeRoomId);
+                            const dragging = dragRoomId === String(room.id);
                             return (
-                                <button
+                                <div
                                     key={room.id}
-                                    type="button"
-                                    className={`flex w-full items-center gap-2 px-4 py-2.5 text-left text-sm transition ${
-                                        active ? 'bg-plex/15 text-plex' : 'text-text/85 hover:bg-white/5'
-                                    }`}
-                                    onClick={() => setActiveRoomId(String(room.id))}
+                                    className={`flex items-center gap-0.5 transition-opacity ${dragging ? 'opacity-50' : ''}`}
+                                    onDragOver={(event) => {
+                                        if (!isAdmin || !dragRoomId) return;
+                                        event.preventDefault();
+                                    }}
+                                    onDrop={(event) => {
+                                        if (!isAdmin || !dragRoomId) return;
+                                        event.preventDefault();
+                                        const fromId = dragRoomId;
+                                        setDragRoomId(null);
+                                        if (fromId !== String(room.id)) {
+                                            void reorderChannels(fromId, String(room.id));
+                                        }
+                                    }}
                                 >
-                                    <Hash className="h-4 w-4 shrink-0 opacity-70" />
-                                    <span className="min-w-0 flex-1 truncate font-medium">{room.name}</span>
-                                    {room.unreadCount ? (
-                                        <span className="rounded-full bg-plex px-1.5 py-0.5 text-[10px] font-bold text-background">
-                                            {room.unreadCount}
-                                        </span>
+                                    {isAdmin ? (
+                                        <button
+                                            type="button"
+                                            draggable={!reorderingRooms}
+                                            onDragStart={(event) => {
+                                                event.stopPropagation();
+                                                setDragRoomId(String(room.id));
+                                                event.dataTransfer.effectAllowed = 'move';
+                                            }}
+                                            onDragEnd={() => setDragRoomId(null)}
+                                            className="ml-1 flex h-8 w-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-white/5 hover:text-text cursor-grab active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-40"
+                                            aria-label={`Drag ${room.name} to reorder`}
+                                            disabled={reorderingRooms}
+                                        >
+                                            <GripVertical className="h-3.5 w-3.5" />
+                                        </button>
                                     ) : null}
-                                </button>
+                                    <button
+                                        type="button"
+                                        className={`flex min-w-0 flex-1 items-center gap-2 px-3 py-2.5 text-left text-sm transition ${
+                                            active ? 'bg-plex/15 text-plex' : 'text-text/85 hover:bg-white/5'
+                                        }`}
+                                        onClick={() => setActiveRoomId(String(room.id))}
+                                    >
+                                        <Hash className="h-4 w-4 shrink-0 opacity-70" />
+                                        <span className="min-w-0 flex-1 truncate font-medium">{room.name}</span>
+                                        {room.unreadCount ? (
+                                            <span className="rounded-full bg-plex px-1.5 py-0.5 text-[10px] font-bold text-background">
+                                                {room.unreadCount}
+                                            </span>
+                                        ) : null}
+                                    </button>
+                                </div>
                             );
                         })}
                         {!rooms.length ? (
