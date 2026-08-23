@@ -23,6 +23,8 @@ import {
     fetchPortalEmailLogoBuffer,
     resolvePortalPushIconUrl,
     resolvePortalPwaManifestIconHref,
+    SERVER_PWA_ICON_BADGE_SCALE,
+    SERVER_PWA_MASKABLE_BADGE_SCALE,
 } from './lib/portal-branding.js';
 import { resolvePackageVersion } from './lib/resolve-package-version.js';
 import {
@@ -13669,7 +13671,7 @@ const sendCircularPwaIcon = async (res, buffer, size = 192) => {
         if (!detectRasterImageType(buffer)) {
             return sendPwaSizedIconFile(res, size);
         }
-        const png = makeCircularPwaIconPng(buffer, size);
+        const png = makeCircularPwaIconPng(buffer, size, { badgeScale: SERVER_PWA_ICON_BADGE_SCALE });
         res.setHeader('Content-Type', 'image/png');
         res.setHeader('Cache-Control', 'public, max-age=3600');
         return res.send(png);
@@ -13764,7 +13766,7 @@ app.get('/api/public/pwa-icon', publicReadRateLimit, async (req, res) => {
         }
 
         if (maskable) {
-            const png = makeMaskablePwaIconPng(buffer, size, { badgeScale: 0.88 });
+            const png = makeMaskablePwaIconPng(buffer, size, { badgeScale: SERVER_PWA_MASKABLE_BADGE_SCALE });
             res.setHeader('Content-Type', 'image/png');
             res.setHeader('Cache-Control', 'public, max-age=3600');
             return res.send(png);
