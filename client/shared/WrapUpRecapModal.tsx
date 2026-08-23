@@ -63,9 +63,8 @@ export const WrapUpRecapModal: React.FC<{
     days: number | string;
     loading?: boolean;
     onClose: () => void;
-    onShare?: () => void;
     onDaysChange?: (days: number) => void;
-}> = ({ analytics, days, loading = false, onClose, onShare, onDaysChange }) => {
+}> = ({ analytics, days, loading = false, onClose, onDaysChange }) => {
     const { t } = useDiscoverI18n();
     const [index, setIndex] = useState(0);
     const artwork = useMemo(() => collectArtwork(analytics), [analytics]);
@@ -155,10 +154,10 @@ export const WrapUpRecapModal: React.FC<{
         }
 
         list.push({
-            key: 'share',
+            key: 'close',
             kicker: period,
-            title: t('wrapUp.recapShare'),
-            body: t('wrapUp.shareModalSubtitle'),
+            title: t('wrapUp.recapDoneTitle'),
+            body: t('wrapUp.recapDoneBody'),
             art: artwork,
             poster: bingeArt || movieArt,
         });
@@ -256,24 +255,14 @@ export const WrapUpRecapModal: React.FC<{
                             <ChevronLeft className="w-4 h-4" />
                             {t('wrapUp.recapBack')}
                         </button>
-                        {isLast && onShare ? (
-                            <button
-                                type="button"
-                                onClick={onShare}
-                                className="inline-flex items-center justify-center gap-1 px-3 py-2.5 rounded-xl text-sm font-bold bg-plex text-black"
-                            >
-                                {t('wrapUp.share')}
-                            </button>
-                        ) : (
-                            <button
-                                type="button"
-                                onClick={() => (isLast ? onClose() : setIndex((value) => Math.min(slides.length - 1, value + 1)))}
-                                className="inline-flex items-center justify-center gap-1 px-3 py-2.5 rounded-xl text-sm font-bold bg-plex text-black"
-                            >
-                                {isLast ? t('wrapUp.recapDone') : t('wrapUp.recapNext')}
-                                {!isLast && <ChevronRight className="w-4 h-4" />}
-                            </button>
-                        )}
+                        <button
+                            type="button"
+                            onClick={() => (isLast ? onClose() : setIndex((value) => Math.min(slides.length - 1, value + 1)))}
+                            className="inline-flex items-center justify-center gap-1 px-3 py-2.5 rounded-xl text-sm font-bold bg-plex text-black"
+                        >
+                            {isLast ? t('wrapUp.recapDone') : t('wrapUp.recapNext')}
+                            {!isLast && <ChevronRight className="w-4 h-4" />}
+                        </button>
                     </div>
                     <div className="flex justify-center gap-1.5 sm:ml-auto">
                         {slides.map((item, slideIndex) => (

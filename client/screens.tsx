@@ -7581,6 +7581,7 @@ export const UserDashboard: React.FC<{
             compare: data?.compare || null,
             libraryHealth: data?.libraryHealth || null,
             heatmapData: data?.heatmapData || null,
+            period: String(analyticsDays),
         };
     };
     const handleRequestInvite = async (): Promise<boolean> => {
@@ -7615,7 +7616,7 @@ export const UserDashboard: React.FC<{
     const analyticsFetchGenRef = useRef(0);
     const analyticsLoadingGenRef = useRef(0);
 
-    const wrapUpClientCacheKey = (days: number | string) => `smp.wrapup.analytics.v3:${wrapUpSubjectId}:${days}`;
+    const wrapUpClientCacheKey = (days: number | string) => `smp.wrapup.analytics.v4:${wrapUpSubjectId}:${days}`;
     const readWrapUpClientCache = (days: number | string) => {
         try {
             const raw = sessionStorage.getItem(wrapUpClientCacheKey(days));
@@ -7624,6 +7625,7 @@ export const UserDashboard: React.FC<{
             if (!parsed?.payload || typeof parsed.at !== 'number') return null;
             // Keep session warm for up to 6 hours; server SWR still refreshes.
             if (Date.now() - parsed.at > 6 * 60 * 60 * 1000) return null;
+            if (parsed.payload.period && String(parsed.payload.period) !== String(days)) return null;
             return parsed.payload;
         } catch {
             return null;
@@ -7671,6 +7673,7 @@ export const UserDashboard: React.FC<{
                 if (timeoutId != null) window.clearTimeout(timeoutId);
             }
             if (gen !== analyticsFetchGenRef.current) return;
+            if (res?.period && String(res.period) !== String(analyticsDays)) return;
             setAnalytics(res);
             writeWrapUpClientCache(analyticsDays, res);
             if (!silent) {
@@ -8333,10 +8336,6 @@ export const UserDashboard: React.FC<{
                     loading={analyticsLoading}
                     onClose={() => setRecapWrapUpOpen(false)}
                     onDaysChange={(value) => setAnalyticsDays(value)}
-                    onShare={() => {
-                        setRecapWrapUpOpen(false);
-                        setShareWrapUpOpen(true);
-                    }}
                 />
             )}
 
@@ -8410,18 +8409,27 @@ export const UserDashboard: React.FC<{
                                         />
                                     </div>
                                 </div>
-                                <WrapUpCardGrid analytics={analytics} interactive onCardClick={setSelectedMetric} minCardHeight={112} />
-                                {analytics.heatmapData && (
-                                    <div className="mt-6 pt-6 border-t border-white/10 min-w-0 overflow-hidden">
-                                        <h4 className="text-xs uppercase tracking-widest text-muted font-bold mb-4 flex items-center gap-2">
-                                            <Calendar className="w-4 h-4 text-plex" />{' '}
-                                            {analyticsDays === 'all'
-                                                ? t('wrapUp.activityAllTime')
-                                                : t('wrapUp.activityLastDays', { days: analyticsDays })}
-                                        </h4>
-                                        <ActivityHeatmap data={analytics.heatmapData} />
+                                <div className="relative">
+                                    {analyticsLoading && analytics.period != null && String(analytics.period) !== String(analyticsDays) ? (
+                                        <div className="absolute inset-0 z-10 bg-background/55 backdrop-blur-[1px] flex items-center justify-center rounded-xl min-h-[12rem]">
+                                            <Loader2 className="w-8 h-8 text-plex animate-spin" />
+                                        </div>
+                                    ) : null}
+                                    <div className={analyticsLoading && analytics.period != null && String(analytics.period) !== String(analyticsDays) ? 'opacity-40 pointer-events-none' : undefined}>
+                                        <WrapUpCardGrid analytics={analytics} interactive onCardClick={setSelectedMetric} minCardHeight={112} />
+                                        {analytics.heatmapData && (
+                                            <div className="mt-6 pt-6 border-t border-white/10 min-w-0 overflow-hidden">
+                                                <h4 className="text-xs uppercase tracking-widest text-muted font-bold mb-4 flex items-center gap-2">
+                                                    <Calendar className="w-4 h-4 text-plex" />{' '}
+                                                    {analyticsDays === 'all'
+                                                        ? t('wrapUp.activityAllTime')
+                                                        : t('wrapUp.activityLastDays', { days: analyticsDays })}
+                                                </h4>
+                                                <ActivityHeatmap data={analytics.heatmapData} />
+                                            </div>
+                                        )}
                                     </div>
-                                )}
+                                </div>
                                 {wrapUpAchievementsForDisplay && (
                                     <AchievementsWrapUpSpotlight
                                         me={wrapUpAchievementsForDisplay}

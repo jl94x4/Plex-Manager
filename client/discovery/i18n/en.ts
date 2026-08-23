@@ -275,6 +275,8 @@ export const en = {
         recapBack: 'Back',
         recapDone: 'Done',
         recapShare: 'Share this wrap-up',
+        recapDoneTitle: "That's a wrap",
+        recapDoneBody: 'That’s your story for this period. Use Share on Home if you want a card to post.',
         recapStreams: 'Your streams',
         recapBinge: 'This period’s binge',
         recapMovie: 'This period’s movie',

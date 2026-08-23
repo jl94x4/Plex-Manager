@@ -79,7 +79,7 @@ import { isTautulliWatchHistorySource, buildAchievementsHomeRankContext, summari
 import { loadAchievementsState, setLeaderboardOptOut } from './lib/achievements/store.js';
 import { resolveAchievementsAccountId } from './lib/profile/assemble.js';
 import { sanitizeProfileBio } from './lib/profile/social.js';
-import { wrapUpFromHistoryItems, buildWrapUpCompare, summarizeWrapUpHistoryWindow, formatWrapUpNewsletterHtml } from './lib/profile/wrapUp.js';
+import { wrapUpFromHistoryItems, buildWrapUpCompare, summarizeWrapUpHistoryWindow, formatWrapUpNewsletterHtml, historyViewedAtSeconds, filterHistoryByUnixWindow } from './lib/profile/wrapUp.js';
 import { mapJellyfinPlayedItemsToHistory } from './lib/achievements/jellyfinMap.js';
 import {
     applyMemberNamePrivacyToRows,
@@ -989,13 +989,24 @@ const plexMetadataCache = createTtlLruCache({
 
 // Personal Wrap-Up (`/api/plex/analytics/me`) — serve last payload instantly while refreshing.
 const PERSONAL_ANALYTICS_CACHE_MS = 10 * 60 * 1000;
+const PERSONAL_ANALYTICS_CACHE_VERSION = 'v7';
+const PERSONAL_WRAPUP_HISTORY_DAYS = 730;
+const WRAP_UP_WARM_PERIODS = ['365', '120', '90', '30', '7'];
+const WRAP_UP_COMPARE_FETCH_MAX_DAYS = 180;
+const personalAnalyticsCacheKey = (accountID, daysKey) => `${PERSONAL_ANALYTICS_CACHE_VERSION}:${accountID}:${daysKey}`;
 // Soft freshness uses `at`; LRU entry cap prevents unbounded Wrap-Up payloads.
 const personalAnalyticsCache = createTtlLruCache({
     name: 'personalAnalytics',
     maxEntries: 64,
     defaultTtlMs: Number.POSITIVE_INFINITY,
 });
+const personalHistoryCache = createTtlLruCache({
+    name: 'personalHistory',
+    maxEntries: 24,
+    defaultTtlMs: Number.POSITIVE_INFINITY,
+});
 const personalAnalyticsRefreshJobs = new Map(); // key -> Promise
+const personalHistoryExpandJobs = new Map();
 const personalAnalyticsDaysKey = (raw) => {
     if (raw === 'all') return 'all';
     const days = parseInt(String(raw || '30'), 10);
@@ -8055,7 +8066,7 @@ const personalizeNewsletterHtml = (html, user = {}) => {
         escapeHtmlAttr(user.username || user.name || 'User'),
     );
     const plexId = String(user.plexAccountId || '').trim();
-    const cached = plexId ? personalAnalyticsCache.get(`v6:${plexId}:30`) : null;
+    const cached = plexId ? personalAnalyticsCache.get(personalAnalyticsCacheKey(plexId, '30')) : null;
     output = output.replace(/{{WRAP_MONTH}}/g, formatWrapUpNewsletterHtml(cached?.payload || null));
     return output;
 };
@@ -15187,6 +15198,7 @@ app.post('/api/announcements/push', requireAdmin, async (req, res) => {
 });
 
 const TAUTULLI_HISTORY_PAGE_SIZE = 100;
+const TAUTULLI_USER_HISTORY_PAGE_SIZE = 1000;
 let cachedTautulliUsers = null;
 let cachedTautulliUsersAt = 0;
 let cachedTautulliTimezone = null;
@@ -15469,7 +15481,7 @@ const fetchTautulliUserHistoryItems = async (config, {
     let done = false;
 
     while (!done && items.length < maxItems) {
-        const length = Math.min(TAUTULLI_HISTORY_PAGE_SIZE, maxItems - items.length);
+        const length = Math.min(TAUTULLI_USER_HISTORY_PAGE_SIZE, maxItems - items.length);
         const params = new URLSearchParams({
             apikey: config.tautulliApiKey,
             cmd: 'get_history',
@@ -15489,7 +15501,7 @@ const fetchTautulliUserHistoryItems = async (config, {
         if (!Array.isArray(rows) || rows.length === 0) break;
 
         for (const row of rows) {
-            const started = Number(row.started || row.date || 0);
+            const started = historyViewedAtSeconds(row.started || row.date || 0);
             if (!started) continue;
             if (afterUnixSec > 0 && started < afterUnixSec) {
                 done = true;
@@ -16681,7 +16693,7 @@ const slimPlexHistoryItem = (item) => {
         key: item.key,
         title: item.title,
         thumb: item.thumb,
-        viewedAt: item.viewedAt,
+        viewedAt: historyViewedAtSeconds(item.viewedAt),
         accountID: item.accountID,
         deviceID: item.deviceID,
         client: item.client,
@@ -16740,7 +16752,7 @@ const fetchPlexAccountHistory = async (uri, config, accountID, { maxItems = 7500
         if (pageItems.length === 0) break;
 
         for (const item of pageItems) {
-            const viewedAt = Number(item?.viewedAt) || 0;
+            const viewedAt = historyViewedAtSeconds(item?.viewedAt);
             if (afterUnixSec > 0 && viewedAt > 0 && viewedAt < afterUnixSec) {
                 done = true;
                 break;
@@ -16763,6 +16775,84 @@ const fetchPlexAccountHistory = async (uri, config, accountID, { maxItems = 7500
     }
 
     return historyItems;
+};
+
+const loadPersonalWrapUpHistory = async ({
+    req,
+    config,
+    uri,
+    accountID,
+    afterUnixSec = 0,
+    maxItems = 25000,
+}) => {
+    const cacheKey = `v1:${accountID}`;
+    const cached = personalHistoryCache.get(cacheKey);
+    const cacheFresh = cached && (Date.now() - cached.at) < PERSONAL_ANALYTICS_CACHE_MS;
+    if (cacheFresh && Number(cached.afterUnixSec) <= afterUnixSec) {
+        return {
+            items: filterHistoryByUnixWindow(cached.items, { startSec: afterUnixSec }),
+            source: cached.source,
+            fallback: cached.fallback,
+            degraded: cached.degraded,
+        };
+    }
+
+    const useTautulliHistory = isTautulliWatchHistorySource(config);
+    const { list: plexAccountsForHistory } = await fetchPlexServerAccounts(uri, config);
+    const plexAccountNameForHistory = plexAccountsForHistory.find((a) => String(a.id) === String(accountID))?.name || null;
+    const portalUserForHistory = (await loadFile(USERS_PATH, [])).find((u) => String(u.plexAccountId || '') === String(accountID));
+
+    let historyItems = [];
+    let historySource = 'plex';
+    let historyFallback = null;
+    let historyDegraded = false;
+    if (useTautulliHistory) {
+        historyItems = await fetchTautulliUserHistoryItems(config, {
+            username: req.user?.username || portalUserForHistory?.username,
+            email: req.user?.email || portalUserForHistory?.email,
+            plexAccountName: plexAccountNameForHistory,
+            afterUnixSec,
+            maxItems,
+        });
+        if (historyItems.length) {
+            historySource = 'tautulli';
+        } else {
+            historyItems = await fetchPlexAccountHistory(uri, config, accountID, {
+                afterUnixSec,
+                maxItems,
+            });
+            historySource = 'plex';
+            historyFallback = 'tautulli_unavailable';
+            historyDegraded = true;
+        }
+    } else {
+        historyItems = await fetchPlexAccountHistory(uri, config, accountID, {
+            afterUnixSec,
+            maxItems,
+        });
+    }
+
+    for (const item of historyItems) {
+        if (item) item.viewedAt = historyViewedAtSeconds(item.viewedAt);
+    }
+
+    personalHistoryCache.set(cacheKey, {
+        at: Date.now(),
+        afterUnixSec,
+        items: historyItems,
+        source: historySource,
+        fallback: historyFallback,
+        degraded: historyDegraded,
+    });
+
+    return {
+        items: historyItems,
+        source: historySource,
+        fallback: historyFallback,
+        degraded: historyDegraded,
+        plexAccountsForHistory,
+        plexAccountNameForHistory,
+    };
 };
 
 /** Full-server Plex history (no account filter) — used by achievements portal-wide backfill. */
@@ -16952,11 +17042,10 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
 }) => {
         const useTautulliHistory = isTautulliWatchHistorySource(config);
         const { list: plexAccountsForHistory } = await fetchPlexServerAccounts(uri, config);
-        const plexAccountNameForHistory = plexAccountsForHistory.find((a) => String(a.id) === String(accountID))?.name || null;
-        const portalUserForHistory = (await loadFile(USERS_PATH, [])).find((u) => String(u.plexAccountId || '') === String(accountID));
 
         // Scope history to the selected Wrap-Up period (heatmap title already matches the days filter).
-        // Fetch the previous equal window too so cards can show vs last month / last year.
+        // Fetch the previous equal window too so cards can show vs last period — but cap that
+        // extra scrape so Year in Review does not pull two years on the first paint.
         const yearAgo = Math.floor(Date.now() / 1000) - (365 * 24 * 60 * 60);
         const daysNum = daysKey === 'all' ? 365 : (parseInt(daysKey, 10) || 30);
         const compareEnabled = daysKey !== 'all';
@@ -16966,8 +17055,11 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
             cutoffDate = Math.floor(Date.now() / 1000) - (daysNum * 24 * 60 * 60);
             priorStart = cutoffDate - (daysNum * 24 * 60 * 60);
         }
-        const historyAfterUnixSec = compareEnabled ? priorStart : yearAgo;
-        const fetchWindowDays = compareEnabled ? daysNum * 2 : daysNum;
+        const fetchPriorWindow = compareEnabled && (daysNum * 2) <= WRAP_UP_COMPARE_FETCH_MAX_DAYS;
+        const historyAfterUnixSec = daysKey === 'all'
+            ? yearAgo
+            : (fetchPriorWindow ? priorStart : (cutoffDate || yearAgo));
+        const fetchWindowDays = Math.max(1, Math.ceil((Math.floor(Date.now() / 1000) - historyAfterUnixSec) / 86400));
         const historyMaxItems = daysKey === 'all'
             ? 60000
             : fetchWindowDays <= 14
@@ -16975,39 +17067,21 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
                 : fetchWindowDays <= 60
                     ? 12000
                     : fetchWindowDays <= 180
-                        ? 24000
-                        : 40000;
+                        ? 20000
+                        : 25000;
 
-        let historyItems = [];
-        let historySource = 'plex';
-        let historyFallback = null;
-        let historyDegraded = false;
-        if (useTautulliHistory) {
-            historyItems = await fetchTautulliUserHistoryItems(config, {
-                username: req.user?.username || portalUserForHistory?.username,
-                email: req.user?.email || portalUserForHistory?.email,
-                plexAccountName: plexAccountNameForHistory,
-                afterUnixSec: historyAfterUnixSec,
-                maxItems: historyMaxItems,
-            });
-            if (historyItems.length) {
-                historySource = 'tautulli';
-            } else {
-                // Fall back to Plex if Tautulli has no matching user/history.
-                historyItems = await fetchPlexAccountHistory(uri, config, accountID, {
-                    afterUnixSec: historyAfterUnixSec,
-                    maxItems: historyMaxItems,
-                });
-                historySource = 'plex';
-                historyFallback = 'tautulli_unavailable';
-                historyDegraded = true;
-            }
-        } else {
-            historyItems = await fetchPlexAccountHistory(uri, config, accountID, {
-                afterUnixSec: historyAfterUnixSec,
-                maxItems: historyMaxItems,
-            });
-        }
+        const historyPack = await loadPersonalWrapUpHistory({
+            req,
+            config,
+            uri,
+            accountID,
+            afterUnixSec: historyAfterUnixSec,
+            maxItems: historyMaxItems,
+        });
+        const historyItems = historyPack.items;
+        const historySource = historyPack.source;
+        const historyFallback = historyPack.fallback;
+        const historyDegraded = historyPack.degraded;
         const sectionsRes = await fetch(`${uri}/library/sections?X-Plex-Token=${config.plexToken}`, { headers: plexClientHeaders(config.plexToken) }).then(r => r.json()).catch(() => null);
 
         if (!historyItems.length) {
@@ -17017,6 +17091,7 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
                 topWatched: [],
                 topMusic: [],
                 recentHistory: [],
+                period: daysKey,
                 compare: null,
                 source: historySource,
                 fallback: historyFallback,
@@ -17026,7 +17101,9 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
         }
 
         const sectionsMap = buildLibrarySectionsMap(sectionsRes);
-        await enrichHistoryItemsLibrarySections(uri, config, historyItems, sectionsMap);
+        if (!useTautulliHistory) {
+            await enrichHistoryItemsLibrarySections(uri, config, historyItems, sectionsMap);
+        }
 
         let totalPlays = 0;
         const libraryCounts = {};
@@ -17041,7 +17118,7 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
             plexUrl: `https://app.plex.tv/desktop/#!/server/${config.serverIdentifier}/details?key=${encodeURIComponent(item.key)}`
         });
         const currentHistoryItems = cutoffDate > 0
-            ? historyItems.filter((item) => (Number(item.viewedAt) || 0) >= cutoffDate)
+            ? filterHistoryByUnixWindow(historyItems, { startSec: cutoffDate })
             : historyItems;
         const recentHistory = currentHistoryItems.slice(0, 50).map(mapHistoryToRecent);
 
@@ -17059,24 +17136,24 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
 
         const statsTimezone = await fetchTautulliTimezone(config);
         const plexAccounts = plexAccountsForHistory;
-        const plexAccountName = plexAccountNameForHistory;
 
         const heatmapData = {};
 
         historyItems.forEach(item => {
-            if (item.viewedAt >= (cutoffDate || yearAgo)) {
-                const dateStr = new Date(item.viewedAt * 1000).toISOString().split('T')[0];
+            const viewedAt = historyViewedAtSeconds(item.viewedAt);
+            if (viewedAt > 0 && viewedAt >= (cutoffDate || yearAgo)) {
+                const dateStr = new Date(viewedAt * 1000).toISOString().split('T')[0];
                 heatmapData[dateStr] = (heatmapData[dateStr] || 0) + 1;
             }
 
-            if (cutoffDate > 0 && item.viewedAt < cutoffDate) return;
+            if (cutoffDate > 0 && viewedAt < cutoffDate) return;
             totalPlays++;
 
-            const hour = getHourInTimezone(item.viewedAt, statsTimezone);
+            const hour = getHourInTimezone(viewedAt, statsTimezone);
             plexTotalHourOfDay += hour;
             plexHourCount++;
             plexHourDistribution[hour]++;
-            dayOfWeekCounts[getWeekdayInTimezone(item.viewedAt, statsTimezone)]++;
+            dayOfWeekCounts[getWeekdayInTimezone(viewedAt, statsTimezone)]++;
 
             if (item.type === 'movie') moviesCount++;
             else if (item.type === 'episode') showsCount++;
@@ -17108,7 +17185,6 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
                     };
                 }
                 contentCounts[contentKey].plays++;
-                const viewedAt = Number(item.viewedAt) || 0;
                 if (viewedAt >= (contentCounts[contentKey].lastViewedAt || 0)) {
                     contentCounts[contentKey].lastViewedAt = viewedAt;
                     // Keep title/artwork aligned with the most recent play of this title.
@@ -17119,34 +17195,9 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
             }
         });
 
-        const allUsersMap = await loadFile(USERS_PATH, []);
-        const targetDbUser = allUsersMap.find(u => String(u.plexAccountId) === String(accountID));
-
-        // Already have hours from history rows; avoid a second Tautulli scrape for Home Wrap-Up.
-        if (!useTautulliHistory) {
-            const tautulliHourStats = await resolveTautulliHourStats(config, {
-                username: targetDbUser?.username,
-                email: targetDbUser?.email,
-                plexAccountName,
-                days: daysKey,
-                afterUnixSec: cutoffDate,
-                maxItems: Math.min(3000, historyItems.length || 0),
-                plexPlayCount: totalPlays,
-            });
-            if (tautulliHourStats?.hourCount > 0) {
-                totalHourOfDay = tautulliHourStats.totalHourOfDay;
-                hourCount = tautulliHourStats.hourCount;
-                hourDistribution.splice(0, 24, ...tautulliHourStats.hourDistribution);
-            } else {
-                totalHourOfDay = plexTotalHourOfDay;
-                hourCount = plexHourCount;
-                hourDistribution.splice(0, 24, ...plexHourDistribution);
-            }
-        } else {
-            totalHourOfDay = plexTotalHourOfDay;
-            hourCount = plexHourCount;
-            hourDistribution.splice(0, 24, ...plexHourDistribution);
-        }
+        totalHourOfDay = plexTotalHourOfDay;
+        hourCount = plexHourCount;
+        hourDistribution.splice(0, 24, ...plexHourDistribution);
 
         const sortByPlaysThenRecent = (a, b) => (b.plays - a.plays) || ((b.lastViewedAt || 0) - (a.lastViewedAt || 0));
         const allLibraries = Object.values(libraryCounts).sort((a, b) => b.plays - a.plays);
@@ -17357,6 +17408,7 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
 
         const payload = {
             totalPlays,
+            period: daysKey,
             topLibraries,
             topWatched,
             topMusic,
@@ -17411,16 +17463,16 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
                         topMovie,
                         topBinge,
                     },
-                    summarizeWrapUpHistoryWindow(historyItems.filter((item) => {
-                        const at = Number(item.viewedAt) || 0;
-                        return at >= priorStart && at < cutoffDate;
+                    summarizeWrapUpHistoryWindow(filterHistoryByUnixWindow(historyItems, {
+                        startSec: priorStart,
+                        endSec: cutoffDate,
                     })),
                     daysNum,
                     {
                         currentItems: currentHistoryItems,
-                        previousItems: historyItems.filter((item) => {
-                            const at = Number(item.viewedAt) || 0;
-                            return at >= priorStart && at < cutoffDate;
+                        previousItems: filterHistoryByUnixWindow(historyItems, {
+                            startSec: priorStart,
+                            endSec: cutoffDate,
                         }),
                         dayOfWeekCounts,
                     },
@@ -17433,6 +17485,48 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
         };
 
         return payload;
+};
+
+const schedulePersonalWrapUpExpand = ({ req, config, uri, accountID }) => {
+    const jobKey = String(accountID);
+    if (!jobKey || personalHistoryExpandJobs.has(jobKey)) return;
+    const job = (async () => {
+        try {
+            const afterUnixSec = Math.floor(Date.now() / 1000) - (PERSONAL_WRAPUP_HISTORY_DAYS * 86400);
+            const existingHistory = personalHistoryCache.get(`v1:${accountID}`);
+            const historyReady = existingHistory
+                && (Date.now() - existingHistory.at) < PERSONAL_ANALYTICS_CACHE_MS
+                && Number(existingHistory.afterUnixSec) <= afterUnixSec;
+            if (!historyReady) {
+                await loadPersonalWrapUpHistory({
+                    req,
+                    config,
+                    uri,
+                    accountID,
+                    afterUnixSec,
+                    maxItems: 25000,
+                });
+            }
+            for (const daysKey of WRAP_UP_WARM_PERIODS) {
+                const cacheKey = personalAnalyticsCacheKey(accountID, daysKey);
+                const cached = personalAnalyticsCache.get(cacheKey);
+                if (historyReady && cached && (Date.now() - cached.at) < PERSONAL_ANALYTICS_CACHE_MS) continue;
+                const payload = await buildPersonalWrapUpAnalyticsPayload({
+                    req,
+                    config,
+                    uri,
+                    accountID,
+                    daysKey,
+                });
+                personalAnalyticsCache.set(cacheKey, { at: Date.now(), payload });
+            }
+        } catch (error) {
+            log(`Personal wrap-up expand failed: ${error.message}`);
+        } finally {
+            personalHistoryExpandJobs.delete(jobKey);
+        }
+    })();
+    personalHistoryExpandJobs.set(jobKey, job);
 };
 
 
@@ -17455,9 +17549,12 @@ app.get('/api/plex/analytics/me', requireAuth, requireMember, async (req, res) =
         }
 
         const daysKey = personalAnalyticsDaysKey(req.query.days);
-        const cacheKey = `v6:${accountID}:${daysKey}`;
+        const cacheKey = personalAnalyticsCacheKey(accountID, daysKey);
         const lite = String(req.query.lite || '') === '1' || String(req.query.fields || '') === 'recent';
-        const cached = !lite ? personalAnalyticsCache.get(cacheKey) : null;
+        const cachedRaw = !lite ? personalAnalyticsCache.get(cacheKey) : null;
+        const cached = cachedRaw?.payload && cachedRaw.payload.period && String(cachedRaw.payload.period) !== String(daysKey)
+            ? null
+            : cachedRaw;
         const cacheFresh = cached && (Date.now() - cached.at) < PERSONAL_ANALYTICS_CACHE_MS;
 
         // Dynamic theme only needs a recent poster — one history page, no full wrap-up work.
@@ -17499,11 +17596,13 @@ app.get('/api/plex/analytics/me', requireAuth, requireMember, async (req, res) =
         }
 
         if (cacheFresh) {
-            return res.json({
+            res.json({
                 ...(await overlayAchievementsXpOnWrapUp(cached.payload, { accountID, config, req })),
                 fromCache: true,
                 stale: false,
             });
+            schedulePersonalWrapUpExpand({ req, config, uri, accountID });
+            return;
         }
 
         // Stale-while-revalidate: paint instantly from last payload while we rebuild.
@@ -17532,6 +17631,7 @@ app.get('/api/plex/analytics/me', requireAuth, requireMember, async (req, res) =
                 })();
                 personalAnalyticsRefreshJobs.set(cacheKey, job);
             }
+            schedulePersonalWrapUpExpand({ req, config, uri, accountID });
             return;
         }
 
@@ -17546,7 +17646,9 @@ app.get('/api/plex/analytics/me', requireAuth, requireMember, async (req, res) =
             { accountID, config, req },
         );
         personalAnalyticsCache.set(cacheKey, { at: Date.now(), payload });
-        return res.json(payload);
+        res.json(payload);
+        schedulePersonalWrapUpExpand({ req, config, uri, accountID });
+        return;
     } catch (e) {
         log(`Error fetching personal analytics: ${e.message}`);
         res.status(500).json({ error: 'Analytics error' });
@@ -17608,7 +17710,7 @@ const runPersonalAnalyticsWarmJob = async (reason = 'scheduled') => {
         const fromCache = [];
         // Prefer accounts already in the Wrap-Up cache (recent Home visitors).
         for (const key of personalAnalyticsCache.keys()) {
-            const match = String(key).match(/^v6:([^:]+):/);
+            const match = String(key).match(/^v7:([^:]+):/);
             if (match) fromCache.push(match[1]);
         }
         const uniqueCached = [...new Set(fromCache)];
@@ -17621,8 +17723,8 @@ const runPersonalAnalyticsWarmJob = async (reason = 'scheduled') => {
         let warmed = 0;
         for (const accountID of candidates) {
             const user = (Array.isArray(users) ? users : []).find((u) => String(u.plexAccountId) === String(accountID)) || {};
-            for (const daysKey of ['30', '7']) {
-                const cacheKey = `v6:${accountID}:${daysKey}`;
+            for (const daysKey of WRAP_UP_WARM_PERIODS) {
+                const cacheKey = personalAnalyticsCacheKey(accountID, daysKey);
                 const cached = personalAnalyticsCache.get(cacheKey);
                 if (cached && (Date.now() - cached.at) < PERSONAL_ANALYTICS_CACHE_MS) continue;
                 try {
@@ -17861,7 +17963,7 @@ registerProfileRoutes(app, {
         if (!accountID) return null;
         const uri = await getPlexConnectionUri(config);
         if (!uri) return null;
-        const cacheKey = `v6:${accountID}:${daysKey}`;
+        const cacheKey = personalAnalyticsCacheKey(accountID, daysKey);
         const cached = personalAnalyticsCache.get(cacheKey);
         if (cached?.payload) return cached.payload;
         // Cache the raw subject payload (real neighbourhood names). Profile HTTP
