@@ -3,16 +3,25 @@ import { createPortal } from 'react-dom';
 import {
     Activity,
     BarChart3,
+    CheckCircle2,
     Clapperboard,
+    Clock,
     Cpu,
     Layers,
     Radar,
     RefreshCw,
     Server,
+    Sparkles,
+    TrendingUp,
     X,
 } from 'lucide-react';
 import { apiFetch } from './api';
 import { portalUrl } from './basePath';
+import {
+    dashboardPanelClass,
+    DashboardStatCard,
+} from './dashboard/DashboardChrome';
+import { lockBackgroundScroll } from './lockBackgroundScroll';
 
 export type SummaryDigest = {
     id: string;
@@ -60,30 +69,86 @@ const formatWhen = (iso?: string) => {
     }
 };
 
-const MetricTile: React.FC<{
-    label: string;
-    value: string;
-    hint?: string;
-    tone?: 'default' | 'success' | 'accent';
-}> = ({ label, value, hint, tone = 'default' }) => {
-    const valueClass = tone === 'success'
-        ? 'text-emerald-300'
-        : tone === 'accent'
-            ? 'text-plex'
-            : 'text-text';
+const uptimeTone = (value?: number | null) => {
+    if (value == null || !Number.isFinite(value)) return 'muted';
+    if (value >= 99.9) return 'emerald';
+    if (value >= 95) return 'amber';
+    return 'rose';
+};
+
+const uptimeTextClass = (tone: string) => {
+    if (tone === 'emerald') return 'text-emerald-300';
+    if (tone === 'amber') return 'text-amber-300';
+    if (tone === 'rose') return 'text-rose-300';
+    return 'text-muted';
+};
+
+const uptimeBarClass = (tone: string) => {
+    if (tone === 'emerald') return 'bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.45)]';
+    if (tone === 'amber') return 'bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.4)]';
+    if (tone === 'rose') return 'bg-rose-400 shadow-[0_0_10px_rgba(251,113,133,0.4)]';
+    return 'bg-white/25';
+};
+
+const UptimeRow: React.FC<{ label: string; value?: number | null }> = ({ label, value }) => {
+    const tone = uptimeTone(value);
+    const pct = value == null || !Number.isFinite(value) ? 0 : Math.min(100, Math.max(0, value));
     return (
-        <div className="rounded-xl border border-border/70 bg-background/40 p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-            <p className="text-[11px] uppercase tracking-wider font-bold text-muted">{label}</p>
-            <p className={`mt-1 text-2xl font-bold ${valueClass}`}>{value}</p>
-            {hint ? <p className="mt-1 text-xs text-muted/80">{hint}</p> : null}
+        <div className="space-y-2 py-2.5 border-b border-white/[0.06] last:border-b-0">
+            <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-semibold text-text/90">{label}</span>
+                <span className={`text-sm font-black tabular-nums ${uptimeTextClass(tone)}`}>
+                    {formatPct(value)}
+                </span>
+            </div>
+            <div className="h-1.5 rounded-full bg-black/50 border border-white/[0.06] overflow-hidden">
+                <div
+                    className={`h-full rounded-full transition-all duration-700 ${uptimeBarClass(tone)}`}
+                    style={{ width: `${pct}%` }}
+                />
+            </div>
         </div>
     );
 };
 
-const UptimeRow: React.FC<{ label: string; value?: number | null }> = ({ label, value }) => (
-    <div className="flex items-center justify-between gap-3 py-2 border-b border-border/50 last:border-b-0">
-        <span className="text-sm text-text/90">{label}</span>
-        <span className="text-sm font-bold text-emerald-300">{formatPct(value)}</span>
+const AutomationStat: React.FC<{
+    icon: React.ReactNode;
+    label: string;
+    value: number;
+    accent?: string;
+}> = ({ icon, label, value, accent = 'from-white/[0.06] to-black/30' }) => (
+    <div className={`relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br ${accent} px-4 py-3.5`}>
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_100%_0%,rgba(255,255,255,0.08),transparent_65%)]" />
+        <div className="relative flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-black/35 text-plex">
+                    {icon}
+                </div>
+                <span className="text-sm font-medium text-muted truncate">{label}</span>
+            </div>
+            <span className="text-xl font-black tabular-nums tracking-tight text-text">{value}</span>
+        </div>
+    </div>
+);
+
+const HighlightCard: React.FC<{
+    title: string;
+    subtitle?: string;
+    index: number;
+}> = ({ title, subtitle, index }) => (
+    <div className="group relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-white/[0.05] to-black/40 px-4 py-3 transition-colors hover:border-plex/25">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_0%_0%,rgb(var(--color-plex)_/_0.12),transparent_55%)] opacity-0 transition-opacity group-hover:opacity-100" />
+        <div className="relative flex items-start gap-3">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-plex/25 bg-plex/10 text-[11px] font-black text-plex">
+                {index + 1}
+            </span>
+            <div className="min-w-0">
+                <p className="text-sm font-bold text-text leading-snug">{title}</p>
+                {subtitle ? (
+                    <p className="mt-1 text-xs text-muted leading-relaxed">{subtitle}</p>
+                ) : null}
+            </div>
+        </div>
     </div>
 );
 
@@ -120,6 +185,8 @@ export const SummaryDigestCard: React.FC<Props> = ({ digestId = 'latest', onClos
         void load();
     }, [load]);
 
+    useEffect(() => lockBackgroundScroll(), []);
+
     const uptimeRows = useMemo(() => {
         const uptime = digest?.metrics?.uptime;
         const rows: Array<{ label: string; value?: number | null }> = [];
@@ -153,160 +220,241 @@ export const SummaryDigestCard: React.FC<Props> = ({ digestId = 'latest', onClos
     }, []);
 
     const requests = digest?.metrics?.requests || {};
+    const aggregateUptime = digest?.metrics?.uptime?.aggregatePct;
+    const aggregateTone = uptimeTone(aggregateUptime);
 
     const modal = (
-        <div className="fixed inset-0 z-[500] flex items-center justify-center p-4 sm:p-6">
+        <div className="fixed inset-0 z-[500] flex items-center justify-center p-3 sm:p-6 animate-fade-in">
             <button
                 type="button"
-                className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+                className="absolute inset-0 bg-black/80 backdrop-blur-md"
                 aria-label="Close summary"
                 onClick={close}
             />
-            <div className="relative w-full max-w-5xl max-h-[90vh] overflow-hidden rounded-2xl border border-border/80 bg-card/95 shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl flex flex-col">
-                <div className="flex items-start justify-between gap-4 border-b border-border/70 px-5 py-4 sm:px-6">
-                    <div>
-                        <div className="flex items-center gap-2 text-plex">
-                            <BarChart3 className="w-5 h-5" />
-                            <p className="text-xs font-bold uppercase tracking-wider">Smart summary</p>
+            <div className="relative w-full max-w-5xl max-h-[92vh] overflow-hidden rounded-3xl border border-white/10 bg-card/90 shadow-[0_32px_100px_-16px_rgba(0,0,0,0.75)] backdrop-blur-2xl flex flex-col ring-1 ring-white/[0.06]">
+                {/* Hero header */}
+                <div className="relative overflow-hidden border-b border-white/10">
+                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-plex/20 via-background/50 to-amber-500/10" />
+                    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_100%_0%,rgb(var(--color-plex)_/_0.22),transparent_58%)]" />
+                    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_0%_100%,rgb(var(--color-plex)_/_0.08),transparent_55%)]" />
+                    <div className="relative px-5 py-5 sm:px-6 sm:py-6">
+                        <div className="flex items-start justify-between gap-4">
+                            <div className="min-w-0">
+                                <div className="mb-3 inline-flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.2em] text-plex/90">
+                                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg border border-plex/30 bg-plex/15">
+                                        <Sparkles className="w-3.5 h-3.5" />
+                                    </span>
+                                    Smart summary
+                                </div>
+                                <h2 className="text-3xl font-black tracking-tight text-text sm:text-4xl">
+                                    {digest?.periodLabel || 'Server summary'}
+                                </h2>
+                                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
+                                    {digest?.periodStart && digest?.periodEnd ? (
+                                        <span className="inline-flex items-center gap-1.5">
+                                            <Clock className="w-3.5 h-3.5 shrink-0 text-plex/70" />
+                                            {formatWhen(digest.periodStart)} → {formatWhen(digest.periodEnd)}
+                                        </span>
+                                    ) : (
+                                        <span>Snapshot of server health and activity</span>
+                                    )}
+                                    {digest?.frequency ? (
+                                        <span className="inline-flex items-center rounded-full border border-white/10 bg-black/25 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted">
+                                            {digest.frequency}
+                                        </span>
+                                    ) : null}
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={close}
+                                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/30 text-muted transition-colors hover:border-white/20 hover:bg-white/10 hover:text-text"
+                                aria-label="Close"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
                         </div>
-                        <h2 className="mt-1 text-xl sm:text-2xl font-bold text-text">
-                            {digest?.periodLabel || 'Server summary'}
-                        </h2>
-                        <p className="mt-1 text-sm text-muted">
-                            {digest?.periodStart && digest?.periodEnd
-                                ? `${formatWhen(digest.periodStart)} → ${formatWhen(digest.periodEnd)}`
-                                : 'Snapshot of server health and activity'}
-                        </p>
                     </div>
-                    <button
-                        type="button"
-                        onClick={close}
-                        className="rounded-lg border border-border p-2 text-muted hover:text-text hover:bg-white/5 transition-colors"
-                        aria-label="Close"
-                    >
-                        <X className="w-4 h-4" />
-                    </button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto custom-scrollbar">
                     {loading ? (
-                        <div className="flex items-center justify-center py-20 text-muted">
-                            <RefreshCw className="w-5 h-5 animate-spin mr-2" />
-                            Loading summary…
+                        <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-black/30">
+                                <RefreshCw className="w-5 h-5 animate-spin text-plex" />
+                            </div>
+                            <p className="text-sm font-medium">Loading summary…</p>
                         </div>
                     ) : error ? (
-                        <div className="p-6 text-center text-rose-300">{error}</div>
+                        <div className="p-8 text-center">
+                            <p className="rounded-xl border border-rose-500/25 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+                                {error}
+                            </p>
+                        </div>
                     ) : digest ? (
-                        <div className="grid grid-cols-1 lg:grid-cols-[1fr_220px] gap-0 lg:gap-6 p-5 sm:p-6">
-                            <div className="space-y-6 min-w-0">
+                        <div className="grid grid-cols-1 lg:grid-cols-[1fr_240px] gap-0 lg:gap-0">
+                            <div className="space-y-5 p-5 sm:p-6 min-w-0">
                                 <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-                                    <MetricTile
+                                    <DashboardStatCard
                                         label="Requests made"
-                                        value={String(requests.made ?? 0)}
+                                        value={requests.made ?? 0}
                                         hint="New requests in period"
-                                        tone="accent"
+                                        icon={<TrendingUp className="w-4 h-4 text-plex" />}
+                                        glow="bg-plex/25"
+                                        valueClassName="text-plex"
                                     />
-                                    <MetricTile
+                                    <DashboardStatCard
                                         label="Approved"
-                                        value={String(requests.approved ?? 0)}
+                                        value={requests.approved ?? 0}
                                         hint="Approved or processing"
-                                        tone="success"
+                                        icon={<CheckCircle2 className="w-4 h-4 text-emerald-300" />}
+                                        glow="bg-emerald-400/25"
+                                        valueClassName="text-emerald-300"
                                     />
-                                    <MetricTile
+                                    <DashboardStatCard
                                         label="Available"
-                                        value={String(requests.available ?? 0)}
+                                        value={requests.available ?? 0}
                                         hint="Ready to watch"
+                                        icon={<Clapperboard className="w-4 h-4 text-sky-300" />}
+                                        glow="bg-sky-400/20"
                                     />
-                                    <MetricTile
+                                    <DashboardStatCard
                                         label="Aggregate uptime"
-                                        value={formatPct(digest.metrics?.uptime?.aggregatePct)}
+                                        value={formatPct(aggregateUptime)}
                                         hint="Monitored services"
-                                        tone="success"
+                                        icon={<Server className="w-4 h-4 text-emerald-300" />}
+                                        glow={aggregateTone === 'emerald' ? 'bg-emerald-400/25' : aggregateTone === 'amber' ? 'bg-amber-400/25' : 'bg-rose-400/20'}
+                                        valueClassName={uptimeTextClass(aggregateTone)}
                                     />
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <section className="rounded-2xl border border-border/70 bg-background/30 p-4">
-                                        <div className="flex items-center gap-2 mb-3">
-                                            <Server className="w-4 h-4 text-plex" />
-                                            <h3 className="text-sm font-bold text-text">Service uptime</h3>
+                                    <section className={`${dashboardPanelClass} p-4 md:p-5`}>
+                                        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
+                                        <div className="flex items-center gap-2.5 mb-4">
+                                            <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-plex/25 bg-plex/10">
+                                                <Server className="w-4 h-4 text-plex" />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-sm font-bold text-text">Service uptime</h3>
+                                                <p className="text-[11px] text-muted">Per-service availability</p>
+                                            </div>
                                         </div>
-                                        {uptimeRows.length ? uptimeRows.map((row) => (
-                                            <UptimeRow key={row.label} label={row.label} value={row.value} />
-                                        )) : (
+                                        {uptimeRows.length ? (
+                                            <div className="space-y-0">
+                                                {uptimeRows.map((row) => (
+                                                    <UptimeRow key={row.label} label={row.label} value={row.value} />
+                                                ))}
+                                            </div>
+                                        ) : (
                                             <p className="text-sm text-muted">No uptime samples for this period.</p>
                                         )}
                                     </section>
 
-                                    <section className="rounded-2xl border border-border/70 bg-background/30 p-4 space-y-3">
-                                        <div className="flex items-center gap-2">
-                                            <Activity className="w-4 h-4 text-plex" />
-                                            <h3 className="text-sm font-bold text-text">Automation activity</h3>
+                                    <section className={`${dashboardPanelClass} p-4 md:p-5`}>
+                                        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
+                                        <div className="flex items-center gap-2.5 mb-4">
+                                            <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-plex/25 bg-plex/10">
+                                                <Activity className="w-4 h-4 text-plex" />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-sm font-bold text-text">Automation activity</h3>
+                                                <p className="text-[11px] text-muted">Background jobs this period</p>
+                                            </div>
                                         </div>
-                                        <div className="grid grid-cols-1 gap-2 text-sm">
-                                            <div className="flex items-center justify-between rounded-lg bg-white/[0.03] px-3 py-2">
-                                                <span className="flex items-center gap-2 text-muted"><Radar className="w-4 h-4" /> Scanner imports</span>
-                                                <span className="font-bold text-text">{digest.metrics?.scannerImports ?? 0}</span>
-                                            </div>
-                                            <div className="flex items-center justify-between rounded-lg bg-white/[0.03] px-3 py-2">
-                                                <span className="flex items-center gap-2 text-muted"><Layers className="w-4 h-4" /> ColleXions rotations</span>
-                                                <span className="font-bold text-text">{digest.metrics?.collexionsRotations ?? 0}</span>
-                                            </div>
-                                            <div className="flex items-center justify-between rounded-lg bg-white/[0.03] px-3 py-2">
-                                                <span className="flex items-center gap-2 text-muted"><Cpu className="w-4 h-4" /> Media automation jobs</span>
-                                                <span className="font-bold text-text">{digest.metrics?.mediaAutomationJobs ?? 0}</span>
-                                            </div>
+                                        <div className="grid grid-cols-1 gap-2.5">
+                                            <AutomationStat
+                                                icon={<Radar className="w-4 h-4" />}
+                                                label="Scanner imports"
+                                                value={digest.metrics?.scannerImports ?? 0}
+                                                accent="from-sky-500/[0.08] to-black/30"
+                                            />
+                                            <AutomationStat
+                                                icon={<Layers className="w-4 h-4" />}
+                                                label="ColleXions rotations"
+                                                value={digest.metrics?.collexionsRotations ?? 0}
+                                                accent="from-violet-500/[0.08] to-black/30"
+                                            />
+                                            <AutomationStat
+                                                icon={<Cpu className="w-4 h-4" />}
+                                                label="Media automation jobs"
+                                                value={digest.metrics?.mediaAutomationJobs ?? 0}
+                                                accent="from-amber-500/[0.08] to-black/30"
+                                            />
                                         </div>
                                     </section>
                                 </div>
 
                                 {digest.highlights?.length ? (
-                                    <section className="rounded-2xl border border-border/70 bg-background/30 p-4">
-                                        <div className="flex items-center gap-2 mb-3">
-                                            <Clapperboard className="w-4 h-4 text-plex" />
-                                            <h3 className="text-sm font-bold text-text">Highlights</h3>
+                                    <section className={`${dashboardPanelClass} p-4 md:p-5`}>
+                                        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
+                                        <div className="flex items-center gap-2.5 mb-4">
+                                            <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-plex/25 bg-plex/10">
+                                                <Clapperboard className="w-4 h-4 text-plex" />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-sm font-bold text-text">Highlights</h3>
+                                                <p className="text-[11px] text-muted">Notable activity in this window</p>
+                                            </div>
                                         </div>
-                                        <div className="space-y-2">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                                             {digest.highlights.map((item, index) => (
-                                                <div key={`${item.title}-${index}`} className="rounded-lg border border-border/50 bg-white/[0.02] px-3 py-2">
-                                                    <p className="text-sm font-semibold text-text">{item.title}</p>
-                                                    {item.subtitle ? <p className="text-xs text-muted mt-0.5">{item.subtitle}</p> : null}
-                                                </div>
+                                                <HighlightCard
+                                                    key={`${item.title}-${index}`}
+                                                    title={item.title || 'Highlight'}
+                                                    subtitle={item.subtitle}
+                                                    index={index}
+                                                />
                                             ))}
                                         </div>
                                     </section>
                                 ) : null}
                             </div>
 
-                            <aside className="border-t lg:border-t-0 lg:border-l border-border/60 pt-4 lg:pt-0 lg:pl-4">
-                                <p className="text-[11px] uppercase tracking-wider font-bold text-muted mb-2">Recent summaries</p>
+                            <aside className="border-t lg:border-t-0 lg:border-l border-white/10 bg-black/20 px-4 py-5 sm:px-5">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <BarChart3 className="w-3.5 h-3.5 text-plex/70" />
+                                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">
+                                        Recent summaries
+                                    </p>
+                                </div>
                                 <div className="space-y-2">
-                                    {history.map((item) => (
-                                        <button
-                                            key={item.id}
-                                            type="button"
-                                            onClick={() => {
-                                                void load(item.id);
-                                                try {
-                                                    const url = new URL(window.location.href);
-                                                    url.searchParams.set('summary', item.id);
-                                                    window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
-                                                } catch {
-                                                    // ignore
-                                                }
-                                            }}
-                                            className={`w-full text-left rounded-xl border px-3 py-2 transition-colors ${
-                                                item.id === digest.id
-                                                    ? 'border-plex/40 bg-plex/10'
-                                                    : 'border-border/60 hover:border-plex/30 hover:bg-white/[0.03]'
-                                            }`}
-                                        >
-                                            <p className="text-sm font-semibold text-text">{item.periodLabel || 'Summary'}</p>
-                                            <p className="text-[11px] text-muted mt-0.5">{formatWhen(item.createdAt)}</p>
-                                        </button>
-                                    ))}
+                                    {history.map((item) => {
+                                        const active = item.id === digest.id;
+                                        return (
+                                            <button
+                                                key={item.id}
+                                                type="button"
+                                                onClick={() => {
+                                                    void load(item.id);
+                                                    try {
+                                                        const url = new URL(window.location.href);
+                                                        url.searchParams.set('summary', item.id);
+                                                        window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
+                                                    } catch {
+                                                        // ignore
+                                                    }
+                                                }}
+                                                className={`group relative w-full overflow-hidden rounded-xl border px-3.5 py-3 text-left transition-all ${
+                                                    active
+                                                        ? 'border-plex/40 bg-gradient-to-br from-plex/15 to-plex/5 shadow-[0_0_24px_rgba(229,160,13,0.12)]'
+                                                        : 'border-white/10 bg-white/[0.02] hover:border-plex/25 hover:bg-white/[0.04]'
+                                                }`}
+                                            >
+                                                {active ? (
+                                                    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_0%_0%,rgb(var(--color-plex)_/_0.15),transparent_60%)]" />
+                                                ) : null}
+                                                <p className="relative text-sm font-bold text-text">
+                                                    {item.periodLabel || 'Summary'}
+                                                </p>
+                                                <p className="relative mt-0.5 text-[11px] text-muted">
+                                                    {formatWhen(item.createdAt)}
+                                                </p>
+                                            </button>
+                                        );
+                                    })}
                                     {!history.length ? (
-                                        <p className="text-xs text-muted">No previous summaries yet.</p>
+                                        <p className="text-xs text-muted px-1">No previous summaries yet.</p>
                                     ) : null}
                                 </div>
                             </aside>

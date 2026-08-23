@@ -19536,6 +19536,7 @@ const startBackgroundService = async () => {
                 if (!currentConfig.summaryNotifyEnabled || !currentConfig.summaryNotifyFrequency || currentConfig.summaryNotifyFrequency === 'disabled') {
                     t.nextRun = null;
                 } else {
+                    const now = new Date();
                     const nextDate = new Date(now);
                     const todayStr = now.toISOString().split('T')[0];
                     if (currentConfig.summaryNotifyFrequency === 'weekly') {
@@ -19554,6 +19555,8 @@ const startBackgroundService = async () => {
                         }
                         const daysInMonth = new Date(nextDate.getFullYear(), nextDate.getMonth() + 1, 0).getDate();
                         nextDate.setDate(Math.min(targetDay, daysInMonth));
+                    } else if (currentConfig.summaryNotifyFrequency === 'daily' && currentConfig.lastSummarySent === todayStr) {
+                        nextDate.setDate(now.getDate() + 1);
                     }
                     const [hour, minute] = normalizeSummaryTime(currentConfig.summaryNotifyTime).split(':').map(Number);
                     nextDate.setHours(hour, minute, 0, 0);
