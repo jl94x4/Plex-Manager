@@ -15,13 +15,14 @@ import { execSync } from 'child_process';
 import fsSync from 'fs';
 import net from 'net';
 import dns from 'dns/promises';
-import { makeCircularPwaIconPng } from './lib/circular-icon.js';
+import { makeCircularPwaIconPng, makeMaskablePwaIconPng } from './lib/circular-icon.js';
 import {
     getPortalBrandingIconCacheKey,
     fetchPortalBrandingRasterBuffer,
     syncPortalPwaStaticIcons,
     fetchPortalEmailLogoBuffer,
     resolvePortalPushIconUrl,
+    resolvePortalPwaManifestIconHref,
 } from './lib/portal-branding.js';
 import { resolvePackageVersion } from './lib/resolve-package-version.js';
 import {
@@ -13733,101 +13734,48 @@ const sendBrandingImageBuffer = async (res, buffer, contentTypeHint = '', pwaSiz
  */
 app.get('/api/public/pwa-icon', publicReadRateLimit, async (req, res) => {
     const size = Number(req.query.size) >= 512 ? 512 : 192;
+    const maskable = req.query.maskable === '1' || req.query.maskable === 'true';
     try {
         const config = await loadFile(CONFIG_PATH, {});
         if (normalizePwaIconSource(config.pwaIconSource) === 'application') {
+            if (maskable) {
+                const maskablePath = path.join(process.cwd(), 'static', 'pwa-icon-maskable-512.png');
+                try {
+                    await fs.access(maskablePath);
+                    res.setHeader('Content-Type', 'image/png');
+                    res.setHeader('Cache-Control', 'public, max-age=3600');
+                    return res.sendFile(maskablePath);
+                } catch {
+                    return sendPwaSizedIconFile(res, 512);
+                }
+            }
             return sendPwaSizedIconFile(res, size);
         }
 
         const profile = await getAdminProfile(config);
-        const custom = String(config.customLogoUrl || '').trim();
-        const iconTimeoutMs = 2500;
-
-        if (custom) {
-            if (custom.startsWith('http://') || custom.startsWith('https://')) {
-                try {
-                    const parsed = new URL(custom);
-                    if (!isBlockedHostName(parsed.hostname)) {
-                        const response = await fetchWithTimeout(custom, { redirect: 'follow' }, iconTimeoutMs).catch(() => null);
-                        if (response?.ok) {
-                            const buffer = Buffer.from(await response.arrayBuffer());
-                            if (buffer.length) {
-                                return sendBrandingImageBuffer(res, buffer, response.headers.get('content-type') || '', size);
-                            }
-                        }
-                    }
-                } catch {
-                    // fall through
-                }
-            } else {
-                const localPath = stripBasePathFromUrl(custom.startsWith('/') ? custom : `/${custom}`).split('?')[0];
-                if (localPath.startsWith('/static/')) {
-                    const fileName = path.basename(localPath);
-                    if (fileName && !fileName.includes('..')) {
-                        const assetPath = path.join(process.cwd(), 'static', fileName);
-                        try {
-                            const buffer = await fs.readFile(assetPath);
-                            return sendBrandingImageBuffer(res, buffer, '', size);
-                        } catch {
-                            // fall through
-                        }
-                    }
-                }
-            }
+        const brandingDeps = getPortalBrandingDeps();
+        let buffer = await fetchPortalBrandingRasterBuffer(config, profile, brandingDeps, { timeoutMs: 5000 });
+        if (!buffer) {
+            buffer = await fetchPortalBrandingRasterBuffer(config, profile, brandingDeps, { timeoutMs: 10000 });
+        }
+        if (!buffer) {
+            log('[Branding] PWA icon route: server branding unavailable');
+            return res.status(404).send('');
         }
 
-        if (String(config.mediaServerType || '').toLowerCase() === 'jellyfin' && isJellyfinConfigured(config)) {
-            try {
-                const baseUrl = resolveIntegrationUrlForFetch(config.jellyfinUrl);
-                for (const assetPath of ['/web/icon-transparent.png', '/web/assets/img/icon-transparent.png']) {
-                    const response = await fetchWithTimeout(`${baseUrl}${assetPath}`, {
-                        headers: jellyfinHeaders(config.jellyfinApiKey, { Accept: 'image/*,*/*;q=0.8' }),
-                    }, iconTimeoutMs).catch(() => null);
-                    if (!response?.ok) continue;
-                    const buffer = Buffer.from(await response.arrayBuffer());
-                    if (buffer.length) {
-                        return sendCircularPwaIcon(res, buffer, size);
-                    }
-                }
-            } catch {
-                // fall through
-            }
+        if (maskable) {
+            const png = makeMaskablePwaIconPng(buffer, size, { badgeScale: 0.88 });
+            res.setHeader('Content-Type', 'image/png');
+            res.setHeader('Cache-Control', 'public, max-age=3600');
+            return res.send(png);
         }
-
-        const thumb = String(profile.thumb || '').trim();
-        if (thumb.startsWith('http://') || thumb.startsWith('https://')) {
-            try {
-                const parsed = new URL(thumb);
-                if (!isBlockedHostName(parsed.hostname)) {
-                    const response = await fetchWithTimeout(thumb, { redirect: 'follow' }, iconTimeoutMs).catch(() => null);
-                    if (response?.ok) {
-                        const buffer = Buffer.from(await response.arrayBuffer());
-                        if (buffer.length) {
-                            return sendBrandingImageBuffer(res, buffer, response.headers.get('content-type') || '', size);
-                        }
-                    }
-                }
-            } catch {
-                // fall through
-            }
-        } else if (thumb && isSafePlexMediaPath(thumb) && config.plexToken) {
-            const uri = await getPlexConnectionUri(config);
-            if (uri) {
-                const url = `${uri}/photo/:/transcode?url=${encodeURIComponent(thumb)}&width=${size}&height=${size}&minSize=1&X-Plex-Token=${config.plexToken}`;
-                const response = await fetchWithTimeout(url, { headers: plexClientHeaders(config.plexToken) }, iconTimeoutMs).catch(() => null);
-                if (response?.ok) {
-                    const buffer = Buffer.from(await response.arrayBuffer());
-                    if (buffer.length) {
-                        return sendBrandingImageBuffer(res, buffer, response.headers.get('content-type') || 'image/jpeg', size);
-                    }
-                }
-            }
-        }
-
-        return sendPwaSizedIconFile(res, size);
+        return sendCircularPwaIcon(res, buffer, size);
     } catch (e) {
         log(`PWA icon failed: ${e.message}`);
-        return sendPwaSizedIconFile(res, size);
+        if (normalizePwaIconSource((await loadFile(CONFIG_PATH, {}).catch(() => ({}))).pwaIconSource) === 'application') {
+            return sendPwaSizedIconFile(res, size);
+        }
+        return res.status(500).send('');
     }
 });
 
@@ -13838,91 +13786,10 @@ app.get('/api/public/branding-icon', publicReadRateLimit, async (req, res) => {
             return sendCircularStaticLogoFallback(res);
         }
         const profile = await getAdminProfile(config);
-        const custom = String(config.customLogoUrl || '').trim();
-
-        if (custom) {
-            if (custom.startsWith('http://') || custom.startsWith('https://')) {
-                try {
-                    const parsed = new URL(custom);
-                    if (!isBlockedHostName(parsed.hostname)) {
-                        const response = await fetchWithTimeout(custom, { redirect: 'follow' }, 15000).catch(() => null);
-                        if (response?.ok) {
-                            const buffer = Buffer.from(await response.arrayBuffer());
-                            if (buffer.length) {
-                                return sendCircularFavicon(res, buffer);
-                            }
-                        }
-                    }
-                } catch {
-                    // fall through to other sources
-                }
-            } else {
-                const localPath = stripBasePathFromUrl(custom.startsWith('/') ? custom : `/${custom}`).split('?')[0];
-                if (localPath.startsWith('/static/')) {
-                    const fileName = path.basename(localPath);
-                    if (!fileName || fileName.includes('..')) return sendCircularStaticLogoFallback(res);
-                    const assetPath = path.join(process.cwd(), 'static', fileName);
-                    try {
-                        await fs.access(assetPath);
-                        const buffer = await fs.readFile(assetPath);
-                        return sendCircularFavicon(res, buffer);
-                    } catch {
-                        return sendCircularStaticLogoFallback(res);
-                    }
-                }
-            }
+        const buffer = await fetchPortalBrandingRasterBuffer(config, profile, getPortalBrandingDeps(), { timeoutMs: 10000 });
+        if (buffer) {
+            return sendCircularFavicon(res, buffer);
         }
-
-        if (String(config.mediaServerType || '').toLowerCase() === 'jellyfin' && isJellyfinConfigured(config)) {
-            try {
-                const baseUrl = resolveIntegrationUrlForFetch(config.jellyfinUrl);
-                for (const assetPath of ['/web/icon-transparent.png', '/web/assets/img/icon-transparent.png']) {
-                    const response = await fetchWithTimeout(`${baseUrl}${assetPath}`, {
-                        headers: jellyfinHeaders(config.jellyfinApiKey, { Accept: 'image/*,*/*;q=0.8' }),
-                    }, 15000).catch(() => null);
-                    if (!response?.ok) continue;
-                    const buffer = Buffer.from(await response.arrayBuffer());
-                    if (buffer.length) {
-                        return sendCircularFavicon(res, buffer);
-                    }
-                }
-            } catch {
-                // fall through
-            }
-        }
-
-        const thumb = String(profile.thumb || '').trim();
-        if (thumb.startsWith('http://') || thumb.startsWith('https://')) {
-            try {
-                const parsed = new URL(thumb);
-                if (!isBlockedHostName(parsed.hostname)) {
-                    const response = await fetchWithTimeout(thumb, { redirect: 'follow' }, 15000).catch(() => null);
-                    if (response?.ok) {
-                        const buffer = Buffer.from(await response.arrayBuffer());
-                        if (buffer.length) {
-                            return sendCircularFavicon(res, buffer);
-                        }
-                    }
-                }
-            } catch {
-                // fall through
-            }
-        } else if (thumb && isSafePlexMediaPath(thumb) && config.plexToken) {
-            const uri = await getPlexConnectionUri(config);
-            if (uri) {
-                const width = Math.min(Math.max(parseInt(req.query.width, 10) || 180, 32), 1024);
-                const height = Math.min(Math.max(parseInt(req.query.height, 10) || 180, 32), 1024);
-                const url = `${uri}/photo/:/transcode?url=${encodeURIComponent(thumb)}&width=${width}&height=${height}&minSize=1&X-Plex-Token=${config.plexToken}`;
-                const response = await fetchWithTimeout(url, { headers: plexClientHeaders(config.plexToken) }, 15000).catch(() => null);
-                if (response?.ok) {
-                    const buffer = Buffer.from(await response.arrayBuffer());
-                    if (buffer.length) {
-                        return sendCircularFavicon(res, buffer);
-                    }
-                }
-            }
-        }
-
         return sendCircularStaticLogoFallback(res);
     } catch (e) {
         log(`Branding icon failed: ${e.message}`);
@@ -18639,12 +18506,11 @@ const buildPwaManifest = async () => {
     // App home is /portal when BASE_PATH is empty — matches login redirect + client router.
     const startUrl = BASE_PATH ? `${BASE_PATH}/` : '/portal';
     const scope = BASE_PATH ? `${BASE_PATH}/` : '/';
-    // Static PNGs are regenerated from the selected branding source so install icons,
-    // push notifications, and email headers stay in sync with Settings.
-    const iconVer = getPortalBrandingIconCacheKey(config, profile);
-    const icon192 = `${resolvePublicAssetHref('/static/pwa-icon-192.png')}?v=${iconVer}`;
-    const icon512 = `${resolvePublicAssetHref('/static/pwa-icon-512.png')}?v=${iconVer}`;
-    const iconMaskable = `${resolvePublicAssetHref('/static/pwa-icon-maskable-512.png')}?v=${iconVer}`;
+    // Server mode serves install icons from /api/public/pwa-icon so the installed app
+    // always matches live branding. Application mode keeps pre-synced static PNGs.
+    const icon192 = resolvePortalPwaManifestIconHref(config, profile, resolvePublicAssetHref, { size: 192 });
+    const icon512 = resolvePortalPwaManifestIconHref(config, profile, resolvePublicAssetHref, { size: 512 });
+    const iconMaskable = resolvePortalPwaManifestIconHref(config, profile, resolvePublicAssetHref, { size: 512, maskable: true });
     return {
         id: startUrl,
         name: `${serverName} Portal`,
@@ -28937,9 +28803,19 @@ app.listen(PORT, BIND_HOST, async () => {
     process.env.PLEXAPI_HEADER_PLATFORM = 'Server Manager Portal';
     log(`Plex client identity: product=Server Manager Portal clientId=${String(CLIENT_ID).slice(0, 8)}…`);
     await syncAdminPlexIdFromConfigToken(config, { persist: true });
-    void getAdminProfile(config).then((profile) => refreshPortalBrandingAssets(config, profile)).catch((error) => {
-        log(`[Branding] startup icon sync failed: ${error.message}`);
-    });
+    const runStartupBrandingSync = async (label = 'startup') => {
+        try {
+            const profile = await getAdminProfile(config);
+            const result = await refreshPortalBrandingAssets(config, profile);
+            if (!result?.synced) {
+                log(`[Branding] ${label} icon sync skipped or deferred`);
+            }
+        } catch (error) {
+            log(`[Branding] ${label} icon sync failed: ${error.message}`);
+        }
+    };
+    void runStartupBrandingSync('startup');
+    setTimeout(() => { void runStartupBrandingSync('startup-retry'); }, 45000);
 
     await loadStatusState();
     runMonitorCycle();
