@@ -9,6 +9,7 @@ import {
     insertNavKeyBefore,
     removeNavKey,
     resolveCustomNavIcon,
+    shouldUseCustomTabEmbedProxy,
 } from '../shared/customNavTabs';
 import { CustomSelect, SettingsToggleRow } from '../shared/ui';
 import { SettingHint } from './SettingHint';
@@ -187,14 +188,16 @@ export const CustomNavTabsSettings: React.FC<Props> = ({
                                             }))}
                                         />
                                         <SettingHint>{t(`settings.navigation.customTabs.openMode.hint.${tab.openMode}`)}</SettingHint>
-                                        {tab.openMode === 'embed' && detectCustomTabEmbedIssue(tab.url) === 'mixed-content' ? (
-                                            <p className="mt-2 text-xs font-semibold text-yellow-300/90">
-                                                {t('settings.navigation.customTabs.embedWarningMixedContent')}
-                                            </p>
-                                        ) : null}
                                         {tab.openMode === 'embed' && detectCustomTabEmbedIssue(tab.url) === 'blocked-host' ? (
                                             <p className="mt-2 text-xs font-semibold text-yellow-300/90">
                                                 {t('settings.navigation.customTabs.embedWarningBlockedHost')}
+                                            </p>
+                                        ) : null}
+                                        {tab.openMode === 'embed' && shouldUseCustomTabEmbedProxy(tab.url) ? (
+                                            <p className="mt-2 text-xs font-semibold text-sky-300/90">
+                                                {detectCustomTabEmbedIssue(tab.url) === 'mixed-content'
+                                                    ? t('settings.navigation.customTabs.embedWarningMixedContent')
+                                                    : t('settings.navigation.customTabs.embedWarningCrossOrigin')}
                                             </p>
                                         ) : null}
                                     </label>

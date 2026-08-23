@@ -2,7 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ExternalLink, Globe, RefreshCw } from 'lucide-react';
 import { useDiscoverI18n } from '../discovery/i18n';
 import type { CustomNavTab } from '../shared/types';
-import { canAccessCustomNavTab, detectCustomTabEmbedIssue } from '../shared/customNavTabs';
+import {
+    canAccessCustomNavTab,
+    detectCustomTabEmbedIssue,
+    getCustomTabEmbedProxySrc,
+    shouldUseCustomTabEmbedProxy,
+} from '../shared/customNavTabs';
 
 type Props = {
     tabId: string | null;
@@ -18,15 +23,27 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = 
     );
     const [iframeKey, setIframeKey] = useState(0);
     const [embedBlocked, setEmbedBlocked] = useState(false);
-    const predictedEmbedIssue = useMemo(
-        () => (tab?.url ? detectCustomTabEmbedIssue(tab.url) : null),
+    const useEmbedProxy = useMemo(
+        () => !!(tab?.url && shouldUseCustomTabEmbedProxy(tab.url)),
         [tab?.url],
     );
+    const predictedEmbedIssue = useMemo(() => {
+        if (!tab?.url) return null;
+        if (useEmbedProxy) {
+            return detectCustomTabEmbedIssue(tab.url) === 'blocked-host' ? 'blocked-host' : null;
+        }
+        return detectCustomTabEmbedIssue(tab.url);
+    }, [tab?.url, useEmbedProxy]);
+    const iframeSrc = useMemo(() => {
+        if (!tab) return '';
+        if (useEmbedProxy) return getCustomTabEmbedProxySrc(tab.id);
+        return tab.url;
+    }, [tab, useEmbedProxy]);
 
     useEffect(() => {
         setEmbedBlocked(false);
         setIframeKey((value) => value + 1);
-    }, [tab?.id, tab?.url]);
+    }, [tab?.id, tab?.url, useEmbedProxy]);
 
     if (!tabId || !tab || !canAccessCustomNavTab(tab, isAdmin)) {
         return (
@@ -59,11 +76,11 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = 
     }
 
     const showEmbedWarning = predictedEmbedIssue || embedBlocked;
-    const embedWarningText = predictedEmbedIssue === 'mixed-content'
-        ? t('settings.navigation.customTabs.embed.mixedContent')
-        : predictedEmbedIssue === 'blocked-host'
-            ? t('settings.navigation.customTabs.embed.blockedHost')
-            : t('settings.navigation.customTabs.embed.genericBlocked');
+    const embedWarningText = predictedEmbedIssue === 'blocked-host'
+        ? t('settings.navigation.customTabs.embed.blockedHost')
+        : embedBlocked
+            ? t('settings.navigation.customTabs.embed.genericBlocked')
+            : '';
 
     return (
         <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-3">
@@ -100,6 +117,12 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = 
                 </div>
             </div>
 
+            {useEmbedProxy ? (
+                <div className="rounded-2xl border border-sky-500/25 bg-sky-500/10 px-4 py-3 text-sm leading-relaxed text-sky-100">
+                    {t('settings.navigation.customTabs.embed.proxyActive')}
+                </div>
+            ) : null}
+
             {showEmbedWarning ? (
                 <div className="rounded-2xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm leading-relaxed text-yellow-100">
                     <p>{embedWarningText}</p>
@@ -126,7 +149,7 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = 
                     <iframe
                         key={iframeKey}
                         title={tab.name}
-                        src={tab.url}
+                        src={iframeSrc}
                         className="h-full min-h-[60vh] w-full border-0 bg-background"
                         sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-downloads"
                         referrerPolicy="no-referrer"

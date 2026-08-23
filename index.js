@@ -89,6 +89,7 @@ import {
     pruneNavOrderCustomKeys,
     sanitizeCustomNavTabsForSession,
 } from './lib/custom-nav-tabs.js';
+import { createCustomTabEmbedProxyHandler } from './lib/custom-tab-embed-proxy.js';
 import { createSupportTicketFromMediaIssue, attachTicketIdsToIssues } from './lib/support-tickets/fromIssue.js';
 import { mapTautulliHistoryRowToPlexItem } from './lib/achievements/tautulliHistory.js';
 import { isTautulliWatchHistorySource, buildAchievementsHomeRankContext, summarizeAchievementsBackfill, levelProgress } from './lib/achievements/index.js';
@@ -4816,6 +4817,20 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
         } : { active: false },
     });
 });
+
+const handleCustomTabEmbedProxy = createCustomTabEmbedProxyHandler({
+    loadConfig: () => loadFile(CONFIG_PATH, {}),
+    normalizeCustomNavTabs,
+    resolveCurrentAdmin,
+    getSessionActor,
+    effectiveViewerIsAdmin,
+    withBasePath,
+    fetchWithTimeout,
+    log,
+});
+
+app.all('/api/custom-tab-embed/:tabId', requireAuth, requireMember, handleCustomTabEmbedProxy);
+app.all('/api/custom-tab-embed/:tabId/*', requireAuth, requireMember, handleCustomTabEmbedProxy);
 
 app.post('/api/admin/impersonate/:userId', requireAdmin, async (req, res) => {
     try {

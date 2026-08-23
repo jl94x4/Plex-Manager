@@ -33,6 +33,7 @@ import {
     type LucideIcon,
 } from 'lucide-react';
 import type { CustomNavTab } from './types';
+import { portalUrl } from './basePath';
 
 export const CUSTOM_NAV_KEY_PREFIX = 'custom:';
 
@@ -177,6 +178,24 @@ export const detectCustomTabEmbedIssue = (
     }
     return null;
 };
+
+/** Route embeds through the portal when direct iframe would be blocked. */
+export const shouldUseCustomTabEmbedProxy = (url: string): boolean => {
+    if (detectCustomTabEmbedIssue(url) === 'blocked-host') return false;
+    if (detectCustomTabEmbedIssue(url) === 'mixed-content') return true;
+    try {
+        const target = new URL(String(url || '').trim(), typeof window !== 'undefined' ? window.location.origin : 'https://localhost');
+        const portalHost = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : '';
+        if (portalHost && target.hostname.toLowerCase() !== portalHost) return true;
+    } catch {
+        return false;
+    }
+    return false;
+};
+
+export const getCustomTabEmbedProxySrc = (tabId: string) => (
+    portalUrl(`/api/custom-tab-embed/${encodeURIComponent(tabId)}/`)
+);
 
 export const isPrivateOrLocalHost = (url: string) => {
     try {
