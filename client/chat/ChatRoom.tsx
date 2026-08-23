@@ -1,7 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, {
+    useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState,
+} from 'react';
 import {
     Hash, Loader2, MessageSquare, Plus, Send, Trash2, X,
 } from 'lucide-react';
+import { ChatEmojiPicker } from './ChatEmojiPicker';
+import { insertAtCursor } from './insertAtCursor';
+import { useVisualViewportInset } from './useVisualViewportInset';
 import { apiFetch } from '../shared/api';
 import { portalUrl } from '../shared/basePath';
 import { DashboardHero, DashboardPageShell } from '../shared/dashboard/DashboardChrome';
@@ -119,6 +124,8 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
     const [mentionOpen, setMentionOpen] = useState(false);
     const [mentionIndex, setMentionIndex] = useState(0);
     const [mentionStart, setMentionStart] = useState(-1);
+    const [emojiOpen, setEmojiOpen] = useState(false);
+    const [composeFocused, setComposeFocused] = useState(false);
     const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
     const confirmActionRef = useRef<(() => void | Promise<void>) | null>(null);
     const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -126,11 +133,38 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
     const mentionTimerRef = useRef<number | null>(null);
     const lastMessageIdRef = useRef(0);
     const activeRoomIdRef = useRef<string | null>(activeRoomId);
+    const composeFocusedRef = useRef(false);
+    const selectionRef = useRef({ start: 0, end: 0 });
+    const stickToBottomRef = useRef(true);
     const currentUserId = String(sessionInfo?.account?.id || sessionInfo?.session?.id || '');
+    const pausePolls = composeFocused || draft.length > 0;
+    const keyboardInset = useVisualViewportInset(composeFocused);
 
     useEffect(() => {
         activeRoomIdRef.current = activeRoomId;
     }, [activeRoomId]);
+
+    useEffect(() => {
+        composeFocusedRef.current = composeFocused;
+    }, [composeFocused]);
+
+    const syncSelection = useCallback(() => {
+        const node = draftRef.current;
+        if (!node) return;
+        selectionRef.current = {
+            start: node.selectionStart ?? node.value.length,
+            end: node.selectionEnd ?? node.value.length,
+        };
+    }, []);
+
+    const restoreComposeFocus = useCallback(() => {
+        if (!composeFocusedRef.current) return;
+        const node = draftRef.current;
+        if (!node || document.activeElement === node) return;
+        const { start, end } = selectionRef.current;
+        node.focus({ preventScroll: true });
+        node.setSelectionRange(start, end);
+    }, []);
 
     const toast = useCallback((message: string, type: ToastMessage['type'] = 'info') => {
         pushToast(setToasts, message, type);
@@ -261,20 +295,32 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
         window.history.replaceState({}, '', `${url.pathname}?${url.searchParams.toString()}`);
     }, [activeRoomId]);
 
+    const updateStickToBottom = useCallback(() => {
+        const node = scrollRef.current;
+        if (!node) return;
+        stickToBottomRef.current = node.scrollHeight - node.scrollTop - node.clientHeight < 96;
+    }, []);
+
     useEffect(() => {
         const node = scrollRef.current;
         if (!node) return;
+        if (!stickToBottomRef.current && composeFocusedRef.current) return;
         node.scrollTop = node.scrollHeight;
     }, [messages, activeRoomId]);
 
-    usePoll(() => {
-        if (!activeRoomId) return;
-        void loadMessages(activeRoomId, { after: lastMessageIdRef.current });
-    }, activeRoomId ? MESSAGE_POLL_MS : null);
+    useLayoutEffect(() => {
+        restoreComposeFocus();
+    }, [messages, rooms, restoreComposeFocus]);
 
     usePoll(() => {
+        if (!activeRoomId || pausePolls) return;
+        void loadMessages(activeRoomId, { after: lastMessageIdRef.current });
+    }, activeRoomId && !pausePolls ? MESSAGE_POLL_MS : null);
+
+    usePoll(() => {
+        if (pausePolls) return;
         void loadRooms();
-    }, ROOM_POLL_MS);
+    }, pausePolls ? null : ROOM_POLL_MS);
 
     const closeMentions = useCallback(() => {
         setMentionOpen(false);
@@ -307,6 +353,22 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
             void loadMentionables(active.query);
         }, 120);
     }, [closeMentions, loadMentionables]);
+
+    const insertEmoji = useCallback((emoji: string) => {
+        const node = draftRef.current;
+        const { start, end } = node
+            ? { start: node.selectionStart ?? draft.length, end: node.selectionEnd ?? draft.length }
+            : selectionRef.current;
+        const { nextText, nextCursor } = insertAtCursor(draft, emoji, start, end);
+        setDraft(nextText);
+        selectionRef.current = { start: nextCursor, end: nextCursor };
+        window.requestAnimationFrame(() => {
+            const textarea = draftRef.current;
+            if (!textarea) return;
+            textarea.focus({ preventScroll: true });
+            textarea.setSelectionRange(nextCursor, nextCursor);
+        });
+    }, [draft]);
 
     const applyMention = useCallback((user: MentionableUser) => {
         if (mentionStart < 0) return;
@@ -341,6 +403,8 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                 lastMessageIdRef.current = Math.max(lastMessageIdRef.current, Number(message.id));
                 setDraft('');
                 closeMentions();
+                setEmojiOpen(false);
+                stickToBottomRef.current = true;
                 onCountsChange?.();
             }
         } catch (error) {
@@ -434,7 +498,7 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
     }
 
     return (
-        <DashboardPageShell className="gap-3">
+        <DashboardPageShell className="gap-3 max-md:fixed max-md:inset-x-0 max-md:top-[calc(4rem+env(safe-area-inset-top,0px))] max-md:bottom-[calc(4.25rem+env(safe-area-inset-bottom,0px))] max-md:z-20 max-md:overflow-hidden max-md:pb-0 max-md:gap-2">
             <ToastContainer toasts={toasts} setToasts={setToasts} />
             <ConfirmModal
                 isOpen={!!confirmDialog}
@@ -445,14 +509,16 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                 onCancel={closeConfirm}
                 onConfirm={handleConfirm}
             />
-            <DashboardHero
-                eyebrow="Community"
-                title="Live chat"
-                description="Talk with everyone on this server in real time. Admins can create text channels for different topics."
-                icon={<MessageSquare className="h-3.5 w-3.5" />}
-            />
+            <div className="hidden md:block">
+                <DashboardHero
+                    eyebrow="Community"
+                    title="Live chat"
+                    description="Talk with everyone on this server in real time. Admins can create text channels for different topics."
+                    icon={<MessageSquare className="h-3.5 w-3.5" />}
+                />
+            </div>
 
-            <div className="flex min-h-[80vh] flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/20 lg:min-h-[calc(100dvh-13rem)] lg:flex-row">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/20 md:min-h-[80vh] lg:min-h-[calc(100dvh-13rem)] lg:flex-row">
                 <aside className="flex w-full shrink-0 flex-col border-b border-white/10 lg:w-64 lg:border-b-0 lg:border-r">
                     <div className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
                         <p className="text-xs font-bold uppercase tracking-wide text-muted">Channels</p>
@@ -495,7 +561,7 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                     </div>
                 </aside>
 
-                <section className="flex min-h-[70vh] flex-1 flex-col lg:min-h-0">
+                <section className="flex min-h-0 flex-1 flex-col">
                     {activeRoom ? (
                         <>
                             <div className="flex items-start justify-between gap-3 border-b border-white/10 px-4 py-3">
@@ -519,7 +585,11 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                                 ) : null}
                             </div>
 
-                            <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+                            <div
+                                ref={scrollRef}
+                                className="flex-1 space-y-3 overflow-y-auto px-4 py-4"
+                                onScroll={updateStickToBottom}
+                            >
                                 {messagesLoading && !messages.length ? (
                                     <div className="flex items-center justify-center py-10 text-muted">
                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -588,10 +658,13 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                                 ) : null}
                             </div>
 
-                            <div className="border-t border-white/10 p-4">
+                            <div
+                                className="shrink-0 border-t border-white/10 bg-[#0a0b0f] p-3 md:bg-transparent md:p-4"
+                                style={keyboardInset > 0 ? { transform: `translateY(-${keyboardInset}px)` } : undefined}
+                            >
                                 <div className="relative flex items-end gap-2">
                                     {mentionOpen ? (
-                                        <div className="absolute bottom-full left-0 right-12 z-20 mb-2 max-h-48 overflow-y-auto rounded-xl border border-white/10 bg-[#12141c] p-1 shadow-2xl">
+                                        <div className="absolute bottom-full left-0 right-[5.5rem] z-20 mb-2 max-h-48 overflow-y-auto rounded-xl border border-white/10 bg-[#12141c] p-1 shadow-2xl">
                                             {mentionables.map((user, index) => (
                                                 <button
                                                     key={user.id}
@@ -610,20 +683,49 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                                             ))}
                                         </div>
                                     ) : null}
+                                    <ChatEmojiPicker
+                                        open={emojiOpen}
+                                        onToggle={() => setEmojiOpen((value) => !value)}
+                                        onClose={() => setEmojiOpen(false)}
+                                        onPick={(emoji) => {
+                                            insertEmoji(emoji);
+                                            setEmojiOpen(false);
+                                        }}
+                                    />
                                     <textarea
                                         ref={draftRef}
-                                        className="min-h-[88px] flex-1 resize-y rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-text placeholder:text-muted focus:border-plex/40 focus:outline-none"
+                                        className="min-h-[88px] max-md:min-h-[72px] flex-1 resize-y rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-base md:text-sm text-text placeholder:text-muted focus:border-plex/40 focus:outline-none"
                                         placeholder={`Message #${activeRoom.name} · type @ to mention`}
                                         rows={4}
+                                        enterKeyHint="send"
+                                        autoComplete="off"
+                                        autoCorrect="on"
                                         value={draft}
                                         onChange={(event) => {
                                             const next = event.target.value;
                                             setDraft(next);
+                                            syncSelection();
                                             syncMentionSuggestions(next, event.target.selectionStart || next.length);
                                         }}
                                         onClick={(event) => {
                                             const target = event.currentTarget;
+                                            syncSelection();
                                             syncMentionSuggestions(target.value, target.selectionStart || target.value.length);
+                                        }}
+                                        onSelect={syncSelection}
+                                        onKeyUp={syncSelection}
+                                        onFocus={() => {
+                                            setComposeFocused(true);
+                                            setEmojiOpen(false);
+                                            syncSelection();
+                                        }}
+                                        onBlur={() => {
+                                            setComposeFocused(false);
+                                        }}
+                                        onTouchStart={(event) => {
+                                            if (document.activeElement === event.currentTarget) return;
+                                            event.preventDefault();
+                                            event.currentTarget.focus({ preventScroll: true });
                                         }}
                                         onKeyDown={(event) => {
                                             if (mentionOpen && mentionables.length) {
@@ -657,14 +759,14 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                                     />
                                     <button
                                         type="button"
-                                        className="inline-flex h-[88px] w-11 shrink-0 items-center justify-center rounded-xl bg-plex text-background hover:bg-plex-hover disabled:opacity-50"
+                                        className="inline-flex h-[88px] max-md:h-[72px] w-11 shrink-0 items-center justify-center rounded-xl bg-plex text-background hover:bg-plex-hover disabled:opacity-50"
                                         disabled={sending || !draft.trim()}
                                         onClick={() => void handleSend()}
                                     >
                                         {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                                     </button>
                                 </div>
-                                <p className="mt-2 text-[11px] text-muted">Enter to send · Shift+Enter for a new line · @username to mention someone</p>
+                                <p className="mt-2 hidden text-[11px] text-muted md:block">Enter to send · Shift+Enter for a new line · @username to mention someone</p>
                             </div>
                         </>
                     ) : (
