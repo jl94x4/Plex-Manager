@@ -375,7 +375,7 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                 eyebrow="Community"
                 title="Live chat"
                 description="Talk with everyone on this server in real time. Admins can create text channels for different topics."
-                icon={MessageSquare}
+                icon={<MessageSquare className="h-3.5 w-3.5" />}
             />
 
             <div className="mt-6 flex min-h-[62vh] flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/20 lg:flex-row">
