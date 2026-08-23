@@ -276,6 +276,24 @@ const fulfilledSeasonLabel = (label: string) => (
     label === 'Available' || label === 'Up to date'
 );
 
+/** All aired main-season episodes are on disk (continuing shows may still have nextAiring). */
+export const sonarrCaughtUpWithAiredEpisodes = (details: any): boolean => {
+    const sonarr = details?.sonarrLibraryStatus;
+    if (!sonarr?.matched || sonarr.hasActiveDownloads) return false;
+    if (sonarr.showComplete) return true;
+
+    const main = (sonarr.seasons || []).filter((season: any) => isMainSeasonNumber(Number(season?.seasonNumber)));
+    const airedMain = main.filter((season: any) => Number(season.airedTotal) > 0);
+    if (!airedMain.length) return false;
+
+    return airedMain.every((season: any) => {
+        if (season.complete) return true;
+        const aired = Number(season.airedTotal) || 0;
+        const withFile = Number(season.airedWithFile ?? season.withFile) || 0;
+        return aired > 0 && withFile >= aired;
+    });
+};
+
 /** True when every aired season is actually on disk — never from approve alone. */
 export const isTvShowLibraryComplete = (
     details: any,
@@ -294,6 +312,7 @@ export const isTvShowLibraryComplete = (
         if (sonarr.hasActiveDownloads) return false;
         if (sonarr.showComplete) return true;
         if (sonarrMainSeasonsFullyOnDisk(details)) return true;
+        if (sonarrCaughtUpWithAiredEpisodes(details)) return true;
         // Fall through: showComplete can be conservative (specials / undated eps).
         // Prefer per-season evidence below when Sonarr matched but didn't flip complete.
     }
@@ -611,6 +630,49 @@ export const isMovieFullyAvailable = (mediaStatus: number | null | undefined) =>
 export const isMovieRequestPending = (mediaStatus: number | null | undefined) => {
     const value = Number(mediaStatus);
     return value === MEDIA_STATUS.PENDING || value === MEDIA_STATUS.PROCESSING;
+};
+
+/** Build per-season rows from catalog cache when TMDB seasons[] are absent (browse grids). */
+export const buildSeasonStatusFromCatalogCache = (details: any): SeasonStatusInfo[] => {
+    const mediaInfo = details?.mediaInfo || {};
+    const librarySeasons = Array.isArray(mediaInfo?.seasons) ? mediaInfo.seasons : [];
+    if (!librarySeasons.length) return [];
+
+    const rows = librarySeasons
+        .filter((season: any) => isMainSeasonNumber(Number(season?.seasonNumber)))
+        .sort((a: any, b: any) => Number(a.seasonNumber) - Number(b.seasonNumber))
+        .map((season: any) => {
+            const seasonNumber = Number(season.seasonNumber);
+            const libraryStatus = Number(season?.status) || null;
+            let statusLabel = mediaLibraryStatusLabel(libraryStatus) || 'Not requested';
+            if (libraryStatus === MEDIA_STATUS.PARTIAL) {
+                const sonarr = details?.sonarrLibraryStatus;
+                statusLabel = sonarr?.nextAiring
+                    ? 'Up to date'
+                    : resolvePartialSeasonLabel(details, seasonNumber);
+            } else if (libraryStatus === MEDIA_STATUS.AVAILABLE) {
+                statusLabel = 'Available';
+            }
+
+            return {
+                seasonNumber,
+                name: `Season ${seasonNumber}`,
+                episodeCount: 0,
+                posterPath: null,
+                libraryStatus,
+                requestStatus: null,
+                statusLabel,
+                requestable: false,
+            };
+        });
+
+    return applySonarrLibrarySeasonOverrides(details, rows);
+};
+
+export const buildTvSeasonStatusRows = (details: any): SeasonStatusInfo[] => {
+    const fromDetails = buildSeasonStatusFromDetails(details);
+    if (fromDetails.length) return fromDetails;
+    return buildSeasonStatusFromCatalogCache(details);
 };
 
 /** Build per-season status from Seerr media detail payload (client-side, no extra API call). */

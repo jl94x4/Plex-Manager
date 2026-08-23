@@ -1,6 +1,6 @@
 import { normalizeRawDiscoveryItem } from './discoverItemUtils';
 import {
-    buildSeasonStatusFromDetails,
+    buildTvSeasonStatusRows,
     canMarkTvAsAvailable,
     hasActiveSeerrDownloads,
     hasActiveShowDownloads,
@@ -13,6 +13,7 @@ import {
     MEDIA_STATUS,
     REQUEST_STATUS,
     resolveInProgressDisplay,
+    sonarrCaughtUpWithAiredEpisodes,
     type SeasonStatusInfo,
 } from './requestSeasonUtils';
 
@@ -127,7 +128,7 @@ export const resolveMediaAvailabilityState = (item: any): MediaAvailabilityState
         };
     }
 
-    const seasonRows = mediaType === 'tv' ? buildSeasonStatusFromDetails(item) : [];
+    const seasonRows = mediaType === 'tv' ? buildTvSeasonStatusRows(item) : [];
     const inProgressDisplay = resolveInProgressDisplay(mediaInfo, mediaStatus, item);
     if (inProgressDisplay?.kind === 'processing' || hasActiveShowDownloads(item, mediaInfo)) {
         return {
@@ -147,13 +148,30 @@ export const resolveMediaAvailabilityState = (item: any): MediaAvailabilityState
         const ended = isEndedShow(item);
         const returning = isReturningSeries(item);
         const libraryBadgeAllowed = canMarkTvAsAvailable(item);
+        const caughtUp = sonarrCaughtUpWithAiredEpisodes(item)
+            || (libraryBadgeAllowed && seasonRows.length > 0 && seasonRows
+                .filter((s) => isMainSeasonNumber(s.seasonNumber))
+                .every((s) => s.statusLabel === 'Available' || isSeasonUpToDateLabel(s.statusLabel)));
+
+        if (libraryBadgeAllowed && (caughtUp || sonarr?.showComplete)) {
+            const showUpToDate = returning && hasAnyEpisodeAired(item) && !ended;
+            return {
+                ...base,
+                kind: 'available',
+                label: showUpToDate ? 'Up to date' : 'Available in library',
+                detail: sonarr?.showComplete
+                    ? 'All aired episodes are on disk (verified via Sonarr).'
+                    : (formatTvLibraryDetail(seasonRows) || 'All aired episodes are in your library.'),
+            };
+        }
+
         const continuingInLibrary = libraryBadgeAllowed
             && Boolean(sonarr?.matched)
             && !ended
+            && !caughtUp
             && (
                 Boolean(sonarr?.nextAiring)
                 || (returning && sonarr?.showComplete === false)
-                || (returning && stamped === MEDIA_STATUS.PARTIAL)
             );
         if (
             continuingInLibrary
@@ -171,7 +189,7 @@ export const resolveMediaAvailabilityState = (item: any): MediaAvailabilityState
         }
         // Ended/canceled shows may keep a stale Seerr PARTIAL stamp after every
         // season is on disk — defer to library-complete checks below.
-        if (libraryBadgeAllowed && stamped === MEDIA_STATUS.PARTIAL && !ended) {
+        if (libraryBadgeAllowed && stamped === MEDIA_STATUS.PARTIAL && !ended && !caughtUp) {
             return {
                 ...base,
                 kind: 'partial',
@@ -416,6 +434,17 @@ export const resolveMediaAvailabilityState = (item: any): MediaAvailabilityState
 
     // TV list stamps from the disk cache (no full season rows). Trust mediaInfo.status.
     if (mediaType === 'tv' && mediaStatus === MEDIA_STATUS.PARTIAL && canMarkTvAsAvailable(item)) {
+        if (sonarrCaughtUpWithAiredEpisodes(item) || item?.sonarrLibraryStatus?.showComplete) {
+            const showUpToDate = isReturningSeries(item) && hasAnyEpisodeAired(item);
+            return {
+                ...base,
+                kind: 'available',
+                label: showUpToDate ? 'Up to date' : 'Available in library',
+                detail: item?.sonarrLibraryStatus?.showComplete
+                    ? 'All aired episodes are on disk (verified via Sonarr).'
+                    : 'All aired episodes are in your library.',
+            };
+        }
         return {
             ...base,
             kind: 'partial',
