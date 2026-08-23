@@ -1450,6 +1450,17 @@ import {
     isWebPushGloballyEnabled,
     getWebPushAdminSummary,
 } from './lib/notifications/webPush.js';
+import {
+    buildSummaryDigest,
+    runSummaryDigestCycle,
+    getLatestSummaryDigest,
+    getSummaryDigestById,
+    listSummaryDigestHistory,
+    normalizeSummaryMetrics,
+    normalizeSummaryFrequency,
+    normalizeSummaryTime,
+} from './lib/notifications/summaryDigest.js';
+import { createJsonRequestStore } from './lib/portal-request/requestStore.js';
 import { notifyRequestAvailableDiscord } from './lib/notifications/discordWebhook.js';
 import {
     isRequestAvailableNotifyEnabled,
@@ -2436,6 +2447,7 @@ const ensurePortalUserForNotifications = async (sessionUser, { config: configArg
         notifyRequestAvailableInApp: true,
         notifyRequestAvailableWebPush: true,
         notifyWebPush: true,
+        notifySummaryDigest: true,
     };
     users.push(created);
     await saveFile(USERS_PATH, users);
@@ -4124,6 +4136,7 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             notifySupportMediaIssue,
             notifyChatMentionInApp,
             notifyWebPush,
+            notifySummaryDigest,
             showDiscoverNowPlaying,
             uiLocale,
             privacyShowName,
@@ -4188,6 +4201,7 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             notifySupportMediaIssue,
             notifyChatMentionInApp,
             notifyWebPush,
+            notifySummaryDigest,
             showDiscoverNowPlaying,
             privacyShowName,
             privacyShowPlayer,
@@ -5109,6 +5123,14 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 alertRules: normalizeAlertRules(config.alertRules),
                 newsletterFrequency: config.newsletterFrequency || 'disabled',
                 newsletterDay: config.newsletterDay || 0,
+                summaryNotifyEnabled: !!config.summaryNotifyEnabled,
+                summaryNotifyFrequency: normalizeSummaryFrequency(config.summaryNotifyFrequency),
+                summaryNotifyDay: Number(config.summaryNotifyDay) || 0,
+                summaryNotifyTime: normalizeSummaryTime(config.summaryNotifyTime),
+                summaryNotifyInApp: config.summaryNotifyInApp !== false,
+                summaryNotifyWebPush: config.summaryNotifyWebPush !== false,
+                summaryNotifyEmail: !!config.summaryNotifyEmail,
+                summaryMetrics: normalizeSummaryMetrics(config.summaryMetrics),
                 inactiveCleanupEnabled: !!config.inactiveCleanupEnabled,
                 inactiveCleanupDays: config.inactiveCleanupDays || 90,
                 publicDomain: resolvePublicBaseUrlFromConfig(config) || '',
@@ -5284,6 +5306,14 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 alertRules: DEFAULT_ALERT_RULES,
                 newsletterFrequency: 'disabled',
                 newsletterDay: 0,
+                summaryNotifyEnabled: false,
+                summaryNotifyFrequency: 'disabled',
+                summaryNotifyDay: 0,
+                summaryNotifyTime: '23:00',
+                summaryNotifyInApp: true,
+                summaryNotifyWebPush: true,
+                summaryNotifyEmail: false,
+                summaryMetrics: normalizeSummaryMetrics({}),
                 inactiveCleanupEnabled: false,
                 inactiveCleanupDays: 90,
                 publicDomain: '',
@@ -5431,7 +5461,10 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         plexServerUrl: plexServerUrlFromBody, jellyfinUrl, jellyfinApiKey,
         smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom, smtpSecure, emailDaysBefore,
         gotifyEnabled, gotifyUrl, gotifyToken, gotifyPriority, alertRules,
-        newsletterFrequency, newsletterDay, publicDomain, requestUrl, contactUrl, contactWhatsApp, contactEmail,
+        newsletterFrequency, newsletterDay,
+        summaryNotifyEnabled, summaryNotifyFrequency, summaryNotifyDay, summaryNotifyTime,
+        summaryNotifyInApp, summaryNotifyWebPush, summaryNotifyEmail, summaryMetrics,
+        publicDomain, requestUrl, contactUrl, contactWhatsApp, contactEmail,
         sonarrUrl, sonarrApiKey, radarrUrl, radarrApiKey, arrInstances, downloadClients, tautulliUrl, tautulliApiKey, jellyfinAnalyticsProvider, jellystatUrl, jellystatApiKey, jellyglanceUrl, jellyglanceApiKey,
         requestAppType, requestAppUrl, requestAppFetchUrl, requestAppApiKey,
         requestDiscoverRegion, requestDiscoverLanguage, requestHideAvailableMedia, discoverySource, requestEngine,
@@ -5680,6 +5713,14 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         alertRules: normalizeAlertRules(alertRules ?? existingConfig.alertRules),
         newsletterFrequency: newsletterFrequency || 'disabled',
         newsletterDay: parseInt(newsletterDay, 10) || 0,
+        summaryNotifyEnabled: !!summaryNotifyEnabled,
+        summaryNotifyFrequency: normalizeSummaryFrequency(summaryNotifyFrequency, normalizeSummaryFrequency(existingConfig.summaryNotifyFrequency)),
+        summaryNotifyDay: parseInt(summaryNotifyDay, 10) || 0,
+        summaryNotifyTime: normalizeSummaryTime(summaryNotifyTime, normalizeSummaryTime(existingConfig.summaryNotifyTime)),
+        summaryNotifyInApp: summaryNotifyInApp !== false,
+        summaryNotifyWebPush: summaryNotifyWebPush !== false,
+        summaryNotifyEmail: !!summaryNotifyEmail,
+        summaryMetrics: normalizeSummaryMetrics(summaryMetrics ?? existingConfig.summaryMetrics),
         inactiveCleanupEnabled: !!inactiveCleanupEnabled,
         inactiveCleanupDays: parseInt(inactiveCleanupDays, 10) || 90,
         publicDomain: normalizePublicBaseUrl(publicDomain)
@@ -8265,6 +8306,56 @@ app.post('/api/newsletter/send-now', requireAdmin, async (req, res) => {
     } catch (e) {
         log(`Newsletter send-now error: ${e.message}`);
         if (!res.headersSent) res.status(500).json({ error: e.message });
+    }
+});
+
+app.get('/api/admin/summary-digest/latest', requireAdmin, async (req, res) => {
+    try {
+        const digest = await getLatestSummaryDigest();
+        if (!digest) return res.status(404).json({ error: 'No summary digest yet.' });
+        return res.json(digest);
+    } catch (e) {
+        return res.status(500).json({ error: e.message || 'Failed to load summary digest.' });
+    }
+});
+
+app.get('/api/admin/summary-digest/history', requireAdmin, async (req, res) => {
+    try {
+        const limit = Math.max(1, Math.min(30, Number(req.query.limit) || 7));
+        const items = await listSummaryDigestHistory(limit);
+        return res.json({ items });
+    } catch (e) {
+        return res.status(500).json({ error: e.message || 'Failed to load summary history.' });
+    }
+});
+
+app.get('/api/admin/summary-digest/:id', requireAdmin, async (req, res) => {
+    try {
+        const digest = await getSummaryDigestById(req.params.id);
+        if (!digest) return res.status(404).json({ error: 'Summary digest not found.' });
+        return res.json(digest);
+    } catch (e) {
+        return res.status(500).json({ error: e.message || 'Failed to load summary digest.' });
+    }
+});
+
+app.post('/api/admin/summary-digest/preview', requireAdmin, async (req, res) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        const digest = await buildSummaryDigest(config, await buildSummaryDigestDeps(config, { force: true }));
+        return res.json(digest);
+    } catch (e) {
+        return res.status(500).json({ error: e.message || 'Failed to build summary preview.' });
+    }
+});
+
+app.post('/api/admin/summary-digest/send-now', requireAdmin, async (req, res) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        const result = await checkAndSendSummaryDigest(config, true);
+        return res.json({ success: true, ...result });
+    } catch (e) {
+        return res.status(500).json({ error: e.message || 'Failed to send summary digest.' });
     }
 });
 
@@ -12495,6 +12586,7 @@ app.post('/api/tasks/run/:taskId', requireAdmin, async (req, res) => {
                         case 'checkAndSendNotifications': await checkAndSendNotifications(currentConfig); break;
                         case 'checkAndRevoke': await checkAndRevoke(currentConfig); break;
                         case 'checkAndSendNewsletter': await checkAndSendNewsletter(currentConfig, true); break;
+                        case 'checkAndSendSummaryDigest': await checkAndSendSummaryDigest(currentConfig, true); break;
                         case 'checkAndCleanupInactive': await checkAndCleanupInactive(currentConfig); break;
                         case 'maintenanceRuleRun':
                             if (!isMaintenanceExperimentalEnabled(currentConfig)) {
@@ -18843,6 +18935,70 @@ app.get(/^\/(?!api\/|static\/|manifest\.(?:webmanifest|json)|site\.webmanifest|s
 // --- API Routes ---Service ---
 let serviceIntervalId = null;
 
+const fetchCollexionsHistoryInternal = async (config, limit = 100) => {
+    if (!config?.collexionsEnabled) return { events: [] };
+    try {
+        const base = sanitizeCollexionsProxyBase(config.collexionsInternalUrl || '');
+        const serviceKey = String(config.collexionsServiceKey || process.env.COLLEXIONS_SERVICE_KEY || '').trim();
+        if (!base || !serviceKey) return { events: [] };
+        const url = `${base}/api/history?limit=${Math.max(1, Math.min(200, Number(limit) || 100))}`;
+        const upstream = await fetchWithTimeout(url, {
+            headers: {
+                Accept: 'application/json',
+                'X-Collexions-Service-Key': serviceKey,
+                'X-Portal-Admin': '1',
+            },
+        }, 20000);
+        if (!upstream.ok) return { events: [] };
+        return await upstream.json().catch(() => ({ events: [] }));
+    } catch {
+        return { events: [] };
+    }
+};
+
+const buildSummaryDigestDeps = async (config, { force = false } = {}) => {
+    const profile = await getAdminProfile(config);
+    const portalRequestStore = createJsonRequestStore({ dataDir: REQUESTS_DIR });
+    return {
+        force,
+        healthData,
+        statusConfig,
+        users: await loadFile(USERS_PATH, []),
+        profile,
+        publicBase: resolvePublicBaseUrlFromConfig(config) || config.publicDomain || '',
+        log,
+        sendEmail,
+        listPortalRequests: () => portalRequestStore.list(),
+        countAuditEvents: async ({ startMs, endMs }) => {
+            const audit = await loadFile(AUDIT_LOG_PATH, []);
+            const counts = {};
+            for (const entry of audit) {
+                const ts = Date.parse(entry?.timestamp || '');
+                if (!Number.isFinite(ts) || ts < startMs || ts > endMs) continue;
+                const event = String(entry?.event || '');
+                counts[event] = (counts[event] || 0) + 1;
+            }
+            return counts;
+        },
+        listScannerLog: listLog,
+        listMediaAutomationActivity: (limit) => mediaAutomationService.listActivity({ limit: Math.max(1, Number(limit) || 100) }),
+        fetchCollexionsHistory: (limit) => fetchCollexionsHistoryInternal(config, limit),
+    };
+};
+
+const checkAndSendSummaryDigest = async (config, force = false) => {
+    if (!config.summaryNotifyEnabled && !force) return { skipped: 'disabled' };
+    const deps = await buildSummaryDigestDeps(config, { force });
+    const result = await runSummaryDigestCycle(config, deps);
+    if (result?.markedSent) {
+        const now = new Date();
+        config.lastSummarySent = now.toISOString().split('T')[0];
+        config.lastSummaryPeriodEnd = now.toISOString();
+        await saveFile(CONFIG_PATH, config);
+    }
+    return result;
+};
+
 const checkAndSendNewsletter = async (config, force = false) => {
     if (!config.newsletterFrequency || config.newsletterFrequency === 'disabled') return;
     if (!config.smtpHost || !config.smtpUser) return;
@@ -19039,6 +19195,7 @@ let tasksInfo = [
     { id: 'checkAndSendNotifications', name: 'Expiry Notifications', description: 'Sends warning emails to users nearing expiry.', lastRun: null, nextRun: null, running: false, lastDurationMs: null, lastError: null },
     { id: 'checkAndRevoke', name: 'Revoke Access', description: 'Removes Plex access for expired users.', lastRun: null, nextRun: null, running: false, lastDurationMs: null, lastError: null },
     { id: 'checkAndSendNewsletter', name: 'Send Newsletter', description: 'Generates and sends automated newsletters.', lastRun: null, nextRun: null, running: false, lastDurationMs: null, lastError: null },
+    { id: 'checkAndSendSummaryDigest', name: 'Send Smart Summary', description: 'Builds and sends scheduled admin summary digests.', lastRun: null, nextRun: null, running: false, lastDurationMs: null, lastError: null },
     { id: 'checkAndCleanupInactive', name: 'Inactive Cleanup', description: 'Revokes access for users who have not watched anything recently.', lastRun: null, nextRun: null, running: false, lastDurationMs: null, lastError: null },
     { id: 'maintenanceRuleRun', name: 'Maintenance Rule Run', description: 'Evaluates maintenance rules and executes eligible actions.', lastRun: null, nextRun: null, running: false, lastDurationMs: null, lastError: null }
 ];
@@ -19509,6 +19666,33 @@ const startBackgroundService = async () => {
                     }
                     t.nextRun = nextDate.toISOString();
                 }
+            } else if (t.id === 'checkAndSendSummaryDigest') {
+                if (!currentConfig.summaryNotifyEnabled || !currentConfig.summaryNotifyFrequency || currentConfig.summaryNotifyFrequency === 'disabled') {
+                    t.nextRun = null;
+                } else {
+                    const nextDate = new Date(now);
+                    const todayStr = now.toISOString().split('T')[0];
+                    if (currentConfig.summaryNotifyFrequency === 'weekly') {
+                        const targetDay = Number(currentConfig.summaryNotifyDay);
+                        const currentDay = now.getDay();
+                        let daysUntil = targetDay - currentDay;
+                        if (daysUntil < 0 || (daysUntil === 0 && currentConfig.lastSummarySent === todayStr)) {
+                            daysUntil += 7;
+                        }
+                        nextDate.setDate(now.getDate() + daysUntil);
+                    } else if (currentConfig.summaryNotifyFrequency === 'monthly') {
+                        const targetDay = Number(currentConfig.summaryNotifyDay);
+                        const currentDay = now.getDate();
+                        if (currentDay > targetDay || (currentDay === targetDay && currentConfig.lastSummarySent === todayStr)) {
+                            nextDate.setMonth(now.getMonth() + 1);
+                        }
+                        const daysInMonth = new Date(nextDate.getFullYear(), nextDate.getMonth() + 1, 0).getDate();
+                        nextDate.setDate(Math.min(targetDay, daysInMonth));
+                    }
+                    const [hour, minute] = normalizeSummaryTime(currentConfig.summaryNotifyTime).split(':').map(Number);
+                    nextDate.setHours(hour, minute, 0, 0);
+                    t.nextRun = nextDate.toISOString();
+                }
             } else if (t.id === 'checkAndCleanupInactive' && !currentConfig.inactiveCleanupEnabled) {
                 t.nextRun = null;
             } else if (t.id === 'checkAndSendNotifications' && (!currentConfig.smtpHost || !currentConfig.smtpUser || !currentConfig.smtpPass)) {
@@ -19551,6 +19735,7 @@ const startBackgroundService = async () => {
         await runManagedTask('checkAndSendNotifications', () => checkAndSendNotifications(currentConfig), 'notifications');
         await runManagedTask('checkAndRevoke', () => checkAndRevoke(currentConfig), 'revoke');
         await runManagedTask('checkAndSendNewsletter', () => checkAndSendNewsletter(currentConfig), 'newsletter');
+        await runManagedTask('checkAndSendSummaryDigest', () => checkAndSendSummaryDigest(currentConfig), 'summary digest');
         await runManagedTask('checkAndCleanupInactive', () => checkAndCleanupInactive(currentConfig), 'inactive cleanup');
         if (isMaintenanceExperimentalEnabled(currentConfig)) {
             await runManagedTask('maintenanceRuleRun', async () => {

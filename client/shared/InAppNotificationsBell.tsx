@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
+    BarChart3,
     Bell,
     Calendar,
     CheckCheck,
@@ -24,6 +25,7 @@ import {
 import { apiFetch } from './api';
 import { IN_APP_NOTIFICATIONS_CHANGED_EVENT, notifyInAppNotificationsChanged } from './inAppNotificationsRefresh';
 import { resolveNotificationDestination } from './notificationDestination';
+import { navigateToSummaryDigest } from './SummaryDigestCard';
 import { stackInAppNotifications } from './notificationStacks';
 import { resolveTmdbImageUrl } from '../discovery/tmdbImageUrl';
 import { useDiscoverI18n } from '../discovery/i18n';
@@ -109,6 +111,12 @@ const typeVisual = (type?: string) => {
                 Icon: Bell,
                 tone: 'text-plex bg-plex/15 border-plex/35',
                 tile: 'from-plex/25 via-plex/10 to-card',
+            };
+        case 'summary_digest':
+            return {
+                Icon: BarChart3,
+                tone: 'text-cyan-300 bg-cyan-500/15 border-cyan-500/35',
+                tile: 'from-cyan-500/25 via-cyan-500/10 to-card',
             };
         case 'support_ticket':
             return {
@@ -620,6 +628,10 @@ export const InAppNotificationsBell: React.FC<Props> = ({
         }
         if (dest.kind === 'route') {
             onNavigate?.(dest.route);
+            return;
+        }
+        if (dest.kind === 'summary') {
+            navigateToSummaryDigest(dest.digestId || 'latest');
             return;
         }
         if (dest.kind === 'external' && dest.href.startsWith('/')) {

@@ -7,6 +7,7 @@ import { ConfirmModal } from './shared/ui';
 import { Loader } from './shared/toast';
 import { AppAmbientBackground } from './shared/theme';
 import { WhatsNewModal } from './shared/WhatsNewModal';
+import { SummaryDigestCard, openSummaryDigestFromUrl } from './shared/SummaryDigestCard';
 import { DiscoverI18nProvider } from './discovery/i18n';
 import { DEFAULT_NAV_ORDER } from './shared/nav';
 import {
@@ -149,6 +150,7 @@ export const MainApp: React.FC = () => {
     const [publicConfigWarning, setPublicConfigWarning] = useState<string | null>(null);
     const [releaseNotes, setReleaseNotes] = useState<ReleaseNotes | null>(null);
     const [showWhatsNew, setShowWhatsNew] = useState(false);
+    const [summaryDigestId, setSummaryDigestId] = useState<string | null>(null);
     const whatsNewCheckedRef = useRef(false);
 
     const fetchPublicConfig = useCallback(async () => {
@@ -563,6 +565,28 @@ export const MainApp: React.FC = () => {
         return () => window.removeEventListener('portal-open-profile', onOpenProfile as EventListener);
     }, [setRoute]);
 
+    useEffect(() => {
+        if (!sessionInfo?.session?.isAdmin) {
+            setSummaryDigestId(null);
+            return;
+        }
+        const syncFromUrl = () => {
+            const id = openSummaryDigestFromUrl();
+            setSummaryDigestId(id);
+        };
+        syncFromUrl();
+        const onOpenSummary = (event: Event) => {
+            const digestId = String((event as CustomEvent)?.detail?.digestId || 'latest').trim() || 'latest';
+            setSummaryDigestId(digestId);
+        };
+        window.addEventListener('portal-summary-open', onOpenSummary as EventListener);
+        window.addEventListener('popstate', syncFromUrl);
+        return () => {
+            window.removeEventListener('portal-summary-open', onOpenSummary as EventListener);
+            window.removeEventListener('popstate', syncFromUrl);
+        };
+    }, [sessionInfo?.session?.isAdmin]);
+
     const handleLogout = async () => {
         await apiFetch('/api/auth/logout', { method: 'POST' });
         setSessionInfo(null);
@@ -776,6 +800,12 @@ export const MainApp: React.FC = () => {
                     notes={releaseNotes}
                     appVersion={publicConfig?.appVersion}
                     onDismiss={dismissWhatsNew}
+                />
+            )}
+            {summaryDigestId && isAdmin && (
+                <SummaryDigestCard
+                    digestId={summaryDigestId}
+                    onClose={() => setSummaryDigestId(null)}
                 />
             )}
             {!isPublicView && <Navigation currentRoute={currentRoute} onNavigate={setRoute as any} onLogout={handleLogout} isAdmin={isAdmin} serverName={sessionInfo?.serverName || 'Server Portal'} adminThumb={sessionInfo?.adminThumb} customLogoUrl={publicConfig?.customLogoUrl} requestUrl={sessionInfo?.requestUrl || 'https://yourdomain.com'} navOrder={sessionInfo?.navOrder || [...DEFAULT_NAV_ORDER]} navHiddenKeys={sessionInfo?.navHiddenKeys} memberNavOrder={sessionInfo?.memberNavOrder} memberNavHiddenKeys={sessionInfo?.memberNavHiddenKeys} navFeatures={sessionInfo?.navFeatures} appVersion={publicConfig.appVersion} activeTheme={activeTheme} setActiveTheme={setActiveTheme} pendingRequestCount={queueBadgeCount} supportUnreadCount={supportUnreadCount} chatUnreadCount={chatUnreadCount} watchingCount={watchingCount} downloadCount={downloadCount} mediaAutomationActiveCount={mediaAutomationActiveCount} showDashboardWatchingBadge={showDashboardWatchingBadge} sessionInfo={sessionInfo} mediaServerType={sessionInfo?.mediaServerType || publicConfig?.mediaServerType || 'plex'} sidebarIdentityPosition={publicConfig?.sidebarIdentityPosition || 'bottom'} />}

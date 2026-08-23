@@ -3,6 +3,7 @@ import { Bell, Loader2, RefreshCw, Send } from 'lucide-react';
 import { useDiscoverI18n } from '../discovery/i18n';
 import { apiFetch } from '../shared/api';
 import { notifyInAppNotificationsChanged } from '../shared/inAppNotificationsRefresh';
+import { navigateToSummaryDigest } from '../shared/SummaryDigestCard';
 import { CustomSelect, SettingsToggleRow } from '../shared/ui';
 import { SettingFieldLabel, SettingHint } from './SettingHint';
 import { NotificationTemplatesPanel } from './NotificationTemplatesPanel';
@@ -234,6 +235,22 @@ type Props = {
     setWebhookEvents: (v: Record<string, boolean>) => void;
     onOpenGotify: () => void;
     onOpenSmtp: () => void;
+    summaryNotifyEnabled: boolean;
+    setSummaryNotifyEnabled: (v: boolean) => void;
+    summaryNotifyFrequency: string;
+    setSummaryNotifyFrequency: (v: string) => void;
+    summaryNotifyDay: number;
+    setSummaryNotifyDay: (v: number) => void;
+    summaryNotifyTime: string;
+    setSummaryNotifyTime: (v: string) => void;
+    summaryNotifyInApp: boolean;
+    setSummaryNotifyInApp: (v: boolean) => void;
+    summaryNotifyWebPush: boolean;
+    setSummaryNotifyWebPush: (v: boolean) => void;
+    summaryNotifyEmail: boolean;
+    setSummaryNotifyEmail: (v: boolean) => void;
+    summaryMetrics: Record<string, boolean>;
+    setSummaryMetrics: (v: Record<string, boolean>) => void;
     addToast: (message: string, type?: 'success' | 'error') => void;
     getSettingsSectionElementId: (id: string) => string;
 };
@@ -306,6 +323,22 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
     setWebhookEvents,
     onOpenGotify,
     onOpenSmtp,
+    summaryNotifyEnabled,
+    setSummaryNotifyEnabled,
+    summaryNotifyFrequency,
+    setSummaryNotifyFrequency,
+    summaryNotifyDay,
+    setSummaryNotifyDay,
+    summaryNotifyTime,
+    setSummaryNotifyTime,
+    summaryNotifyInApp,
+    setSummaryNotifyInApp,
+    summaryNotifyWebPush,
+    setSummaryNotifyWebPush,
+    summaryNotifyEmail,
+    setSummaryNotifyEmail,
+    summaryMetrics,
+    setSummaryMetrics,
     addToast,
     getSettingsSectionElementId,
 }) => {
@@ -316,6 +349,7 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
     const [recent, setRecent] = useState<RecentItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [testing, setTesting] = useState(false);
+    const [summaryBusy, setSummaryBusy] = useState(false);
     const [testChannels, setTestChannels] = useState({
         inApp: true,
         webPush: false,
@@ -781,6 +815,157 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                     <SettingHint>
                         {t('settings.notifications.webhook.defaultsHint')}
                     </SettingHint>
+                </div>
+            </div>
+
+            <div id={getSettingsSectionElementId('notifications-summary')} className="scroll-mt-24 space-y-3">
+                <h4 className="text-sm font-bold text-text uppercase tracking-wider">Smart summary notifications</h4>
+                <p className="text-xs text-muted max-w-2xl">
+                    Scheduled digest for admins with uptime, requests, imports, ColleXions rotations, and media automation jobs.
+                    Clicking the notification opens a rich summary card in the portal.
+                </p>
+                <SettingsToggleRow
+                    title="Enable smart summaries"
+                    description="Send a scheduled snapshot to admins (in-app bell, optional push/email)."
+                    checked={summaryNotifyEnabled}
+                    onChange={setSummaryNotifyEnabled}
+                    border={false}
+                />
+                <div className={summaryNotifyEnabled ? 'space-y-3' : 'space-y-3 opacity-50 pointer-events-none'}>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div>
+                            <SettingFieldLabel htmlFor="summaryNotifyFrequency">Frequency</SettingFieldLabel>
+                            <CustomSelect
+                                id="summaryNotifyFrequency"
+                                value={summaryNotifyFrequency}
+                                onChange={setSummaryNotifyFrequency}
+                                options={[
+                                    { value: 'disabled', label: 'Disabled' },
+                                    { value: 'daily', label: 'Daily' },
+                                    { value: 'weekly', label: 'Weekly' },
+                                    { value: 'monthly', label: 'Monthly' },
+                                ]}
+                                className="w-full"
+                            />
+                        </div>
+                        {summaryNotifyFrequency === 'weekly' ? (
+                            <div>
+                                <SettingFieldLabel htmlFor="summaryNotifyDay">Send day</SettingFieldLabel>
+                                <CustomSelect
+                                    id="summaryNotifyDay"
+                                    value={summaryNotifyDay}
+                                    onChange={(value) => setSummaryNotifyDay(Number(value) || 0)}
+                                    options={[
+                                        { value: 0, label: 'Sunday' },
+                                        { value: 1, label: 'Monday' },
+                                        { value: 2, label: 'Tuesday' },
+                                        { value: 3, label: 'Wednesday' },
+                                        { value: 4, label: 'Thursday' },
+                                        { value: 5, label: 'Friday' },
+                                        { value: 6, label: 'Saturday' },
+                                    ]}
+                                    className="w-full"
+                                />
+                            </div>
+                        ) : summaryNotifyFrequency === 'monthly' ? (
+                            <div>
+                                <SettingFieldLabel htmlFor="summaryNotifyDay">Day of month</SettingFieldLabel>
+                                <input
+                                    id="summaryNotifyDay"
+                                    type="number"
+                                    min={1}
+                                    max={28}
+                                    className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
+                                    value={summaryNotifyDay}
+                                    onChange={(e) => setSummaryNotifyDay(Number(e.target.value) || 1)}
+                                />
+                            </div>
+                        ) : null}
+                        <div>
+                            <SettingFieldLabel htmlFor="summaryNotifyTime">Send time</SettingFieldLabel>
+                            <input
+                                id="summaryNotifyTime"
+                                type="time"
+                                className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
+                                value={summaryNotifyTime}
+                                onChange={(e) => setSummaryNotifyTime(e.target.value || '23:00')}
+                            />
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap gap-4">
+                        <SettingsToggleRow
+                            title="In-app bell"
+                            checked={summaryNotifyInApp}
+                            onChange={setSummaryNotifyInApp}
+                            border={false}
+                        />
+                        <SettingsToggleRow
+                            title="Web push"
+                            checked={summaryNotifyWebPush}
+                            onChange={setSummaryNotifyWebPush}
+                            border={false}
+                        />
+                        <SettingsToggleRow
+                            title="Email"
+                            description="Requires SMTP in this tab."
+                            checked={summaryNotifyEmail}
+                            onChange={setSummaryNotifyEmail}
+                            border={false}
+                        />
+                    </div>
+                    <div>
+                        <SettingFieldLabel>Metrics to include</SettingFieldLabel>
+                        <div className="flex flex-wrap gap-3 pt-1">
+                            {([
+                                ['uptime', 'Uptime'],
+                                ['requests', 'Requests'],
+                                ['scannerImports', 'Scanner imports'],
+                                ['collexionsRotations', 'ColleXions rotations'],
+                                ['mediaAutomationJobs', 'Media automation jobs'],
+                                ['highlights', 'Highlights'],
+                            ] as const).map(([key, label]) => (
+                                <label key={key} className="inline-flex items-center gap-2 text-sm text-text cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={summaryMetrics?.[key] !== false}
+                                        onChange={(e) => setSummaryMetrics({ ...summaryMetrics, [key]: e.target.checked })}
+                                        className="rounded border-border"
+                                    />
+                                    {label}
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 pt-1">
+                        <button
+                            type="button"
+                            className="px-4 py-2 rounded-lg bg-plex text-black text-sm font-bold hover:opacity-90 transition-opacity disabled:opacity-50"
+                            disabled={summaryBusy}
+                            onClick={() => {
+                                setSummaryBusy(true);
+                                void (async () => {
+                                    try {
+                                        await apiFetch('/api/admin/summary-digest/send-now', { method: 'POST' });
+                                        notifyInAppNotificationsChanged();
+                                        addToast('Summary digest sent to admins.', 'success');
+                                    } catch (error) {
+                                        addToast(error instanceof Error ? error.message : 'Failed to send summary digest.', 'error');
+                                    } finally {
+                                        setSummaryBusy(false);
+                                    }
+                                })();
+                            }}
+                        >
+                            {summaryBusy ? 'Sending…' : 'Send now'}
+                        </button>
+                        <button
+                            type="button"
+                            className="px-4 py-2 rounded-lg border border-border text-sm font-semibold hover:bg-white/5 transition-colors"
+                            onClick={() => navigateToSummaryDigest('latest')}
+                        >
+                            View last summary
+                        </button>
+                    </div>
                 </div>
             </div>
 

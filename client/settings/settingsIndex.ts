@@ -79,6 +79,7 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
     { id: 'notifications/webhook', tabId: 'notifications', sectionId: 'notifications-webhook', label: 'Generic Webhook', group: 'Comms', keywords: ['webhook', 'json', 'http', 'integration'] },
     { id: 'notifications/test', tabId: 'notifications', sectionId: 'notifications-test', label: 'Send Test Notification', group: 'Comms', keywords: ['test', 'send', 'bell'] },
     { id: 'notifications/recent', tabId: 'notifications', sectionId: 'notifications-recent', label: 'Recent Notifications', group: 'Comms', keywords: ['history', 'log', 'recent', 'bell'] },
+    { id: 'notifications/summary', tabId: 'notifications', sectionId: 'notifications-summary', label: 'Smart Summary Notifications', group: 'Comms', keywords: ['summary', 'digest', 'smart', 'scheduled', 'uptime', 'snapshot'] },
     { id: 'notifications/gotify', tabId: 'notifications', sectionId: 'gotify', label: 'Gotify Alerts', group: 'Comms', keywords: ['gotify', 'push', 'alerts', 'notifications', 'rules', 'self hosted'] },
     { id: 'newsletter', tabId: 'newsletter', label: 'Newsletter', group: 'Comms', keywords: ['digest', 'send', 'frequency', 'weekly', 'monthly'] },
     { id: 'broadcast', tabId: 'broadcast', label: 'Broadcast Email', group: 'Comms', keywords: ['announcement', 'bulk', 'users', 'broadcast'] },

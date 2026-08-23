@@ -101,6 +101,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
     const [notifySupportMediaIssue, setNotifySupportMediaIssue] = useState(user?.notifySupportMediaIssue !== false);
     const [notifyChatMentionInApp, setNotifyChatMentionInApp] = useState(user?.notifyChatMentionInApp !== false);
     const [notifyWebPush, setNotifyWebPush] = useState(user?.notifyWebPush !== false);
+    const [notifySummaryDigest, setNotifySummaryDigest] = useState(user?.notifySummaryDigest !== false);
     const [browserPushReady, setBrowserPushReady] = useState(false);
     const browserPushSupportedFlag = webPushSupported();
     const iosPushBlock = typeof window !== 'undefined' ? getIosWebPushBlockReason() : null;
@@ -145,6 +146,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
         setNotifySupportMediaIssue(user?.notifySupportMediaIssue !== false);
         setNotifyChatMentionInApp(user?.notifyChatMentionInApp !== false);
         setNotifyWebPush(user?.notifyWebPush !== false);
+        setNotifySummaryDigest(user?.notifySummaryDigest !== false);
         setOptOutNewsletter(!!user?.optOutNewsletter);
         setPrivacyShowName(user?.privacyShowName !== false);
         setPrivacyShowPlayer(user?.privacyShowPlayer !== false);
@@ -184,6 +186,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
         user?.notifySupportMediaIssue,
         user?.notifyChatMentionInApp,
         user?.notifyWebPush,
+        user?.notifySummaryDigest,
         user?.optOutNewsletter,
         user?.privacyShowName,
         user?.privacyShowPlayer,
@@ -281,6 +284,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                     notifySupportMediaIssue,
                     notifyChatMentionInApp,
                     notifyWebPush,
+                    notifySummaryDigest,
                 }),
             });
             await Promise.resolve(refreshSession());
@@ -666,6 +670,14 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                     on={notifyMediaJobCompleted}
                                     onToggle={flip(setNotifyMediaJobCompleted)}
                                     ariaLabel={t('homeDashboard.toggleMediaJobCompletedAria')}
+                                    disabled={busy}
+                                />
+                                <PrefToggle
+                                    title="Smart summary digests"
+                                    hint="Scheduled server snapshot notifications with uptime, requests, and automation activity."
+                                    on={notifySummaryDigest}
+                                    onToggle={flip(setNotifySummaryDigest)}
+                                    ariaLabel="Toggle smart summary digests"
                                     disabled={busy}
                                 />
                                 <PrefToggle

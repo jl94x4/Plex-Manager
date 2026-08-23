@@ -53,6 +53,7 @@ export interface User {
     notifyNewEpisodeWebPush?: boolean;
     /** Master browser push preference for all in-app fan-out (default on). */
     notifyWebPush?: boolean;
+    notifySummaryDigest?: boolean;
     lastLogin?: string;
     /** Plex library section ids shared with this user. Empty/absent = all libraries. */
     libraryIds?: string[] | null;

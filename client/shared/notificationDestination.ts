@@ -10,6 +10,7 @@ export type NotificationDestination =
     | { kind: 'settings'; labelKey: string }
     | { kind: 'support'; path: string; labelKey: string }
     | { kind: 'route'; route: string; labelKey: string }
+    | { kind: 'summary'; digestId: string; labelKey: string }
     | { kind: 'external'; href: string; labelKey: string };
 
 export type NotificationLike = {
@@ -82,7 +83,27 @@ export const resolveNotificationDestination = (item: NotificationLike): Notifica
     }
 
     if (href === '/portal' || href === '/') {
+        try {
+            const url = new URL(href, 'http://local.invalid');
+            const summaryId = url.searchParams.get('summary');
+            if (summaryId) {
+                return { kind: 'summary', digestId: summaryId, labelKey: 'notifications.openSummary' };
+            }
+        } catch {
+            // ignore
+        }
         return { kind: 'home', labelKey: 'notifications.openHome' };
+    }
+
+    if (type === 'summary_digest' || href.includes('summary=')) {
+        let digestId = 'latest';
+        try {
+            const url = new URL(href || '/portal?summary=latest', 'http://local.invalid');
+            digestId = url.searchParams.get('summary') || 'latest';
+        } catch {
+            digestId = 'latest';
+        }
+        return { kind: 'summary', digestId, labelKey: 'notifications.openSummary' };
     }
 
     if (href.startsWith('/settings')) {

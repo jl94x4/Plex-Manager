@@ -700,6 +700,21 @@ export const SettingsDashboard: React.FC = () => {
     const [scannerNotifyUpgrade, setScannerNotifyUpgrade] = useState(false);
     const [scannerNotifyImport, setScannerNotifyImport] = useState(false);
     const [webPushEnabled, setWebPushEnabled] = useState(true);
+    const [summaryNotifyEnabled, setSummaryNotifyEnabled] = useState(false);
+    const [summaryNotifyFrequency, setSummaryNotifyFrequency] = useState('disabled');
+    const [summaryNotifyDay, setSummaryNotifyDay] = useState(0);
+    const [summaryNotifyTime, setSummaryNotifyTime] = useState('23:00');
+    const [summaryNotifyInApp, setSummaryNotifyInApp] = useState(true);
+    const [summaryNotifyWebPush, setSummaryNotifyWebPush] = useState(true);
+    const [summaryNotifyEmail, setSummaryNotifyEmail] = useState(false);
+    const [summaryMetrics, setSummaryMetrics] = useState<Record<string, boolean>>({
+        uptime: true,
+        requests: true,
+        scannerImports: true,
+        collexionsRotations: true,
+        mediaAutomationJobs: true,
+        highlights: true,
+    });
     const [notificationTemplates, setNotificationTemplates] = useState<Record<string, Record<string, string>>>({});
     const [notificationTemplateDefaults, setNotificationTemplateDefaults] = useState<Record<string, Record<string, string>>>({});
     const [notificationTemplateEvents, setNotificationTemplateEvents] = useState<string[]>([]);
@@ -1601,6 +1616,21 @@ export const SettingsDashboard: React.FC = () => {
             setScannerNotifyUpgrade(initialSettings.scannerNotifyUpgrade === true);
             setScannerNotifyImport(initialSettings.scannerNotifyImport === true);
             setWebPushEnabled(initialSettings.webPushEnabled !== false);
+            setSummaryNotifyEnabled(!!initialSettings.summaryNotifyEnabled);
+            setSummaryNotifyFrequency(initialSettings.summaryNotifyFrequency || 'disabled');
+            setSummaryNotifyDay(Number(initialSettings.summaryNotifyDay) || 0);
+            setSummaryNotifyTime(initialSettings.summaryNotifyTime || '23:00');
+            setSummaryNotifyInApp(initialSettings.summaryNotifyInApp !== false);
+            setSummaryNotifyWebPush(initialSettings.summaryNotifyWebPush !== false);
+            setSummaryNotifyEmail(!!initialSettings.summaryNotifyEmail);
+            setSummaryMetrics({
+                uptime: initialSettings.summaryMetrics?.uptime !== false,
+                requests: initialSettings.summaryMetrics?.requests !== false,
+                scannerImports: initialSettings.summaryMetrics?.scannerImports !== false,
+                collexionsRotations: initialSettings.summaryMetrics?.collexionsRotations !== false,
+                mediaAutomationJobs: initialSettings.summaryMetrics?.mediaAutomationJobs !== false,
+                highlights: initialSettings.summaryMetrics?.highlights !== false,
+            });
             setNotificationTemplates(
                 initialSettings.notificationTemplates && typeof initialSettings.notificationTemplates === 'object'
                     ? initialSettings.notificationTemplates
@@ -2102,6 +2132,14 @@ export const SettingsDashboard: React.FC = () => {
             scannerNotifyUpgrade,
             scannerNotifyImport,
             webPushEnabled,
+            summaryNotifyEnabled,
+            summaryNotifyFrequency,
+            summaryNotifyDay,
+            summaryNotifyTime,
+            summaryNotifyInApp,
+            summaryNotifyWebPush,
+            summaryNotifyEmail,
+            summaryMetrics,
             notificationTemplates,
             ntfyEnabled,
             ntfyServerUrl,
@@ -2662,6 +2700,22 @@ export const SettingsDashboard: React.FC = () => {
                                 setScannerNotifyImport={setScannerNotifyImport}
                                 webPushEnabled={webPushEnabled}
                                 setWebPushEnabled={setWebPushEnabled}
+                                summaryNotifyEnabled={summaryNotifyEnabled}
+                                setSummaryNotifyEnabled={setSummaryNotifyEnabled}
+                                summaryNotifyFrequency={summaryNotifyFrequency}
+                                setSummaryNotifyFrequency={setSummaryNotifyFrequency}
+                                summaryNotifyDay={summaryNotifyDay}
+                                setSummaryNotifyDay={setSummaryNotifyDay}
+                                summaryNotifyTime={summaryNotifyTime}
+                                setSummaryNotifyTime={setSummaryNotifyTime}
+                                summaryNotifyInApp={summaryNotifyInApp}
+                                setSummaryNotifyInApp={setSummaryNotifyInApp}
+                                summaryNotifyWebPush={summaryNotifyWebPush}
+                                setSummaryNotifyWebPush={setSummaryNotifyWebPush}
+                                summaryNotifyEmail={summaryNotifyEmail}
+                                setSummaryNotifyEmail={setSummaryNotifyEmail}
+                                summaryMetrics={summaryMetrics}
+                                setSummaryMetrics={setSummaryMetrics}
                                 notificationTemplates={notificationTemplates}
                                 setNotificationTemplates={setNotificationTemplates}
                                 notificationTemplateDefaults={notificationTemplateDefaults}
