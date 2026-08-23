@@ -539,9 +539,15 @@ export const PosterSetsSettingsView: React.FC = () => {
                         <div className="sm:col-span-2 space-y-2 rounded-lg border border-white/10 bg-black/20 px-3 py-3">
                             <p className="text-xs font-semibold text-text">Import TPDB browser cookies</p>
                             <p className="text-[11px] leading-relaxed text-muted">
-                                Cloudflare often blocks password login from servers. On your PC/phone browser: log into theposterdb.com,
-                                then upload a cookies.txt export (Get cookies.txt LOCALLY), paste Cookie-Editor JSON, or paste a DevTools Cookie header.
-                                Include <code className="text-text/80">cf_clearance</code> if present. Cookies expire — re-import when login stops working.
+                                Cloudflare often blocks password login from servers. In the same browser that is logged into theposterdb.com,
+                                export cookies for that site only (Get cookies.txt LOCALLY or Cookie-Editor). Include
+                                {' '}<code className="text-text/80">cf_clearance</code> and the session cookie
+                                ({' '}<code className="text-text/80">the_poster_database_session</code>
+                                {' '}/ <code className="text-text/80">remember_web_*</code>).
+                                DevTools <code className="text-text/80">document.cookie</code> skips HttpOnly cookies and will fail.
+                                Advanced TMDB search needs TPDB Pro. If Poster Sets runs on Docker/a VPS, Cloudflare may still
+                                block because <code className="text-text/80">cf_clearance</code> is tied to your home IP — paste the
+                                exact browser User-Agent below. Cookies expire — re-import when login stops working.
                             </p>
                             <div className="flex flex-wrap items-center gap-2">
                                 <label className={`${buttonClass} cursor-pointer`}>
@@ -579,10 +585,10 @@ export const PosterSetsSettingsView: React.FC = () => {
                                 onChange={(event) => setTpdbCookiePaste(event.target.value)}
                             />
                             <label className="block">
-                                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">Browser User-Agent (optional)</span>
+                                <span className="text-[10px] font-semibold uppercase tracking-wide text-muted">Browser User-Agent (needed for cf_clearance)</span>
                                 <input
                                     className={`${fieldClass} mt-1 font-mono text-[11px]`}
-                                    placeholder="Same UA as the browser that exported cookies (recommended for cf_clearance)"
+                                    placeholder="chrome://version → copy the full User-Agent string"
                                     value={tpdbCookieUserAgent}
                                     onChange={(event) => setTpdbCookieUserAgent(event.target.value)}
                                 />
