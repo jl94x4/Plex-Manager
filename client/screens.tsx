@@ -8330,7 +8330,9 @@ export const UserDashboard: React.FC<{
                 <WrapUpRecapModal
                     analytics={analytics}
                     days={analyticsDays}
+                    loading={analyticsLoading}
                     onClose={() => setRecapWrapUpOpen(false)}
+                    onDaysChange={(value) => setAnalyticsDays(value)}
                     onShare={() => {
                         setRecapWrapUpOpen(false);
                         setShareWrapUpOpen(true);

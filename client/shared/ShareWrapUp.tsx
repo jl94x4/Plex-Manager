@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { X, Copy, Download, Share2 } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import { WrapUpCardGrid, periodLabel, isYearInReviewPeriod, wrapUpPriorPeriodLabel, formatWrapUpDelta } from './WrapUpCards';
@@ -6,6 +6,7 @@ import { formatStreamingHour } from './format';
 import { getPublicOrigin } from './basePath';
 import { createDiscoverTranslate, useDiscoverI18n } from '../discovery/i18n';
 import type { DiscoverTranslate } from '../discovery/i18n/types';
+import { lockBackgroundScroll } from './lockBackgroundScroll';
 
 const EXPORT_WIDTH_PX = 1080;
 
@@ -77,6 +78,7 @@ export const ShareWrapUpModal: React.FC<ShareWrapUpModalProps> = ({
     const { t } = useDiscoverI18n();
     const exportRef = useRef<HTMLDivElement>(null);
     const [busy, setBusy] = useState<'copy' | 'download' | 'share' | null>(null);
+    useEffect(() => lockBackgroundScroll(), []);
     const period = periodLabel(days, t);
     const yearInReview = isYearInReviewPeriod(days);
     const compareDelta = formatWrapUpDelta(analytics?.compare?.totalPlays, t);
@@ -121,10 +123,17 @@ export const ShareWrapUpModal: React.FC<ShareWrapUpModalProps> = ({
                     exportRoot.style.maxWidth = 'none';
                     exportRoot.style.paddingBottom = '1.5rem';
 
-                    clonedDoc.querySelectorAll('[data-wrap-up-card]').forEach((card) => {
+                    exportRoot.querySelectorAll('[data-wrap-up-export-grid]').forEach((node) => {
+                        const el = node as HTMLElement;
+                        el.style.display = 'grid';
+                        el.style.gridTemplateColumns = 'repeat(5, minmax(0, 1fr))';
+                        el.style.gap = '12px';
+                    });
+                    exportRoot.querySelectorAll('[data-wrap-up-card]').forEach((card) => {
                         const el = card as HTMLElement;
                         el.style.isolation = 'isolate';
                         el.style.overflow = 'visible';
+                        el.style.minHeight = '128px';
                     });
                     clonedDoc.querySelectorAll('svg').forEach((svg) => {
                         const el = svg as SVGElement;
@@ -227,29 +236,29 @@ export const ShareWrapUpModal: React.FC<ShareWrapUpModalProps> = ({
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-3 md:p-4 bg-black/80 backdrop-blur-sm" onClick={onClose}>
-            <div className="glass-card shadow-2xl w-[calc(100vw-1.5rem)] max-w-[1080px] p-5 md:p-6 relative max-h-[92vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-                <button type="button" onClick={onClose} className="absolute top-4 right-4 p-2 rounded-full hover:bg-white/10 text-muted hover:text-text transition-colors z-10">
+        <div className="fixed inset-0 z-[350] flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/80 backdrop-blur-sm" onClick={onClose}>
+            <div className="glass-card shadow-2xl w-full sm:w-[calc(100vw-2rem)] max-w-[1080px] rounded-t-3xl sm:rounded-2xl p-4 sm:p-6 relative max-h-[min(96dvh,100svh)] sm:max-h-[92vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+                <button type="button" onClick={onClose} className="absolute top-3 right-3 sm:top-4 sm:right-4 p-2 rounded-full hover:bg-white/10 text-muted hover:text-text transition-colors z-10">
                     <X className="w-5 h-5" />
                 </button>
 
-                <h3 className="text-xl font-bold text-text mb-1 pr-10">{yearInReview ? t('wrapUp.yearInReview') : t('wrapUp.shareModalTitle')}</h3>
-                <p className="text-muted text-sm mb-4">{yearInReview ? t('wrapUp.yearInReviewHint') : t('wrapUp.shareModalSubtitle')}</p>
+                <h3 className="text-lg sm:text-xl font-bold text-text mb-1 pr-12">{yearInReview ? t('wrapUp.yearInReview') : t('wrapUp.shareModalTitle')}</h3>
+                <p className="text-muted text-sm mb-4 pr-4 leading-relaxed">{yearInReview ? t('wrapUp.yearInReviewHint') : t('wrapUp.shareModalSubtitle')}</p>
 
-                <div className="overflow-y-auto overflow-x-hidden flex-1 min-h-0 custom-scrollbar mb-4">
+                <div className="overflow-y-auto overflow-x-hidden flex-1 min-h-0 custom-scrollbar mb-4 space-y-4">
                     <div
                         ref={exportRef}
-                        className="w-full rounded-2xl border border-white/10 bg-[#0d0e10] p-5 pb-6 overflow-visible"
+                        className="w-full rounded-2xl border border-white/10 bg-[#0d0e10] p-4 sm:p-5 pb-6 overflow-visible"
                     >
                         <div className="mb-4 pb-3 border-b border-white/10">
                             <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-plex mb-1">{yearInReview ? t('wrapUp.yearInReview') : t('wrapUp.title')}</p>
-                            <h4 className="text-2xl font-black text-white">{serverName}</h4>
-                            <p className="text-sm text-muted mt-1">
+                            <h4 className="text-xl sm:text-2xl font-black text-white leading-tight">{serverName}</h4>
+                            <p className="text-sm text-muted mt-1.5">
                                 {period}
                                 {username ? ` · ${username}` : ''}
                             </p>
                             {compareDelta ? (
-                                <p className="text-xs font-bold text-plex mt-1">{t('wrapUp.vsPrior', { delta: compareDelta, period: comparePeriod })}</p>
+                                <p className="text-xs font-bold text-plex mt-1.5">{t('wrapUp.vsPrior', { delta: compareDelta, period: comparePeriod })}</p>
                             ) : null}
                         </div>
 
@@ -258,9 +267,9 @@ export const ShareWrapUpModal: React.FC<ShareWrapUpModalProps> = ({
                         <p className="text-[10px] text-muted/70 mt-5 leading-normal break-all">{getPublicOrigin()}</p>
                     </div>
 
-                    <div className="mt-4 rounded-xl border border-border/50 bg-background/40 p-4 text-sm space-y-2">
+                    <div className="rounded-xl border border-border/50 bg-background/40 p-4 text-sm space-y-3">
                         <p className="font-bold text-text">{t('wrapUp.fullStatsSummary')}</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1.5 text-muted">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5 text-muted">
                             <p><span className="text-text font-semibold">{t('wrapUp.serverRank')}:</span> {hasRank ? `#${leaderboardRank}` : t('wrapUp.notRankedYet')}{rankPct ? ` (${t('wrapUp.topPct', { pct: rankPct })})` : ''}</p>
                             <p><span className="text-text font-semibold">{t('wrapUp.totalStreams')}:</span> {analytics.totalPlays || 0} {t('wrapUp.total')}{compareDelta ? ` · ${t('wrapUp.vsPrior', { delta: compareDelta, period: comparePeriod })}` : ''}</p>
                             <p><span className="text-text font-semibold">{t('wrapUp.moviesTv')}:</span> {analytics.moviesCount || 0} / {analytics.showsCount || 0}</p>
@@ -276,7 +285,7 @@ export const ShareWrapUpModal: React.FC<ShareWrapUpModalProps> = ({
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-shrink-0">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 flex-shrink-0 pb-[max(0px,env(safe-area-inset-bottom))]">
                     <button type="button" onClick={handleCopyText} disabled={!!busy}
                         className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-white/5 border border-border hover:border-plex/50 font-bold text-sm transition-colors disabled:opacity-50">
                         <Copy className="w-4 h-4" /> {busy === 'copy' ? t('wrapUp.copying') : t('wrapUp.copyText')}

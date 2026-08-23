@@ -15,6 +15,7 @@ export const periodLabel = (days: number | string, t?: DiscoverTranslate) => {
         if (key === 'wrapUp.last30Days') return 'Last 30 Days';
         if (key === 'wrapUp.last60Days') return 'Last 60 Days';
         if (key === 'wrapUp.last90Days') return 'Last 90 Days';
+        if (key === 'wrapUp.last120Days') return 'Last 120 Days';
         if (key === 'wrapUp.last180Days') return 'Last 180 Days';
         if (key === 'wrapUp.last365Days') return 'Last 365 Days';
         if (key === 'wrapUp.lastNDays') return `Last ${vars?.days ?? days} Days`;
@@ -25,6 +26,7 @@ export const periodLabel = (days: number | string, t?: DiscoverTranslate) => {
     if (days === 30) return translate('wrapUp.last30Days');
     if (days === 60) return translate('wrapUp.last60Days');
     if (days === 90) return translate('wrapUp.last90Days');
+    if (days === 120) return translate('wrapUp.last120Days');
     if (days === 180) return translate('wrapUp.last180Days');
     if (days === 365) return translate('wrapUp.last365Days');
     return translate('wrapUp.lastNDays', { days: Number(days) || 0 });
@@ -38,6 +40,7 @@ export const wrapUpPriorPeriodLabel = (days: number | string | null | undefined,
         if (key === 'wrapUp.priorPeriod30') return 'last month';
         if (key === 'wrapUp.priorPeriod60') return 'the previous 60 days';
         if (key === 'wrapUp.priorPeriod90') return 'the previous 90 days';
+        if (key === 'wrapUp.priorPeriod120') return 'the previous 120 days';
         if (key === 'wrapUp.priorPeriod180') return 'the previous 180 days';
         if (key === 'wrapUp.priorPeriod365') return 'last year';
         if (key === 'wrapUp.priorPeriodN') return `the previous ${vars?.days ?? days} days`;
@@ -48,6 +51,7 @@ export const wrapUpPriorPeriodLabel = (days: number | string | null | undefined,
     if (value === '30') return translate('wrapUp.priorPeriod30');
     if (value === '60') return translate('wrapUp.priorPeriod60');
     if (value === '90') return translate('wrapUp.priorPeriod90');
+    if (value === '120') return translate('wrapUp.priorPeriod120');
     if (value === '180') return translate('wrapUp.priorPeriod180');
     if (value === '365') return translate('wrapUp.priorPeriod365');
     return translate('wrapUp.priorPeriodN', { days: value || 0 });
@@ -641,11 +645,11 @@ export const WrapUpCardGrid: React.FC<WrapUpCardGridProps> = ({
     const isExport = variant === 'export';
     const resolvedMinHeight = minCardHeight ?? (isExport ? 128 : 112);
     const gridClass = isExport
-        ? 'grid grid-cols-5 gap-3'
+        ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3'
         : `grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 md:gap-3 ${className}`;
 
     return (
-        <div className={gridClass}>
+        <div className={gridClass} data-wrap-up-export-grid={isExport ? '' : undefined}>
             {cards.map((card, index) => {
                 const Icon = card.icon;
                 const valueClass = isExport
@@ -666,8 +670,8 @@ export const WrapUpCardGrid: React.FC<WrapUpCardGridProps> = ({
                         key={card.metric}
                         data-wrap-up-card=""
                         onClick={interactive && onCardClick ? () => onCardClick(card.metric) : undefined}
-                        className={`wrap-up-card rounded-xl relative border border-border/50 flex flex-col ${isExport ? 'isolate' : 'overflow-hidden'} ${interactive ? 'cursor-pointer hover:ring-2 hover:ring-plex/50 transition-all group' : ''} ${desktopHidden ? 'md:hidden' : ''}`}
-                        style={{ minHeight: `${resolvedMinHeight}px` }}
+                        className={`wrap-up-card rounded-xl relative border border-border/50 flex flex-col ${isExport ? 'isolate min-h-[108px] sm:min-h-[128px]' : 'overflow-hidden'} ${interactive ? 'cursor-pointer hover:ring-2 hover:ring-plex/50 transition-all group' : ''} ${desktopHidden ? 'md:hidden' : ''}`}
+                        style={isExport ? undefined : { minHeight: `${resolvedMinHeight}px` }}
                     >
                         {isExport ? (
                             <>
