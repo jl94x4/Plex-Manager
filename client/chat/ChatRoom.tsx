@@ -369,7 +369,7 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
     }
 
     return (
-        <DashboardPageShell>
+        <DashboardPageShell className="gap-3">
             <ToastContainer toasts={toasts} setToasts={setToasts} />
             <DashboardHero
                 eyebrow="Community"
@@ -378,7 +378,7 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                 icon={<MessageSquare className="h-3.5 w-3.5" />}
             />
 
-            <div className="mt-6 flex min-h-[62vh] flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/20 lg:flex-row">
+            <div className="flex min-h-[80vh] flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/20 lg:min-h-[calc(100dvh-13rem)] lg:flex-row">
                 <aside className="flex w-full shrink-0 flex-col border-b border-white/10 lg:w-64 lg:border-b-0 lg:border-r">
                     <div className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
                         <p className="text-xs font-bold uppercase tracking-wide text-muted">Channels</p>
@@ -421,7 +421,7 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                     </div>
                 </aside>
 
-                <section className="flex min-h-[50vh] flex-1 flex-col">
+                <section className="flex min-h-[70vh] flex-1 flex-col lg:min-h-0">
                     {activeRoom ? (
                         <>
                             <div className="flex items-start justify-between gap-3 border-b border-white/10 px-4 py-3">
@@ -601,8 +601,7 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                 </section>
             </div>
 
-            {createOpen ? (
-                <ModalPortal>
+            <ModalPortal open={createOpen}>
                     <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/70 p-4">
                         <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#12141c] p-5 shadow-2xl">
                             <div className="mb-4 flex items-center justify-between">
@@ -648,8 +647,7 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                             </div>
                         </div>
                     </div>
-                </ModalPortal>
-            ) : null}
+            </ModalPortal>
         </DashboardPageShell>
     );
 };
