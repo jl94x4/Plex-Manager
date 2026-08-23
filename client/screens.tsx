@@ -9871,9 +9871,9 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
                 : null;
 
             const jobs = notificationsRes?.jobs || {};
-            const failingJobs = ['seerrAvailableNotify', 'requestStatusSync']
+            const failingJobs = ['seerrAvailableNotify', 'seerrPendingNotify', 'requestStatusSync']
                 .filter((key) => String(jobs?.[key]?.lastError || '').trim()).length;
-            const runningJobs = ['seerrAvailableNotify', 'requestStatusSync']
+            const runningJobs = ['seerrAvailableNotify', 'seerrPendingNotify', 'requestStatusSync']
                 .filter((key) => !!jobs?.[key]?.running).length;
 
             setOpsSnapshot({

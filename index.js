@@ -1420,7 +1420,12 @@ import {
     parseWebhookHeaders,
     sendGenericWebhook,
 } from './lib/notifications/genericWebhook.js';
-import { syncSeerrRequestAvailableNotifications } from './lib/notifications/seerrAvailablePoll.js';
+import { syncSeerrRequestAvailableNotifications, loadSeerrAvailableNotifyState } from './lib/notifications/seerrAvailablePoll.js';
+import {
+    syncSeerrPendingRequestNotifications,
+    loadSeerrPendingNotifyState,
+    stampSeerrPendingNotified,
+} from './lib/notifications/seerrPendingPoll.js';
 import {
     listInAppNotificationsForUser,
     summarizeInAppNotificationsForUser,
@@ -1439,7 +1444,6 @@ import {
     getWebPushAdminSummary,
 } from './lib/notifications/webPush.js';
 import { notifyRequestAvailableDiscord } from './lib/notifications/discordWebhook.js';
-import { loadSeerrAvailableNotifyState } from './lib/notifications/seerrAvailablePoll.js';
 import {
     isRequestAvailableNotifyEnabled,
     shouldSendRequestAvailableEmail,
@@ -4346,6 +4350,7 @@ app.get('/api/admin/notifications/status', requireAdmin, async (req, res) => {
             vapidReady = false;
         }
         let seerrSnapshot = { updatedAt: null, trackedRequests: 0 };
+        let seerrPendingSnapshot = { updatedAt: null, trackedRequests: 0 };
         try {
             const state = await loadSeerrAvailableNotifyState();
             seerrSnapshot = {
@@ -4355,11 +4360,22 @@ app.get('/api/admin/notifications/status', requireAdmin, async (req, res) => {
         } catch {
             // ignore
         }
+        try {
+            const state = await loadSeerrPendingNotifyState();
+            seerrPendingSnapshot = {
+                updatedAt: state.updatedAt || null,
+                trackedRequests: Object.keys(state.byRequestId || {}).length,
+                bootstrapped: !!state.bootstrapped,
+            };
+        } catch {
+            // ignore
+        }
         const smtpReady = !!(config.smtpHost && config.smtpUser && config.smtpPass);
         const discordUrl = String(config.requestAvailableDiscordWebhookUrl || '').trim();
         const gotifyReady = !!(config.gotifyEnabled && config.gotifyUrl && config.gotifyToken);
         const engine = getRequestEngine(config);
         const seerrJob = systemJobs.seerrAvailableNotify || null;
+        const seerrPendingJob = systemJobs.seerrPendingNotify || null;
         const portalJob = systemJobs.requestStatusSync || null;
         res.json({
             requestAvailable: {
@@ -4412,6 +4428,13 @@ app.get('/api/admin/notifications/status', requireAdmin, async (req, res) => {
                     lastDurationMs: seerrJob.lastDurationMs,
                     lastError: seerrJob.lastError,
                 } : null,
+                seerrPendingNotify: seerrPendingJob ? {
+                    lastRun: seerrPendingJob.lastRun,
+                    nextRun: seerrPendingJob.nextRun,
+                    running: !!seerrPendingJob.running,
+                    lastDurationMs: seerrPendingJob.lastDurationMs,
+                    lastError: seerrPendingJob.lastError,
+                } : null,
                 requestStatusSync: portalJob ? {
                     lastRun: portalJob.lastRun,
                     nextRun: portalJob.nextRun,
@@ -4421,6 +4444,7 @@ app.get('/api/admin/notifications/status', requireAdmin, async (req, res) => {
                 } : null,
             },
             seerrSnapshot,
+            seerrPendingSnapshot,
             members: Array.isArray(users) ? users.length : 0,
         });
     } catch (e) {
@@ -9039,6 +9063,12 @@ const notifyAdminNewRequest = async (config, record) => {
             alertRuleEnabled,
             log,
         });
+        const seerrId = String(record.id || '').startsWith('seerr:')
+            ? record.id
+            : record?.meta?.seerrRequestId;
+        if (seerrId) {
+            await stampSeerrPendingNotified(seerrId, { source: 'portal' });
+        }
     } catch (error) {
         log(`[RequestLifecycle] admin pending notify failed: ${error?.message || error}`);
     }
@@ -12459,6 +12489,7 @@ app.post('/api/tasks/run/:taskId', requireAdmin, async (req, res) => {
                     case 'maintenanceIndex': await buildMaintenanceMediaIndex({ actor: req.user, force: true }); break;
                     case 'requestStatusSync': await runPortalRequestStatusSync('manual'); break;
                     case 'seerrAvailableNotify': await runSeerrAvailableNotify('manual'); break;
+                    case 'seerrPendingNotify': await runSeerrPendingNotify('manual'); break;
                     case 'discoveryAvailabilityCache':
                         await runDiscoveryAvailabilityCacheRebuild('manual', { alreadyStarted: true });
                         break;
@@ -18998,6 +19029,16 @@ const systemJobs = {
         lastDurationMs: null,
         lastError: null,
     },
+    seerrPendingNotify: {
+        id: 'seerrPendingNotify',
+        name: 'Seerr Pending Notify',
+        description: 'Polls Seerr for new pending requests (including Seerr app submissions) and alerts admins.',
+        lastRun: null,
+        nextRun: null,
+        running: false,
+        lastDurationMs: null,
+        lastError: null,
+    },
     discoveryAvailabilityCache: {
         id: 'discoveryAvailabilityCache',
         name: 'Discovery Availability Cache',
@@ -19103,6 +19144,7 @@ const markTaskEnd = (task, error = null, extras = {}) => {
 
 const REQUEST_STATUS_SYNC_INTERVAL_MS = 60 * 1000;
 const SEERR_AVAILABLE_NOTIFY_INTERVAL_MS = 60 * 1000;
+const SEERR_PENDING_NOTIFY_INTERVAL_MS = 45 * 1000;
 /** Sonarr/Radarr library badge snapshot — Discover serves from disk; rescans infrequently. */
 const DISCOVERY_AVAILABILITY_CACHE_INTERVAL_MS = 12 * 60 * 60 * 1000;
 /** Full Sonarr/Radarr JSON downloads need far longer than Discover browse (8s). */
@@ -19219,6 +19261,40 @@ const runSeerrAvailableNotify = async (reason = 'scheduled') => {
     }
 };
 
+const runSeerrPendingNotify = async (reason = 'scheduled') => {
+    const job = systemJobs.seerrPendingNotify;
+    if (job.running) return null;
+    markTaskStart(job);
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        const gate = getRequestAppGate(config);
+        if (!gate.ready) {
+            job.nextRun = new Date(Date.now() + SEERR_PENDING_NOTIFY_INTERVAL_MS).toISOString();
+            markTaskEnd(job, null);
+            return { skipped: true, reason: gate.error || 'Request app not configured' };
+        }
+        const summary = await syncSeerrPendingRequestNotifications({
+            config,
+            listRequests: (cfg, opts) => requestAppService.listRequests(cfg, opts),
+            loadUsers: () => loadFile(USERS_PATH, []),
+            sendGotifyAlert,
+            alertRuleEnabled,
+            log,
+        });
+        job.nextRun = new Date(Date.now() + SEERR_PENDING_NOTIFY_INTERVAL_MS).toISOString();
+        markTaskEnd(job, null);
+        if (summary?.notified > 0 || summary?.bootstrapped || reason === 'manual') {
+            log(`[SeerrPendingNotify] ${reason}: scanned=${summary.scanned} checked=${summary.checked} notified=${summary.notified} seeded=${summary.seeded || 0} bootstrapped=${!!summary.bootstrapped} errors=${summary.errors}`);
+        }
+        return summary;
+    } catch (error) {
+        markTaskEnd(job, error);
+        log(`[SeerrPendingNotify] failed: ${error.message}`);
+        job.nextRun = new Date(Date.now() + SEERR_PENDING_NOTIFY_INTERVAL_MS).toISOString();
+        return null;
+    }
+};
+
 const runSeerrHistoryImport = async (reason = 'manual') => {
     const job = systemJobs.seerrHistoryImport;
     if (job.running) return null;
@@ -19259,6 +19335,16 @@ const startPortalRequestStatusSyncBackgroundTask = () => {
     setInterval(() => {
         runPortalRequestStatusSync('scheduled').catch(() => {});
     }, REQUEST_STATUS_SYNC_INTERVAL_MS);
+};
+
+const startSeerrPendingNotifyBackgroundTask = () => {
+    systemJobs.seerrPendingNotify.nextRun = new Date(Date.now() + 20 * 1000).toISOString();
+    setTimeout(() => {
+        runSeerrPendingNotify('startup').catch(() => {});
+    }, 20 * 1000);
+    setInterval(() => {
+        runSeerrPendingNotify('scheduled').catch(() => {});
+    }, SEERR_PENDING_NOTIFY_INTERVAL_MS);
 };
 
 const startSeerrAvailableNotifyBackgroundTask = () => {
@@ -28659,6 +28745,7 @@ app.listen(PORT, BIND_HOST, async () => {
     startUpgraderIndexBackgroundTask();
     startPortalRequestStatusSyncBackgroundTask();
     startSeerrAvailableNotifyBackgroundTask();
+    startSeerrPendingNotifyBackgroundTask();
     startDiscoveryAvailabilityCacheBackgroundTask();
     startScannerWorker(async () => scannerPortalConfig(await loadFile(CONFIG_PATH, {})));
     setScannerFailureNotify((payload) => {
