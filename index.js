@@ -84,6 +84,11 @@ import { registerAchievementsRoutes } from './lib/achievements/http.js';
 import { registerProfileRoutes } from './lib/profile/http.js';
 import { registerSupportTicketRoutes } from './lib/support-tickets/http.js';
 import { registerChatRoutes } from './lib/chat/http.js';
+import {
+    normalizeCustomNavTabs,
+    pruneNavOrderCustomKeys,
+    sanitizeCustomNavTabsForSession,
+} from './lib/custom-nav-tabs.js';
 import { createSupportTicketFromMediaIssue, attachTicketIdsToIssues } from './lib/support-tickets/fromIssue.js';
 import { mapTautulliHistoryRowToPlexItem } from './lib/achievements/tautulliHistory.js';
 import { isTautulliWatchHistorySource, buildAchievementsHomeRankContext, summarizeAchievementsBackfill, levelProgress } from './lib/achievements/index.js';
@@ -4801,6 +4806,7 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
         memberNavHiddenKeys: Array.isArray(config.memberNavHiddenKeys)
             ? config.memberNavHiddenKeys.filter((key) => typeof key === 'string' && key && key !== 'home' && key !== 'logout')
             : [],
+        customNavTabs: sanitizeCustomNavTabsForSession(config.customNavTabs),
         navFeatures,
         impersonation: impersonating ? {
             active: true,
@@ -5190,6 +5196,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 navHiddenKeys: Array.isArray(config.navHiddenKeys) ? config.navHiddenKeys : [],
                 memberNavOrder: Array.isArray(config.memberNavOrder) ? config.memberNavOrder : [],
                 memberNavHiddenKeys: Array.isArray(config.memberNavHiddenKeys) ? config.memberNavHiddenKeys : [],
+                customNavTabs: sanitizeCustomNavTabsForSession(config.customNavTabs),
                 downloadsVisibleToMembers: config.downloadsVisibleToMembers !== false,
                 defaultLibraryIds: config.defaultLibraryIds || null,
                 use24HourClock: !!config.use24HourClock,
@@ -5477,7 +5484,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         autoApproveMovies4k, autoApproveTv4k, portalAutoRequestMovies, portalAutoRequestTv,
         seriesMetadataProvider, animeMetadataProvider, tvdbApiKey,
         inactiveCleanupEnabled, inactiveCleanupDays,
-        primaryColor, customLogoUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
+        primaryColor, customLogoUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, customNavTabs, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
         autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, supportTicketsEnabled, chatEnabled, chatMentionNotifyInApp, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, scannerNotifyDeleted, scannerNotifyUpgrade, scannerNotifyImport, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
@@ -5693,6 +5700,28 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         return res.status(400).json({ error: `Invalid integration URL: ${e.message}` });
     }
 
+    const normalizedCustomNavTabs = normalizeCustomNavTabs(customNavTabs, existingConfig.customNavTabs);
+    const resolvedNavOrder = Array.isArray(navOrder)
+        ? navOrder
+        : existingConfig.navOrder || ['home', 'discover', 'request', 'analytics', 'users', 'downloads', 'upgrader', 'collexions', 'mediastack', 'requests', 'status', 'maintenance', 'about', 'settings', 'logout'];
+    const resolvedMemberNavOrder = (() => {
+        const ADMIN_ONLY = new Set(['users', 'upgrader', 'collexions', 'scanner', 'media-automation', 'poster-sets', 'requests', 'maintenance', 'settings', 'logs']);
+        const adminOnlyCustom = new Set(
+            normalizedCustomNavTabs.filter((tab) => tab.adminOnly).map((tab) => `custom:${tab.id}`),
+        );
+        const incoming = Array.isArray(memberNavOrder) ? memberNavOrder : existingConfig.memberNavOrder;
+        if (!Array.isArray(incoming)) return [];
+        const seen = new Set();
+        const result = [];
+        for (const raw of incoming) {
+            const key = String(raw || '').trim();
+            if (!key || ADMIN_ONLY.has(key) || adminOnlyCustom.has(key) || seen.has(key)) continue;
+            seen.add(key);
+            result.push(key);
+        }
+        return result;
+    })();
+
     const configDraft = {
         ...existingConfig,
         mediaServerType: normalizedMediaServerType,
@@ -5816,7 +5845,8 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         referralRewardDays: parseInt(referralRewardDays, 10) || 7,
         announcement: announcement || '',
         hideStreamUsers: hideStreamUsers === true ? 'anonymous' : (hideStreamUsers === false ? 'false' : (hideStreamUsers || 'false')),
-        navOrder: Array.isArray(navOrder) ? navOrder : existingConfig.navOrder || ['home', 'discover', 'request', 'analytics', 'users', 'downloads', 'upgrader', 'collexions', 'mediastack', 'requests', 'status', 'maintenance', 'about', 'settings', 'logout'],
+        customNavTabs: normalizedCustomNavTabs,
+        navOrder: pruneNavOrderCustomKeys(resolvedNavOrder, normalizedCustomNavTabs),
         navHiddenKeys: (() => {
             const ALWAYS = new Set(['home', 'settings', 'logout']);
             const incoming = Array.isArray(navHiddenKeys) ? navHiddenKeys : existingConfig.navHiddenKeys;
@@ -5831,20 +5861,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
             }
             return result;
         })(),
-        memberNavOrder: (() => {
-            const ADMIN_ONLY = new Set(['users', 'upgrader', 'collexions', 'scanner', 'media-automation', 'poster-sets', 'requests', 'maintenance', 'settings', 'logs']);
-            const incoming = Array.isArray(memberNavOrder) ? memberNavOrder : existingConfig.memberNavOrder;
-            if (!Array.isArray(incoming)) return [];
-            const seen = new Set();
-            const result = [];
-            for (const raw of incoming) {
-                const key = String(raw || '').trim();
-                if (!key || ADMIN_ONLY.has(key) || seen.has(key)) continue;
-                seen.add(key);
-                result.push(key);
-            }
-            return result;
-        })(),
+        memberNavOrder: pruneNavOrderCustomKeys(resolvedMemberNavOrder, normalizedCustomNavTabs),
         memberNavHiddenKeys: (() => {
             const ALWAYS = new Set(['home', 'logout']);
             const ADMIN_ONLY = new Set(['users', 'upgrader', 'collexions', 'scanner', 'media-automation', 'poster-sets', 'requests', 'maintenance', 'settings', 'logs']);

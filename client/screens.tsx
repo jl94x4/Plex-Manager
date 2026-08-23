@@ -42,6 +42,8 @@ import { useDiscoverI18n } from './discovery/i18n';
 import { DiscoverNowPlayingStrip } from './discovery/DiscoverNowPlayingStrip';
 import { useNowPlaying } from './shared/useNowPlaying';
 import { filterNavOrder, ensureCompleteNavOrder, resolveMemberNavOrder, MOBILE_NAV_PRIMARY_SLOTS, type NavFeatureFlags } from './shared/nav';
+import { customNavTabKey, resolveCustomNavIcon } from './shared/customNavTabs';
+import type { CustomNavTab } from './shared/types';
 import { isFirefoxMobileClient, useFirefoxMobileNavShell } from './shared/useFirefoxMobileNavShell';
 import { ProfileBadgeRack, AchievementsHomeWidget } from './achievements/AchievementsDashboard';
 import { AchievementsAnalyticsLeaderboard } from './achievements/AchievementsAnalyticsLeaderboard';
@@ -11681,7 +11683,7 @@ export const MaintenanceDashboard: React.FC = () => {
 interface NavigationProps {
     currentRoute: string;
     onNavigate: (
-        route: 'admin' | 'user' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'editions' | 'requests' | 'discovery' | 'about' | 'achievements' | 'support' | 'preferences' | 'profile',
+        route: 'admin' | 'user' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'editions' | 'requests' | 'discovery' | 'about' | 'achievements' | 'support' | 'chat' | 'preferences' | 'profile' | 'external',
         options?: { hash?: string; reviewId?: number; path?: string },
     ) => void;
     onLogout: () => void;
@@ -11708,9 +11710,10 @@ interface NavigationProps {
     sessionInfo?: any;
     mediaServerType?: string;
     sidebarIdentityPosition?: 'top' | 'bottom';
+    externalTabId?: string | null;
 }
 
-export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate, onLogout, isAdmin, serverName, adminThumb, customLogoUrl, requestUrl, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, navFeatures, appVersion, activeTheme, setActiveTheme, pendingRequestCount = 0, supportUnreadCount = 0, chatUnreadCount = 0, watchingCount = 0, downloadCount = 0, mediaAutomationActiveCount = 0, showDashboardWatchingBadge = false, sessionInfo, mediaServerType = 'plex', sidebarIdentityPosition = 'bottom' }) => {
+export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate, onLogout, isAdmin, serverName, adminThumb, customLogoUrl, requestUrl, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, navFeatures, appVersion, activeTheme, setActiveTheme, pendingRequestCount = 0, supportUnreadCount = 0, chatUnreadCount = 0, watchingCount = 0, downloadCount = 0, mediaAutomationActiveCount = 0, showDashboardWatchingBadge = false, sessionInfo, mediaServerType = 'plex', sidebarIdentityPosition = 'bottom', externalTabId = null }) => {
     const { t } = useDiscoverI18n();
     const serverIcon = customLogoUrl ? resolvePortalAssetUrl(customLogoUrl) : (adminThumb ? (adminThumb.startsWith('http') ? adminThumb : portalUrl(`/api/plex/image?path=${encodeURIComponent(adminThumb)}&width=256&height=256`)) : logoUrl());
     const providerName = String(mediaServerType || 'plex').toLowerCase() === 'jellyfin'
@@ -11964,7 +11967,10 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         return () => document.removeEventListener('mousedown', handler);
     }, [mobileThemeOpen]);
 
-    const navItemsConfig: Record<string, { label: string; icon: React.FC<any>; route: string; adminOnly: boolean; href?: string; onClick?: (e: any) => void }> = {
+    const customNavTabs: CustomNavTab[] = Array.isArray(sessionInfo?.customNavTabs) ? sessionInfo.customNavTabs : [];
+
+    const navItemsConfig: Record<string, { label: string; icon: React.FC<any>; route: string; adminOnly: boolean; href?: string; onClick?: (e: any) => void; customTabId?: string }> = useMemo(() => {
+        const config: Record<string, { label: string; icon: React.FC<any>; route: string; adminOnly: boolean; href?: string; onClick?: (e: any) => void; customTabId?: string }> = {
         'home': { label: t('navigation.home'), icon: Home, route: 'user', adminOnly: false },
         'users': { label: t('navigation.users'), icon: Users, route: 'users', adminOnly: true },
         'discover': { label: t('navigation.dashboard'), icon: Film, route: 'dashboard', adminOnly: false },
@@ -11990,19 +11996,52 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         'profile': { label: t('navigation.profile'), icon: User, route: 'profile', adminOnly: false },
         'preferences': { label: t('navigation.preferences'), icon: SlidersHorizontal, route: 'preferences', adminOnly: false },
         'settings': { label: t('navigation.settings'), icon: Settings, route: 'settings', adminOnly: true },
-        'logout': { label: t('navigation.logout'), icon: LogOut, route: '', adminOnly: false, onClick: onLogout }
-    };
+        'logout': { label: t('navigation.logout'), icon: LogOut, route: '', adminOnly: false, onClick: onLogout },
+        };
+        for (const tab of customNavTabs) {
+            if (!tab?.enabled) continue;
+            const key = customNavTabKey(tab.id);
+            const Icon = resolveCustomNavIcon(tab.icon);
+            if (tab.openMode === 'embed') {
+                config[key] = {
+                    label: tab.name,
+                    icon: Icon,
+                    route: 'external',
+                    adminOnly: !!tab.adminOnly,
+                    customTabId: tab.id,
+                };
+            } else if (tab.openMode === 'newTab') {
+                config[key] = {
+                    label: tab.name,
+                    icon: Icon,
+                    route: '',
+                    adminOnly: !!tab.adminOnly,
+                    href: tab.url,
+                };
+            } else {
+                config[key] = {
+                    label: tab.name,
+                    icon: Icon,
+                    route: '',
+                    adminOnly: !!tab.adminOnly,
+                    onClick: () => { window.location.href = tab.url; },
+                };
+            }
+        }
+        return config;
+    }, [customNavTabs, onLogout, t]);
     const normalizedNavOrder = useMemo(() => {
         const order = isAdmin
             ? ensureCompleteNavOrder(navOrder)
-            : resolveMemberNavOrder(memberNavOrder, navOrder);
+            : resolveMemberNavOrder(memberNavOrder, navOrder, customNavTabs);
         const hiddenKeys = isAdmin ? navHiddenKeys : (memberNavHiddenKeys ?? navHiddenKeys);
-        return filterNavOrder(order, { isAdmin, features: navFeatures, hiddenKeys });
-    }, [navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, isAdmin, navFeatures]);
+        return filterNavOrder(order, { isAdmin, features: navFeatures, hiddenKeys, customTabs: customNavTabs });
+    }, [navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, isAdmin, navFeatures, customNavTabs]);
 
-    const isNavCurrent = (key: string, route: string) => (
-        ['admin', 'user'].includes(currentRoute) && key === 'home' ? true : currentRoute === route
-    );
+    const isNavCurrent = (key: string, route: string, customTabId?: string) => {
+        if (customTabId) return currentRoute === 'external' && externalTabId === customTabId;
+        return ['admin', 'user'].includes(currentRoute) && key === 'home' ? true : currentRoute === route;
+    };
 
     const getNavBadgeCount = (key: string) => {
         if (key === 'request') return pendingRequestCount;
@@ -12016,7 +12055,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
     const renderNavAction = (
         key: string,
-        item: { label: string; icon: React.FC<any>; route: string; href?: string; onClick?: (e: any) => void },
+        item: { label: string; icon: React.FC<any>; route: string; href?: string; onClick?: (e: any) => void; customTabId?: string },
         options: { compactLabel?: string; mobile?: boolean; isCurrent: boolean; badgeCount?: number },
     ) => {
         const Icon = item.icon;
@@ -12036,6 +12075,10 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
         const handleActivate = () => {
             if (options.mobile) setMobileMoreOpen(false);
+            if (item.customTabId) {
+                onNavigate('external', { path: `/external/${encodeURIComponent(item.customTabId)}` });
+                return;
+            }
             if (item.onClick) item.onClick({ preventDefault: () => {} });
             else if (item.route) onNavigate(item.route as any);
         };
@@ -12224,7 +12267,9 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                         const item = navItemsConfig[key];
                         if (!item) return null;
                         if (key === 'logs') return null;
-                        const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
+                        const isCurrent = item.customTabId
+                            ? isNavCurrent(key, item.route, item.customTabId)
+                            : (item.route ? isNavCurrent(key, item.route) : false);
                         const labelOverride = key === 'mediastack' ? t('navigation.calendar') : item.label;
                         return renderNavAction(key, { ...item, label: labelOverride }, { isCurrent, badgeCount: getNavBadgeCount(key) });
                     })}
@@ -12510,7 +12555,9 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                         {primary.map((key) => {
                             const item = navItemsConfig[key];
                             if (!item) return null;
-                            const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
+                            const isCurrent = item.customTabId
+                            ? isNavCurrent(key, item.route, item.customTabId)
+                            : (item.route ? isNavCurrent(key, item.route) : false);
                             const labelOverride = key === 'mediastack' ? t('navigation.calendar') : key === 'request' ? t('navigation.request') : item.label;
                             return renderNavAction(key, { ...item, label: labelOverride }, { mobile: true, isCurrent, compactLabel: labelOverride, badgeCount: getNavBadgeCount(key) });
                         })}
@@ -12578,10 +12625,16 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                 return secondary.map(key => {
                                     const item = navItemsConfig[key];
                                     if (!item) return null;
-                                    const isCurrent = item.route ? isNavCurrent(key, item.route) : false;
+                                    const isCurrent = item.customTabId
+                            ? isNavCurrent(key, item.route, item.customTabId)
+                            : (item.route ? isNavCurrent(key, item.route) : false);
                                     const labelOverride = key === 'mediastack' ? t('navigation.calendar') : key === 'request' ? t('navigation.request') : item.label;
                                     const handleActivate = () => {
                                         setMobileMoreOpen(false);
+                                        if (item.customTabId) {
+                                            onNavigate('external', { path: `/external/${encodeURIComponent(item.customTabId)}` });
+                                            return;
+                                        }
                                         if (item.href) window.open(item.href, '_blank');
                                         else if (item.onClick) item.onClick({ preventDefault: () => {} });
                                         else if (item.route) onNavigate(item.route as any);

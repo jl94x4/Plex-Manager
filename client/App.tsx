@@ -36,6 +36,7 @@ const EditionsDashboard = lazy(() => import('./editions/EditionsDashboard').then
 const AchievementsDashboard = lazy(() => import('./achievements/AchievementsDashboard').then(m => ({ default: m.AchievementsDashboard })));
 const SupportInbox = lazy(() => import('./support/SupportInbox').then(m => ({ default: m.SupportInbox })));
 const ChatRoom = lazy(() => import('./chat/ChatRoom').then(m => ({ default: m.ChatRoom })));
+const CustomExternalTabPage = lazy(() => import('./custom/CustomExternalTabPage').then(m => ({ default: m.CustomExternalTabPage })));
 const PreferencesPage = lazy(() => import('./preferences/PreferencesPage').then(m => ({ default: m.PreferencesPage })));
 const ProfilePage = lazy(() => import('./profile/ProfilePage').then(m => ({ default: m.ProfilePage })));
 import {
@@ -140,10 +141,11 @@ export const MainApp: React.FC = () => {
         closeConfirm();
     };
 
-    const [currentRoute, setCurrentRoute] = useState<'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'achievements' | 'support' | 'chat' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'editions' | 'requests' | 'discovery' | 'about' | 'preferences' | 'profile' | 'invite' | 'loading'>('loading');
+    const [currentRoute, setCurrentRoute] = useState<'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'achievements' | 'support' | 'chat' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'editions' | 'requests' | 'discovery' | 'about' | 'preferences' | 'profile' | 'invite' | 'external' | 'loading'>('loading');
     const [profilePath, setProfilePath] = useState(() => (
         typeof window !== 'undefined' ? stripBasePath(window.location.pathname) : '/profile'
     ));
+    const [externalTabId, setExternalTabId] = useState<string | null>(null);
     const [sessionInfo, setSessionInfo] = useState<any>(null);
     // Default temporary access off so login never flashes the trial panel before public config arrives.
     const [publicConfig, setPublicConfig] = useState<any>({ allowTemporaryAccess: false });
@@ -321,7 +323,7 @@ export const MainApp: React.FC = () => {
         setShowWhatsNew(false);
     }, [publicConfig?.appVersion]);
 
-    const setRoute = useCallback((route: 'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'achievements' | 'support' | 'chat' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'editions' | 'requests' | 'discovery' | 'about' | 'preferences' | 'profile' | 'invite' | 'loading', options?: { hash?: string; reviewId?: number; path?: string }) => {
+    const setRoute = useCallback((route: 'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'achievements' | 'support' | 'chat' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'editions' | 'requests' | 'discovery' | 'about' | 'preferences' | 'profile' | 'invite' | 'external' | 'loading', options?: { hash?: string; reviewId?: number; path?: string }) => {
         if (route === 'logs') {
             setCurrentRoute('settings');
             window.history.pushState({}, '', portalUrl('/settings#logs'));
@@ -378,6 +380,14 @@ export const MainApp: React.FC = () => {
             if (route === 'profile') {
                 const custom = String(options?.path || '').trim();
                 path = custom.startsWith('/profile') ? custom : '/profile';
+            }
+            if (route === 'external') {
+                const custom = String(options?.path || '').trim();
+                path = custom.startsWith('/external') ? custom : '/external';
+                const match = path.match(/^\/external\/([^/?#]+)/i);
+                setExternalTabId(match?.[1] ? decodeURIComponent(match[1]) : null);
+            } else {
+                setExternalTabId(null);
             }
             if (options?.hash) path += options.hash;
             window.history.pushState({}, '', portalUrl(path));
@@ -522,6 +532,11 @@ export const MainApp: React.FC = () => {
             else if (path.startsWith('/chat')) {
                 window.history.replaceState({}, '', portalUrl('/portal'));
                 setCurrentRoute('user');
+            }
+            else if (path.startsWith('/external/')) {
+                const match = path.match(/^\/external\/([^/?#]+)/i);
+                setExternalTabId(match?.[1] ? decodeURIComponent(match[1]) : null);
+                setCurrentRoute('external');
             }
             else if (path.startsWith('/admin') || path.startsWith('/users')) {
                 if (data.session.isAdmin && !data.impersonation?.active) setCurrentRoute('users');
@@ -751,6 +766,17 @@ export const MainApp: React.FC = () => {
                 </Suspense>
             );
         }
+        if (currentRoute === 'external') {
+            return (
+                <Suspense fallback={<Loader isLoading={true} isCinematic={!!publicConfig?.useCinematicLoading} />}>
+                    <CustomExternalTabPage
+                        tabId={externalTabId}
+                        customNavTabs={sessionInfo?.customNavTabs || []}
+                        isAdmin={isAdmin}
+                    />
+                </Suspense>
+            );
+        }
         if (currentRoute === 'about') return <AboutDashboard appVersion={publicConfig?.appVersion} mediaServerType={sessionInfo?.mediaServerType || publicConfig?.mediaServerType} />;
         if (currentRoute === 'preferences') {
             return (
@@ -808,7 +834,7 @@ export const MainApp: React.FC = () => {
                     onClose={() => setSummaryDigestId(null)}
                 />
             )}
-            {!isPublicView && <Navigation currentRoute={currentRoute} onNavigate={setRoute as any} onLogout={handleLogout} isAdmin={isAdmin} serverName={sessionInfo?.serverName || 'Server Portal'} adminThumb={sessionInfo?.adminThumb} customLogoUrl={publicConfig?.customLogoUrl} requestUrl={sessionInfo?.requestUrl || 'https://yourdomain.com'} navOrder={sessionInfo?.navOrder || [...DEFAULT_NAV_ORDER]} navHiddenKeys={sessionInfo?.navHiddenKeys} memberNavOrder={sessionInfo?.memberNavOrder} memberNavHiddenKeys={sessionInfo?.memberNavHiddenKeys} navFeatures={sessionInfo?.navFeatures} appVersion={publicConfig.appVersion} activeTheme={activeTheme} setActiveTheme={setActiveTheme} pendingRequestCount={queueBadgeCount} supportUnreadCount={supportUnreadCount} chatUnreadCount={chatUnreadCount} watchingCount={watchingCount} downloadCount={downloadCount} mediaAutomationActiveCount={mediaAutomationActiveCount} showDashboardWatchingBadge={showDashboardWatchingBadge} sessionInfo={sessionInfo} mediaServerType={sessionInfo?.mediaServerType || publicConfig?.mediaServerType || 'plex'} sidebarIdentityPosition={publicConfig?.sidebarIdentityPosition || 'bottom'} />}
+            {!isPublicView && <Navigation currentRoute={currentRoute} onNavigate={setRoute as any} onLogout={handleLogout} isAdmin={isAdmin} serverName={sessionInfo?.serverName || 'Server Portal'} adminThumb={sessionInfo?.adminThumb} customLogoUrl={publicConfig?.customLogoUrl} requestUrl={sessionInfo?.requestUrl || 'https://yourdomain.com'} navOrder={sessionInfo?.navOrder || [...DEFAULT_NAV_ORDER]} navHiddenKeys={sessionInfo?.navHiddenKeys} memberNavOrder={sessionInfo?.memberNavOrder} memberNavHiddenKeys={sessionInfo?.memberNavHiddenKeys} navFeatures={sessionInfo?.navFeatures} appVersion={publicConfig.appVersion} activeTheme={activeTheme} setActiveTheme={setActiveTheme} pendingRequestCount={queueBadgeCount} supportUnreadCount={supportUnreadCount} chatUnreadCount={chatUnreadCount} watchingCount={watchingCount} downloadCount={downloadCount} mediaAutomationActiveCount={mediaAutomationActiveCount} showDashboardWatchingBadge={showDashboardWatchingBadge} sessionInfo={sessionInfo} mediaServerType={sessionInfo?.mediaServerType || publicConfig?.mediaServerType || 'plex'} sidebarIdentityPosition={publicConfig?.sidebarIdentityPosition || 'bottom'} externalTabId={externalTabId} />}
             <div id="main-scroll-container" className={`relative z-10 flex-1 min-w-0 min-h-0 flex flex-col items-center px-4 pb-[calc(5rem+env(safe-area-inset-bottom,0px))] md:px-8 md:pb-8 overflow-x-visible md:overflow-y-auto custom-scrollbar ${isPublicView ? '!pb-8' : ''}`}>
                 {isImpersonating && (
                     <div className="w-full max-w-[100%] pt-[calc(5rem+env(safe-area-inset-top,0px))] md:pt-0 md:sticky md:top-0 md:z-30">

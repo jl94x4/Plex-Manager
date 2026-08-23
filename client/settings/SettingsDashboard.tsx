@@ -38,7 +38,7 @@ import { usePoll } from '../shared/usePoll';
 import { CustomSelect, SettingsSwitch, SettingsToggleRow } from '../shared/ui';
 import { Loader, ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { SettingHint, SettingFieldLabel } from './SettingHint';
-import type { User, AuditEntry, DeletedUser, PlexServer, ArrInstance, DownloadClientConfig } from '../shared/types';
+import type { User, AuditEntry, DeletedUser, PlexServer, ArrInstance, DownloadClientConfig, CustomNavTab } from '../shared/types';
 import { formatDateTime, formatEventName, hexToRgb, accentHoverRgb, getDaysUntilExpiry, addMonths, addYears, formatDate } from '../shared/format';
 
 import { StreamKillRulesPanel } from './StreamKillRulesPanel';
@@ -52,6 +52,7 @@ import { HomeLayoutSettings } from './HomeLayoutSettings';
 import { AchievementsSettings } from './AchievementsSettings';
 import { AnalyticsSettings } from './AnalyticsSettings';
 import { NavigationOrderSettings } from './NavigationOrderSettings';
+import { CustomNavTabsSettings } from './CustomNavTabsSettings';
 import { ArrInstancesPanel, type ArrInstancesPanelCopy } from './ArrInstancesPanel';
 import { DISCOVER_LANGUAGE_OPTIONS, DISCOVER_REGION_OPTIONS } from './discoverySettingsOptions';
 import { DEFAULT_DASHBOARD_LAYOUT, normalizeSectionLayout, type DashboardLayoutConfig } from '../shared/dashboardLayout';
@@ -795,6 +796,7 @@ export const SettingsDashboard: React.FC = () => {
     const [navHiddenKeys, setNavHiddenKeys] = useState<string[]>([]);
     const [memberNavOrder, setMemberNavOrder] = useState<string[]>(() => deriveMemberNavOrderFromAdmin([...DEFAULT_NAV_ORDER]));
     const [memberNavHiddenKeys, setMemberNavHiddenKeys] = useState<string[]>([]);
+    const [customNavTabs, setCustomNavTabs] = useState<CustomNavTab[]>([]);
     const [downloadsVisibleToMembers, setDownloadsVisibleToMembers] = useState(true);
     const [logoFile, setLogoFile] = useState<File | null>(null);
     const [backgroundFile, setBackgroundFile] = useState<File | null>(null);
@@ -1502,9 +1504,10 @@ export const SettingsDashboard: React.FC = () => {
             setReferralRewardDays(initialSettings.referralRewardDays || 7);
             setAnnouncement(initialSettings.announcement || '');
             if (initialSettings.navOrder) setNavOrder(ensureCompleteNavOrder(initialSettings.navOrder));
-            setNavHiddenKeys(normalizeNavHiddenKeys(initialSettings.navHiddenKeys));
-            setMemberNavOrder(resolveMemberNavOrder(initialSettings.memberNavOrder, initialSettings.navOrder));
-            setMemberNavHiddenKeys(normalizeMemberNavHiddenKeys(initialSettings.memberNavHiddenKeys));
+            setNavHiddenKeys(normalizeNavHiddenKeys(initialSettings.navHiddenKeys, initialSettings.customNavTabs));
+            setMemberNavOrder(resolveMemberNavOrder(initialSettings.memberNavOrder, initialSettings.navOrder, initialSettings.customNavTabs));
+            setMemberNavHiddenKeys(normalizeMemberNavHiddenKeys(initialSettings.memberNavHiddenKeys, initialSettings.customNavTabs));
+            if (Array.isArray(initialSettings.customNavTabs)) setCustomNavTabs(initialSettings.customNavTabs);
             if (initialSettings.downloadsVisibleToMembers !== undefined) {
                 setDownloadsVisibleToMembers(!!initialSettings.downloadsVisibleToMembers);
             }
@@ -2065,9 +2068,10 @@ export const SettingsDashboard: React.FC = () => {
             referralRewardDays,
             announcement,
             navOrder: ensureCompleteNavOrder(navOrder),
-            navHiddenKeys: normalizeNavHiddenKeys(navHiddenKeys),
-            memberNavOrder: ensureCompleteMemberNavOrder(memberNavOrder),
-            memberNavHiddenKeys: normalizeMemberNavHiddenKeys(memberNavHiddenKeys),
+            navHiddenKeys: normalizeNavHiddenKeys(navHiddenKeys, customNavTabs),
+            memberNavOrder: ensureCompleteMemberNavOrder(memberNavOrder, customNavTabs),
+            memberNavHiddenKeys: normalizeMemberNavHiddenKeys(memberNavHiddenKeys, customNavTabs),
+            customNavTabs,
             downloadsVisibleToMembers,
             hideStreamUsers,
             showUsernamesInAnalytics,
@@ -3804,6 +3808,16 @@ export const SettingsDashboard: React.FC = () => {
 
                     {activeTab === 'layout' && (
                         <div className="mb-8 space-y-10">
+                            <section id={getSettingsSectionElementId('custom-nav-tabs')} className="scroll-mt-24">
+                                <CustomNavTabsSettings
+                                    customNavTabs={customNavTabs}
+                                    onChange={setCustomNavTabs}
+                                    navOrder={navOrder}
+                                    onNavOrderChange={setNavOrder}
+                                    memberNavOrder={memberNavOrder}
+                                    onMemberNavOrderChange={setMemberNavOrder}
+                                />
+                            </section>
                             <section id={getSettingsSectionElementId('navigation')} className="scroll-mt-24">
                                 <NavigationOrderSettings
                                     navOrder={navOrder}
@@ -3816,6 +3830,7 @@ export const SettingsDashboard: React.FC = () => {
                                     onMemberNavHiddenKeysChange={setMemberNavHiddenKeys}
                                     downloadsVisibleToMembers={downloadsVisibleToMembers}
                                     onDownloadsVisibleToMembersChange={setDownloadsVisibleToMembers}
+                                    customNavTabs={customNavTabs}
                                     featureStatus={{
                                         upgrader: upgraderEnabled,
                                         collexions: collexionsEnabled,

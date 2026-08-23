@@ -222,13 +222,24 @@ export const ALWAYS_VISIBLE_NAV_KEYS = new Set(['home', 'settings', 'logout']);
 export const ALWAYS_VISIBLE_MEMBER_NAV_KEYS = new Set(['home', 'logout']);
 
 /** Normalize a saved hidden-keys list; strips always-visible keys. */
-export const normalizeNavHiddenKeys = (keys?: string[] | null): string[] => {
+export const normalizeNavHiddenKeys = (keys?: string[] | null, customTabs?: Array<{ id: string; enabled?: boolean }>): string[] => {
     if (!Array.isArray(keys)) return [];
+    const enabledCustom = new Set(
+        (customTabs || [])
+            .filter((tab) => tab && tab.enabled !== false)
+            .map((tab) => `custom:${String(tab.id).trim()}`),
+    );
     const seen = new Set<string>();
     const result: string[] = [];
     for (const raw of keys) {
         const key = String(raw || '').trim();
         if (!key || ALWAYS_VISIBLE_NAV_KEYS.has(key) || seen.has(key)) continue;
+        if (key.startsWith('custom:')) {
+            if (!enabledCustom.has(key)) continue;
+            seen.add(key);
+            result.push(key);
+            continue;
+        }
         if (!(key in NAV_ITEM_LABELS) && key !== 'logs') continue;
         seen.add(key);
         result.push(key);
@@ -237,13 +248,27 @@ export const normalizeNavHiddenKeys = (keys?: string[] | null): string[] => {
 };
 
 /** Hidden keys for the members layout — only member-visible keys, never Home/Logout. */
-export const normalizeMemberNavHiddenKeys = (keys?: string[] | null): string[] => {
+export const normalizeMemberNavHiddenKeys = (
+    keys?: string[] | null,
+    customTabs?: Array<{ id: string; enabled?: boolean; adminOnly?: boolean }>,
+): string[] => {
     if (!Array.isArray(keys)) return [];
+    const memberCustom = new Set(
+        (customTabs || [])
+            .filter((tab) => tab && tab.enabled !== false && !tab.adminOnly)
+            .map((tab) => `custom:${String(tab.id).trim()}`),
+    );
     const seen = new Set<string>();
     const result: string[] = [];
     for (const raw of keys) {
         const key = String(raw || '').trim();
         if (!key || ALWAYS_VISIBLE_MEMBER_NAV_KEYS.has(key) || seen.has(key)) continue;
+        if (key.startsWith('custom:')) {
+            if (!memberCustom.has(key)) continue;
+            seen.add(key);
+            result.push(key);
+            continue;
+        }
         if (!isMemberNavKey(key)) continue;
         if (!(key in NAV_ITEM_LABELS)) continue;
         seen.add(key);
@@ -256,8 +281,19 @@ export const normalizeMemberNavHiddenKeys = (keys?: string[] | null): string[] =
  * Complete a members-only nav order. Missing member keys are inserted using
  * DEFAULT_MEMBER_NAV_ORDER relative positions.
  */
-export const ensureCompleteMemberNavOrder = (order?: string[] | null): string[] => {
-    const incoming = (Array.isArray(order) ? order : []).filter((key) => key && isMemberNavKey(key));
+export const ensureCompleteMemberNavOrder = (
+    order?: string[] | null,
+    customTabs?: Array<{ id: string; enabled?: boolean; adminOnly?: boolean }>,
+): string[] => {
+    const incoming = (Array.isArray(order) ? order : []).filter((key) => {
+        if (!key) return false;
+        if (key.startsWith('custom:')) {
+            const id = key.slice('custom:'.length);
+            const tab = (customTabs || []).find((entry) => String(entry.id) === id);
+            return !!tab && tab.enabled !== false && !tab.adminOnly;
+        }
+        return isMemberNavKey(key);
+    });
     const result: string[] = [];
     const seen = new Set<string>();
 
@@ -299,26 +335,47 @@ export const ensureCompleteMemberNavOrder = (order?: string[] | null): string[] 
 };
 
 /** Build a members order from an admin order (keeps relative sequence, drops admin-only keys). */
-export const deriveMemberNavOrderFromAdmin = (adminOrder?: string[] | null): string[] => {
-    const fromAdmin = ensureCompleteNavOrder(adminOrder).filter((key) => isMemberNavKey(key));
-    return ensureCompleteMemberNavOrder(fromAdmin);
+export const deriveMemberNavOrderFromAdmin = (
+    adminOrder?: string[] | null,
+    customTabs?: Array<{ id: string; enabled?: boolean; adminOnly?: boolean }>,
+): string[] => {
+    const fromAdmin = ensureCompleteNavOrder(adminOrder).filter((key) => {
+        if (key.startsWith('custom:')) {
+            const id = key.slice('custom:'.length);
+            const tab = (customTabs || []).find((entry) => String(entry.id) === id);
+            return !!tab && tab.enabled !== false && !tab.adminOnly;
+        }
+        return isMemberNavKey(key);
+    });
+    return ensureCompleteMemberNavOrder(fromAdmin, customTabs);
 };
 
 export const resolveMemberNavOrder = (
     memberOrder?: string[] | null,
     adminOrder?: string[] | null,
+    customTabs?: Array<{ id: string; enabled?: boolean; adminOnly?: boolean }>,
 ): string[] => {
     if (Array.isArray(memberOrder) && memberOrder.length) {
-        return ensureCompleteMemberNavOrder(memberOrder);
+        return ensureCompleteMemberNavOrder(memberOrder, customTabs);
     }
-    return deriveMemberNavOrderFromAdmin(adminOrder);
+    return deriveMemberNavOrderFromAdmin(adminOrder, customTabs);
 };
 
 export const filterNavOrder = (
     order: string[],
-    options: { isAdmin: boolean; features?: NavFeatureFlags; hiddenKeys?: string[] },
+    options: {
+        isAdmin: boolean;
+        features?: NavFeatureFlags;
+        hiddenKeys?: string[];
+        customTabs?: Array<{ id: string; enabled?: boolean; adminOnly?: boolean }>;
+    },
 ) => {
     const features = options.features || {};
+    const customTabMap = new Map(
+        (options.customTabs || [])
+            .filter((tab) => tab && tab.enabled !== false)
+            .map((tab) => [String(tab.id), tab]),
+    );
     const maintenanceEnabled = features.maintenance !== false;
     const upgraderEnabled = !!features.upgrader;
     const collexionsEnabled = !!features.collexions;
@@ -334,12 +391,20 @@ export const filterNavOrder = (
     const requestEnabled = features.request !== false || requestsQueueEnabled;
     const hidden = new Set(
         options.isAdmin
-            ? normalizeNavHiddenKeys(options.hiddenKeys)
-            : normalizeMemberNavHiddenKeys(options.hiddenKeys),
+            ? normalizeNavHiddenKeys(options.hiddenKeys, options.customTabs)
+            : normalizeMemberNavHiddenKeys(options.hiddenKeys, options.customTabs),
     );
     const alwaysVisible = options.isAdmin ? ALWAYS_VISIBLE_NAV_KEYS : ALWAYS_VISIBLE_MEMBER_NAV_KEYS;
 
     return (Array.isArray(order) ? order : []).filter((key) => {
+        if (key.startsWith('custom:')) {
+            const id = key.slice('custom:'.length);
+            const tab = customTabMap.get(id);
+            if (!tab) return false;
+            if (tab.adminOnly && !options.isAdmin) return false;
+            if (hidden.has(key) && !alwaysVisible.has(key)) return false;
+            return true;
+        }
         if (key === 'logout' || key === 'logs') return false;
         // Review queue now lives as a Discover & Request tab — never show a standalone nav item.
         if (key === 'requests') return false;

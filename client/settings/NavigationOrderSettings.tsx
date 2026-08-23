@@ -8,6 +8,8 @@ import {
     normalizeMemberNavHiddenKeys,
     normalizeNavHiddenKeys,
 } from '../shared/nav';
+import { getCustomNavTabLabel } from '../shared/customNavTabs';
+import type { CustomNavTab } from '../shared/types';
 import { useDiscoverI18n } from '../discovery/i18n';
 import { SettingsToggleRow } from '../shared/ui';
 import { SettingHint } from './SettingHint';
@@ -39,6 +41,7 @@ type Props = {
     onDownloadsVisibleToMembersChange: (next: boolean) => void;
     /** When false, sidebar still hides these until enabled in their Settings section. */
     featureStatus?: NavFeatureStatus;
+    customNavTabs?: CustomNavTab[];
 };
 
 const FEATURE_OFF_SECTIONS: Record<string, string> = {
@@ -441,9 +444,18 @@ export const NavigationOrderSettings: React.FC<Props> = ({
     downloadsVisibleToMembers,
     onDownloadsVisibleToMembersChange,
     featureStatus,
+    customNavTabs = [],
 }) => {
     const { t } = useDiscoverI18n();
     const labelForKey = (key: string, options?: { adminSuffix?: boolean; downloadsMembersVisible?: boolean }) => {
+        if (key.startsWith('custom:')) {
+            const label = getCustomNavTabLabel(key, customNavTabs);
+            const tab = customNavTabs.find((entry) => `custom:${entry.id}` === key);
+            if (options?.adminSuffix && tab?.adminOnly) {
+                return t('settings.navigation.order.adminOnlyLabel', { label });
+            }
+            return label;
+        }
         const baseKey = NAV_ITEM_TRANSLATION_KEYS[key];
         const base = baseKey ? t(baseKey) : getNavItemLabel(key);
         return getNavItemLabel(key, options) !== getNavItemLabel(key)

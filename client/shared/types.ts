@@ -176,6 +176,21 @@ export interface AppSettings {
     memberNavOrder?: string[];
     /** Members / non-admin hidden nav keys. */
     memberNavHiddenKeys?: string[];
+    /** Admin-defined external service tabs shown in the sidebar. */
+    customNavTabs?: CustomNavTab[];
+}
+
+export type CustomNavTabOpenMode = 'embed' | 'sameTab' | 'newTab';
+
+export interface CustomNavTab {
+    id: string;
+    name: string;
+    description?: string;
+    url: string;
+    icon: string;
+    openMode: CustomNavTabOpenMode;
+    adminOnly?: boolean;
+    enabled: boolean;
 }
 
 export interface PlexServer {
