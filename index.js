@@ -19143,8 +19143,8 @@ const markTaskEnd = (task, error = null, extras = {}) => {
 };
 
 const REQUEST_STATUS_SYNC_INTERVAL_MS = 60 * 1000;
-const SEERR_AVAILABLE_NOTIFY_INTERVAL_MS = 60 * 1000;
-const SEERR_PENDING_NOTIFY_INTERVAL_MS = 45 * 1000;
+const SEERR_AVAILABLE_NOTIFY_INTERVAL_MS = 10 * 1000;
+const SEERR_PENDING_NOTIFY_INTERVAL_MS = 10 * 1000;
 /** Sonarr/Radarr library badge snapshot — Discover serves from disk; rescans infrequently. */
 const DISCOVERY_AVAILABILITY_CACHE_INTERVAL_MS = 12 * 60 * 60 * 1000;
 /** Full Sonarr/Radarr JSON downloads need far longer than Discover browse (8s). */
@@ -19338,20 +19338,20 @@ const startPortalRequestStatusSyncBackgroundTask = () => {
 };
 
 const startSeerrPendingNotifyBackgroundTask = () => {
-    systemJobs.seerrPendingNotify.nextRun = new Date(Date.now() + 20 * 1000).toISOString();
+    systemJobs.seerrPendingNotify.nextRun = new Date(Date.now() + 10 * 1000).toISOString();
     setTimeout(() => {
         runSeerrPendingNotify('startup').catch(() => {});
-    }, 20 * 1000);
+    }, 10 * 1000);
     setInterval(() => {
         runSeerrPendingNotify('scheduled').catch(() => {});
     }, SEERR_PENDING_NOTIFY_INTERVAL_MS);
 };
 
 const startSeerrAvailableNotifyBackgroundTask = () => {
-    systemJobs.seerrAvailableNotify.nextRun = new Date(Date.now() + 25 * 1000).toISOString();
+    systemJobs.seerrAvailableNotify.nextRun = new Date(Date.now() + 12 * 1000).toISOString();
     setTimeout(() => {
         runSeerrAvailableNotify('startup').catch(() => {});
-    }, 25 * 1000);
+    }, 12 * 1000);
     setInterval(() => {
         runSeerrAvailableNotify('scheduled').catch(() => {});
     }, SEERR_AVAILABLE_NOTIFY_INTERVAL_MS);
