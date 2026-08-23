@@ -7,6 +7,7 @@ import { portalUrl } from '../shared/basePath';
 import { DashboardHero, DashboardPageShell } from '../shared/dashboard/DashboardChrome';
 import { formatDateTime } from '../shared/format';
 import { ModalPortal } from '../shared/ModalPortal';
+import { ConfirmModal } from '../shared/ui';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { usePoll } from '../shared/usePoll';
 import { goToProfile } from '../profile/helpers';
@@ -50,6 +51,13 @@ type Props = {
     sessionInfo: any;
     onCountsChange?: () => void;
     initialRoomId?: string | null;
+};
+
+type ConfirmDialogState = {
+    title: string;
+    message: string;
+    danger?: boolean;
+    confirmLabel?: string;
 };
 
 const MESSAGE_POLL_MS = 5000;
@@ -111,14 +119,43 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
     const [mentionOpen, setMentionOpen] = useState(false);
     const [mentionIndex, setMentionIndex] = useState(0);
     const [mentionStart, setMentionStart] = useState(-1);
+    const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
+    const confirmActionRef = useRef<(() => void | Promise<void>) | null>(null);
     const scrollRef = useRef<HTMLDivElement | null>(null);
     const draftRef = useRef<HTMLTextAreaElement | null>(null);
     const mentionTimerRef = useRef<number | null>(null);
     const lastMessageIdRef = useRef(0);
+    const activeRoomIdRef = useRef<string | null>(activeRoomId);
     const currentUserId = String(sessionInfo?.account?.id || sessionInfo?.session?.id || '');
+
+    useEffect(() => {
+        activeRoomIdRef.current = activeRoomId;
+    }, [activeRoomId]);
 
     const toast = useCallback((message: string, type: ToastMessage['type'] = 'info') => {
         pushToast(setToasts, message, type);
+    }, []);
+
+    const openConfirm = useCallback((opts: ConfirmDialogState & { onConfirm: () => void | Promise<void> }) => {
+        confirmActionRef.current = opts.onConfirm;
+        setConfirmDialog({
+            title: opts.title,
+            message: opts.message,
+            danger: opts.danger,
+            confirmLabel: opts.confirmLabel,
+        });
+    }, []);
+
+    const closeConfirm = useCallback(() => {
+        confirmActionRef.current = null;
+        setConfirmDialog(null);
+    }, []);
+
+    const handleConfirm = useCallback(() => {
+        const action = confirmActionRef.current;
+        confirmActionRef.current = null;
+        setConfirmDialog(null);
+        if (action) void action();
     }, []);
 
     const activeRoom = useMemo(
@@ -131,14 +168,28 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
         const nextRooms = Array.isArray(data?.rooms) ? data.rooms as ChatRoom[] : [];
         setRooms(nextRooms);
         setIsAdmin(!!data?.isAdmin);
-        const preferred = selectRoomId || activeRoomId || initialRoomId || nextRooms[0]?.id || null;
-        if (preferred && nextRooms.some((room) => String(room.id) === String(preferred))) {
-            setActiveRoomId(String(preferred));
-        } else if (!activeRoomId && nextRooms[0]?.id) {
+
+        const hasRoom = (roomId: string | null | undefined) => (
+            !!roomId && nextRooms.some((room) => String(room.id) === String(roomId))
+        );
+
+        if (selectRoomId != null && String(selectRoomId).trim() !== '') {
+            const preferred = String(selectRoomId);
+            if (hasRoom(preferred)) setActiveRoomId(preferred);
+            return nextRooms;
+        }
+
+        const current = activeRoomIdRef.current;
+        if (hasRoom(current)) return nextRooms;
+
+        const fallback = initialRoomId || nextRooms[0]?.id || null;
+        if (hasRoom(fallback)) {
+            setActiveRoomId(String(fallback));
+        } else if (nextRooms[0]?.id) {
             setActiveRoomId(String(nextRooms[0].id));
         }
         return nextRooms;
-    }, [activeRoomId, initialRoomId]);
+    }, [initialRoomId]);
 
     const loadMessages = useCallback(async (roomId: string, { after = 0, replace = false } = {}) => {
         if (!roomId) return;
@@ -193,7 +244,7 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
             }
         })();
         return () => { cancelled = true; };
-    }, [initialRoomId, loadRooms, toast]);
+    }, [initialRoomId, toast]);
 
     useEffect(() => {
         if (!activeRoomId) return;
@@ -222,7 +273,7 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
     }, activeRoomId ? MESSAGE_POLL_MS : null);
 
     usePoll(() => {
-        void loadRooms(activeRoomId);
+        void loadRooms();
     }, ROOM_POLL_MS);
 
     const closeMentions = useCallback(() => {
@@ -327,34 +378,48 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
         }
     };
 
-    const handleDeleteRoom = async (room: ChatRoom) => {
+    const handleDeleteRoom = (room: ChatRoom) => {
         if (!isAdmin) return;
-        if (!window.confirm(`Delete #${room.name}? Messages in this channel will be removed from the room list.`)) return;
-        try {
-            await apiFetch(`/api/chat/rooms/${encodeURIComponent(room.id)}`, { method: 'DELETE' });
-            const nextRooms = await loadRooms();
-            if (String(activeRoomId) === String(room.id)) {
-                setActiveRoomId(nextRooms[0]?.id ? String(nextRooms[0].id) : null);
-            }
-            toast(`Deleted #${room.name}`, 'success');
-        } catch (error) {
-            toast(error instanceof Error ? error.message : 'Failed to delete channel', 'error');
-        }
+        openConfirm({
+            title: 'Delete channel',
+            message: `Delete #${room.name}? Messages in this channel will be removed from the room list.`,
+            danger: true,
+            confirmLabel: 'Delete channel',
+            onConfirm: async () => {
+                try {
+                    await apiFetch(`/api/chat/rooms/${encodeURIComponent(room.id)}`, { method: 'DELETE' });
+                    const nextRooms = await loadRooms();
+                    if (String(activeRoomId) === String(room.id)) {
+                        setActiveRoomId(nextRooms[0]?.id ? String(nextRooms[0].id) : null);
+                    }
+                    toast(`Deleted #${room.name}`, 'success');
+                } catch (error) {
+                    toast(error instanceof Error ? error.message : 'Failed to delete channel', 'error');
+                }
+            },
+        });
     };
 
-    const handleDeleteMessage = async (message: ChatMessage) => {
+    const handleDeleteMessage = (message: ChatMessage) => {
         if (!activeRoomId) return;
         const canDelete = isAdmin || String(message.user.id) === currentUserId;
         if (!canDelete) return;
-        if (!window.confirm('Delete this message?')) return;
-        try {
-            await apiFetch(`/api/chat/rooms/${encodeURIComponent(activeRoomId)}/messages/${message.id}`, {
-                method: 'DELETE',
-            });
-            setMessages((prev) => prev.filter((item) => item.id !== message.id));
-        } catch (error) {
-            toast(error instanceof Error ? error.message : 'Failed to delete message', 'error');
-        }
+        openConfirm({
+            title: 'Delete message',
+            message: 'Delete this message? This cannot be undone.',
+            danger: true,
+            confirmLabel: 'Delete message',
+            onConfirm: async () => {
+                try {
+                    await apiFetch(`/api/chat/rooms/${encodeURIComponent(activeRoomId)}/messages/${message.id}`, {
+                        method: 'DELETE',
+                    });
+                    setMessages((prev) => prev.filter((item) => item.id !== message.id));
+                } catch (error) {
+                    toast(error instanceof Error ? error.message : 'Failed to delete message', 'error');
+                }
+            },
+        });
     };
 
     if (loading) {
@@ -371,6 +436,15 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
     return (
         <DashboardPageShell className="gap-3">
             <ToastContainer toasts={toasts} setToasts={setToasts} />
+            <ConfirmModal
+                isOpen={!!confirmDialog}
+                title={confirmDialog?.title || 'Are you sure?'}
+                message={confirmDialog?.message || ''}
+                danger={confirmDialog?.danger}
+                confirmLabel={confirmDialog?.confirmLabel || 'Confirm'}
+                onCancel={closeConfirm}
+                onConfirm={handleConfirm}
+            />
             <DashboardHero
                 eyebrow="Community"
                 title="Live chat"
@@ -538,9 +612,9 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                                     ) : null}
                                     <textarea
                                         ref={draftRef}
-                                        className="min-h-[44px] flex-1 resize-y rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-text placeholder:text-muted focus:border-plex/40 focus:outline-none"
+                                        className="min-h-[88px] flex-1 resize-y rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm text-text placeholder:text-muted focus:border-plex/40 focus:outline-none"
                                         placeholder={`Message #${activeRoom.name} · type @ to mention`}
-                                        rows={2}
+                                        rows={4}
                                         value={draft}
                                         onChange={(event) => {
                                             const next = event.target.value;
@@ -583,7 +657,7 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                                     />
                                     <button
                                         type="button"
-                                        className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-plex text-background hover:bg-plex-hover disabled:opacity-50"
+                                        className="inline-flex h-[88px] w-11 shrink-0 items-center justify-center rounded-xl bg-plex text-background hover:bg-plex-hover disabled:opacity-50"
                                         disabled={sending || !draft.trim()}
                                         onClick={() => void handleSend()}
                                     >
