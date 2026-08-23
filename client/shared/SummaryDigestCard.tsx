@@ -7,16 +7,19 @@ import {
     Clapperboard,
     Clock,
     Cpu,
+    Film,
     Layers,
     Radar,
     RefreshCw,
     Server,
     Sparkles,
     TrendingUp,
+    Tv,
     X,
 } from 'lucide-react';
 import { apiFetch } from './api';
 import { portalUrl } from './basePath';
+import { resolveTmdbImageUrl } from '../discovery/tmdbImageUrl';
 import {
     dashboardPanelClass,
     DashboardStatCard,
@@ -53,6 +56,9 @@ export type SummaryDigest = {
         title?: string;
         subtitle?: string;
         at?: string;
+        posterPath?: string | null;
+        backdropPath?: string | null;
+        mediaType?: string | null;
     }>;
 };
 
@@ -131,26 +137,80 @@ const AutomationStat: React.FC<{
     </div>
 );
 
+const formatHighlightSubtitle = (subtitle?: string) => {
+    const raw = String(subtitle || '').trim();
+    if (!raw) return '';
+    const labels: Record<string, string> = {
+        approved: 'Approved',
+        pending: 'Pending',
+        processing: 'Processing',
+        declined: 'Declined',
+        available: 'Available',
+        completed: 'Completed',
+        failed: 'Failed',
+    };
+    return labels[raw.toLowerCase()] || raw.charAt(0).toUpperCase() + raw.slice(1);
+};
+
 const HighlightCard: React.FC<{
     title: string;
     subtitle?: string;
+    posterPath?: string | null;
+    backdropPath?: string | null;
+    mediaType?: string | null;
     index: number;
-}> = ({ title, subtitle, index }) => (
-    <div className="group relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-white/[0.05] to-black/40 px-4 py-3 transition-colors hover:border-plex/25">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_0%_0%,rgb(var(--color-plex)_/_0.12),transparent_55%)] opacity-0 transition-opacity group-hover:opacity-100" />
-        <div className="relative flex items-start gap-3">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-plex/25 bg-plex/10 text-[11px] font-black text-plex">
-                {index + 1}
-            </span>
-            <div className="min-w-0">
-                <p className="text-sm font-bold text-text leading-snug">{title}</p>
-                {subtitle ? (
-                    <p className="mt-1 text-xs text-muted leading-relaxed">{subtitle}</p>
-                ) : null}
+}> = ({ title, subtitle, posterPath, backdropPath, mediaType, index }) => {
+    const posterUrl = resolveTmdbImageUrl(posterPath, 'w185');
+    const backdropUrl = resolveTmdbImageUrl(backdropPath || posterPath, 'w780');
+    const isTv = String(mediaType || '').toLowerCase() === 'tv';
+    const FallbackIcon = isTv ? Tv : Film;
+
+    return (
+        <div className="group relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-white/[0.05] to-black/50 min-h-[5.5rem] transition-all hover:border-plex/30 hover:shadow-[0_8px_32px_rgba(0,0,0,0.35)]">
+            {backdropUrl ? (
+                <>
+                    <img
+                        src={backdropUrl}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover opacity-35 scale-105 transition-transform duration-500 group-hover:scale-110"
+                        loading="lazy"
+                    />
+                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-r from-black/92 via-black/78 to-black/55" />
+                    <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                </>
+            ) : (
+                <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_0%_0%,rgb(var(--color-plex)_/_0.12),transparent_55%)] opacity-0 transition-opacity group-hover:opacity-100" />
+            )}
+            <div className="relative flex items-center gap-3 p-3">
+                {posterUrl ? (
+                    <img
+                        src={posterUrl}
+                        alt=""
+                        className="h-[4.25rem] w-[2.85rem] shrink-0 rounded-lg border border-white/15 object-cover shadow-[0_8px_24px_rgba(0,0,0,0.45)]"
+                        loading="lazy"
+                    />
+                ) : (
+                    <div className="flex h-[4.25rem] w-[2.85rem] shrink-0 items-center justify-center rounded-lg border border-plex/25 bg-plex/10 text-plex shadow-[0_8px_24px_rgba(0,0,0,0.25)]">
+                        <FallbackIcon className="h-5 w-5" />
+                    </div>
+                )}
+                <div className="min-w-0 flex-1">
+                    <div className="flex items-start gap-2">
+                        <p className="min-w-0 flex-1 text-sm font-bold text-text leading-snug line-clamp-2">{title}</p>
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md border border-plex/25 bg-plex/10 text-[10px] font-black text-plex">
+                            {index + 1}
+                        </span>
+                    </div>
+                    {subtitle ? (
+                        <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-muted/90">
+                            {formatHighlightSubtitle(subtitle)}
+                        </p>
+                    ) : null}
+                </div>
             </div>
         </div>
-    </div>
-);
+    );
+};
 
 type Props = {
     digestId?: string | null;
@@ -403,6 +463,9 @@ export const SummaryDigestCard: React.FC<Props> = ({ digestId = 'latest', onClos
                                                     key={`${item.title}-${index}`}
                                                     title={item.title || 'Highlight'}
                                                     subtitle={item.subtitle}
+                                                    posterPath={item.posterPath}
+                                                    backdropPath={item.backdropPath}
+                                                    mediaType={item.mediaType}
                                                     index={index}
                                                 />
                                             ))}
