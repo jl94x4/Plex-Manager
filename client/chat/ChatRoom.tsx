@@ -166,6 +166,11 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
         node.setSelectionRange(start, end);
     }, []);
 
+    const openUserProfile = useCallback((userId?: string | null) => {
+        if (!userId) return;
+        goToProfile(undefined, userId);
+    }, []);
+
     const toast = useCallback((message: string, type: ToastMessage['type'] = 'info') => {
         pushToast(setToasts, message, type);
     }, []);
@@ -604,9 +609,7 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                                             <button
                                                 type="button"
                                                 className="shrink-0"
-                                                onClick={() => {
-                                                    if (message.user.id) goToProfile(String(message.user.id));
-                                                }}
+                                                onClick={() => openUserProfile(message.user.id)}
                                             >
                                                 <ChatAvatar src={message.user.avatar} name={message.user.displayName} />
                                             </button>
@@ -615,9 +618,7 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                                                     <button
                                                         type="button"
                                                         className="text-sm font-semibold text-text hover:text-plex"
-                                                        onClick={() => {
-                                                            if (message.user.id) goToProfile(String(message.user.id));
-                                                        }}
+                                                        onClick={() => openUserProfile(message.user.id)}
                                                     >
                                                         {message.user.displayName}
                                                     </button>
@@ -644,7 +645,7 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                                                     {renderMessageWithMentions(
                                                         message.message,
                                                         message.mentions || [],
-                                                        (userId) => goToProfile(userId),
+                                                        (userId) => openUserProfile(userId),
                                                     )}
                                                 </p>
                                             </div>
