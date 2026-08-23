@@ -383,6 +383,36 @@ Enable in **Settings → Support**.
 
 ---
 
+### Community Live Chat
+
+**One-page Discord-style layout:**
+- Left: channel list (#general, etc.) with unread badges
+- Right: live message thread + compose box
+- Auto-refresh  while a channel is open
+- Enter to send, Shift+Enter for a new line
+
+**Admin channel management**
+- New → create channels (name + optional description)
+- Delete channel on the active room
+
+**Member features**
+- Any logged-in member can read/post in all channels
+- Delete your own messages; admins can delete any message
+- Avatars link to member profiles
+- Unread counts on nav + per-channel badges
+
+**Notifications:**
+- Type @ in the message box to get an autocomplete list of portal usernames (will send mention notification)
+- Mentions are highlighted in messages (clickable, opens profile)
+- Chat @mention notifications global toggle (chatMentionNotifyInApp, on by default). When enabled, mentioned users get an in-app bell notification linking to the channel.
+
+Per-user (Preferences → Notifications)
+- Chat @mentions — opt-out toggle (notifyChatMentionInApp, on by default). Shown only when community chat is enabled.
+
+Members can control their own mention alerts under their own profile Preferences.
+
+---
+
 ### User Onboarding & Access Management
 
 - **Invite Link System** - Generate shareable invite links with a configurable max-use limit and custom duration. Users claim access via a branded landing page
