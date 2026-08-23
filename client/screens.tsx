@@ -12234,25 +12234,37 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
                 <div className="mt-2 pt-2 border-t border-white/10 shrink-0 w-full min-w-0">
                     <div className="grid grid-cols-[minmax(0,1fr)_2.75rem] gap-1.5 items-stretch w-full min-w-0">
-                        <button
-                            type="button"
-                            onClick={() => onNavigate('profile')}
-                            className={`min-w-0 flex items-center gap-1.5 rounded-xl border bg-white/5 hover:bg-white/10 hover:border-plex/40 transition-all py-1 px-1.5 text-left overflow-hidden ${currentRoute === 'profile' ? 'border-plex/50 bg-plex/10' : 'border-white/10'}`}
+                        <div
+                            className={`min-w-0 flex items-center gap-0.5 rounded-xl border bg-white/5 hover:border-plex/40 transition-all overflow-hidden ${currentRoute === 'profile' ? 'border-plex/50 bg-plex/10' : 'border-white/10'}`}
                         >
-                            <img
-                                src={profileIcon}
-                                alt=""
-                                className="w-7 h-7 flex-shrink-0 rounded-full object-cover bg-background/60 border border-white/10"
-                                onError={(e) => {
-                                    (e.target as HTMLImageElement).src = logoUrl();
-                                }}
-                            />
-                            <div className="min-w-0 flex-1 overflow-hidden">
-                                <p className="text-xs font-bold text-text truncate">{profileName}</p>
-                                <p className="text-[9px] uppercase tracking-wider text-muted truncate">{providerName} Profile</p>
-                            </div>
-                            <Palette className="w-3.5 h-3.5 text-plex flex-shrink-0" />
-                        </button>
+                            <button
+                                type="button"
+                                onClick={() => onNavigate('profile')}
+                                className="min-w-0 flex flex-1 items-center gap-1.5 py-1 pl-1.5 pr-0 text-left overflow-hidden hover:bg-white/10 transition-colors"
+                            >
+                                <img
+                                    src={profileIcon}
+                                    alt=""
+                                    className="w-7 h-7 flex-shrink-0 rounded-full object-cover bg-background/60 border border-white/10"
+                                    onError={(e) => {
+                                        (e.target as HTMLImageElement).src = logoUrl();
+                                    }}
+                                />
+                                <div className="min-w-0 flex-1 overflow-hidden">
+                                    <p className="text-xs font-bold text-text truncate">{profileName}</p>
+                                    <p className="text-[9px] uppercase tracking-wider text-muted truncate">{providerName} Profile</p>
+                                </div>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setProfileOpen(true)}
+                                className="flex-shrink-0 p-2 mr-0.5 rounded-lg text-plex hover:bg-white/10 transition-colors"
+                                title="Change theme"
+                                aria-label="Change theme"
+                            >
+                                <Palette className="w-3.5 h-3.5" />
+                            </button>
+                        </div>
                         <InAppNotificationsBell
                             onNavigate={(route, options) => onNavigate(route as any, options)}
                             className="min-w-0 w-full self-stretch overflow-visible"
