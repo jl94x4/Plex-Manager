@@ -99,6 +99,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
     const [notifySupportTicket, setNotifySupportTicket] = useState(user?.notifySupportTicket !== false);
     const [notifySupportReply, setNotifySupportReply] = useState(user?.notifySupportReply !== false);
     const [notifySupportMediaIssue, setNotifySupportMediaIssue] = useState(user?.notifySupportMediaIssue !== false);
+    const [notifyChatMentionInApp, setNotifyChatMentionInApp] = useState(user?.notifyChatMentionInApp !== false);
     const [notifyWebPush, setNotifyWebPush] = useState(user?.notifyWebPush !== false);
     const [browserPushReady, setBrowserPushReady] = useState(false);
     const browserPushSupportedFlag = webPushSupported();
@@ -142,6 +143,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
         setNotifySupportTicket(user?.notifySupportTicket !== false);
         setNotifySupportReply(user?.notifySupportReply !== false);
         setNotifySupportMediaIssue(user?.notifySupportMediaIssue !== false);
+        setNotifyChatMentionInApp(user?.notifyChatMentionInApp !== false);
         setNotifyWebPush(user?.notifyWebPush !== false);
         setOptOutNewsletter(!!user?.optOutNewsletter);
         setPrivacyShowName(user?.privacyShowName !== false);
@@ -180,6 +182,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
         user?.notifySupportTicket,
         user?.notifySupportReply,
         user?.notifySupportMediaIssue,
+        user?.notifyChatMentionInApp,
         user?.notifyWebPush,
         user?.optOutNewsletter,
         user?.privacyShowName,
@@ -226,6 +229,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
 
     const adminAllowsNames = String(publicConfig?.hideStreamUsers || 'false') === 'false';
     const achievementsEnabled = !!(sessionInfo?.navFeatures?.achievements || publicConfig?.achievementsEnabled);
+    const chatEnabled = !!(sessionInfo?.navFeatures?.chat || publicConfig?.chatEnabled);
 
     const flip = (setter: React.Dispatch<React.SetStateAction<boolean>>) => () => {
         setter((value) => !value);
@@ -275,6 +279,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                     notifySupportTicket,
                     notifySupportReply,
                     notifySupportMediaIssue,
+                    notifyChatMentionInApp,
                     notifyWebPush,
                 }),
             });
@@ -502,6 +507,16 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                 ariaLabel={t('homeDashboard.toggleBrowserPushAria')}
                                 disabled={busy}
                             />
+                            {chatEnabled ? (
+                                <PrefToggle
+                                    title={t('homeDashboard.chatMentionAlerts')}
+                                    hint={t('homeDashboard.chatMentionAlertsHint')}
+                                    on={notifyChatMentionInApp}
+                                    onToggle={flip(setNotifyChatMentionInApp)}
+                                    ariaLabel={t('homeDashboard.toggleChatMentionAria')}
+                                    disabled={busy}
+                                />
+                            ) : null}
 
                             {browserPushSupportedFlag && (
                                 <div className="flex flex-col gap-2 border-t border-white/10 pt-4">

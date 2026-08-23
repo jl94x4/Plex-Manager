@@ -676,6 +676,8 @@ export const SettingsDashboard: React.FC = () => {
     const [editionsEnabled, setEditionsEnabled] = useState(false);
     const [achievementsEnabled, setAchievementsEnabled] = useState(false);
     const [supportTicketsEnabled, setSupportTicketsEnabled] = useState(true);
+    const [chatEnabled, setChatEnabled] = useState(false);
+    const [chatMentionNotifyInApp, setChatMentionNotifyInApp] = useState(true);
     const [achievementsLeaderboardEnabled, setAchievementsLeaderboardEnabled] = useState(true);
     const [achievementsHomeWidgetEnabled, setAchievementsHomeWidgetEnabled] = useState(true);
     const [achievementsShowOnProfile, setAchievementsShowOnProfile] = useState(true);
@@ -1541,6 +1543,12 @@ export const SettingsDashboard: React.FC = () => {
             if (initialSettings.supportTicketsEnabled !== undefined) {
                 setSupportTicketsEnabled(initialSettings.supportTicketsEnabled !== false);
             }
+            if (initialSettings.chatEnabled !== undefined) {
+                setChatEnabled(!!initialSettings.chatEnabled);
+            }
+            if (initialSettings.chatMentionNotifyInApp !== undefined) {
+                setChatMentionNotifyInApp(initialSettings.chatMentionNotifyInApp !== false);
+            }
             if (initialSettings.achievementsLeaderboardEnabled !== undefined) {
                 setAchievementsLeaderboardEnabled(initialSettings.achievementsLeaderboardEnabled !== false);
             }
@@ -2070,6 +2078,8 @@ export const SettingsDashboard: React.FC = () => {
             editionsEnabled,
             achievementsEnabled,
             supportTicketsEnabled,
+            chatEnabled,
+            chatMentionNotifyInApp,
             achievementsLeaderboardEnabled,
             achievementsHomeWidgetEnabled,
             achievementsShowOnProfile,
@@ -3762,6 +3772,7 @@ export const SettingsDashboard: React.FC = () => {
                                         editions: editionsEnabled,
                                         achievements: achievementsEnabled,
                                         support: supportTicketsEnabled,
+                                        chat: chatEnabled,
                                         maintenance: maintenanceExperimentalEnabled,
                                     }}
                                 />
@@ -4688,6 +4699,31 @@ export const SettingsDashboard: React.FC = () => {
                     {activeTab === 'system' && (
                         <div className="mb-8 animate-fade-in space-y-6">
                             <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">System</h3>
+                            <section id={getSettingsSectionElementId('community-chat')} className="space-y-3 scroll-mt-24">
+                                <SettingsToggleRow
+                                    title="Community chat"
+                                    hint={<SettingHint>Let members talk in Discord-style text channels. Admins can create rooms; everyone logged in can chat. Messages refresh automatically while the page is open.</SettingHint>}
+                                    checked={chatEnabled}
+                                    onChange={setChatEnabled}
+                                />
+                                {chatEnabled && (
+                                    <>
+                                        <SettingsToggleRow
+                                            title="Chat @mention notifications"
+                                            hint={<SettingHint>Send in-app bell notifications when someone @mentions a member in live chat. Members can turn this off in Preferences.</SettingHint>}
+                                            checked={chatMentionNotifyInApp}
+                                            onChange={setChatMentionNotifyInApp}
+                                        />
+                                        <button
+                                            type="button"
+                                            className="mt-1 px-4 py-2 rounded-md font-bold transition-all bg-plex text-background hover:bg-plex-hover"
+                                            onClick={() => window.location.assign(portalUrl('/chat'))}
+                                        >
+                                            Open live chat
+                                        </button>
+                                    </>
+                                )}
+                            </section>
                             <section id={getSettingsSectionElementId('support-tickets')} className="space-y-3 scroll-mt-24">
                                 <SettingsToggleRow
                                     title="Support tickets"

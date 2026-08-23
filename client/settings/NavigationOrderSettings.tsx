@@ -22,6 +22,7 @@ type NavFeatureStatus = {
     editions?: boolean;
     achievements?: boolean;
     support?: boolean;
+    chat?: boolean;
     maintenance?: boolean;
 };
 
@@ -50,12 +51,13 @@ const FEATURE_OFF_SECTIONS: Record<string, string> = {
     editions: 'settings.navigation.tabs.editions',
     achievements: 'settings.navigation.tabs.achievements',
     support: 'settings.navigation.tabs.system',
+    chat: 'settings.navigation.tabs.system',
     maintenance: 'settings.navigation.tabs.cleanup',
 };
 
 const NAV_ITEM_TRANSLATION_KEYS: Record<string, string> = {
     home: 'navigation.home', discover: 'navigation.dashboard', request: 'navigation.discoverRequest',
-    analytics: 'navigation.analytics', achievements: 'navigation.achievements', support: 'navigation.support',
+    analytics: 'navigation.analytics', achievements: 'navigation.achievements', chat: 'navigation.chat', support: 'navigation.support',
     users: 'navigation.users', downloads: 'navigation.downloads', upgrader: 'navigation.upgrader',
     collexions: 'navigation.collexions', scanner: 'navigation.scanner', 'media-automation': 'navigation.mediaAutomation',
     'poster-sets': 'navigation.posterSets', overlays: 'navigation.overlays', editions: 'navigation.editions',
@@ -264,6 +266,7 @@ const NavOrderColumn: React.FC<ColumnProps> = ({
                         if (key === 'editions' && featureStatus?.editions === false) sectionKey = FEATURE_OFF_SECTIONS.editions;
                         if (key === 'achievements' && featureStatus?.achievements === false) sectionKey = FEATURE_OFF_SECTIONS.achievements;
                         if (key === 'support' && featureStatus?.support === false) sectionKey = FEATURE_OFF_SECTIONS.support;
+                        if (key === 'chat' && !featureStatus?.chat) sectionKey = FEATURE_OFF_SECTIONS.chat;
                         if (key === 'maintenance' && featureStatus?.maintenance === false) sectionKey = FEATURE_OFF_SECTIONS.maintenance;
                         return sectionKey ? translate('settings.navigation.order.featureOff', { section: translate(sectionKey) }) : null;
                     })();

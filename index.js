@@ -73,6 +73,7 @@ import { startOverlaysScheduler, startOverlaysBundleScheduler, runOverlaysSchedu
 import { registerAchievementsRoutes } from './lib/achievements/http.js';
 import { registerProfileRoutes } from './lib/profile/http.js';
 import { registerSupportTicketRoutes } from './lib/support-tickets/http.js';
+import { registerChatRoutes } from './lib/chat/http.js';
 import { createSupportTicketFromMediaIssue, attachTicketIdsToIssues } from './lib/support-tickets/fromIssue.js';
 import { mapTautulliHistoryRowToPlexItem } from './lib/achievements/tautulliHistory.js';
 import { isTautulliWatchHistorySource, buildAchievementsHomeRankContext, summarizeAchievementsBackfill, levelProgress } from './lib/achievements/index.js';
@@ -1256,6 +1257,7 @@ import {
     REQUESTS_DIR,
     ISSUES_DIR,
     SUPPORT_TICKETS_DIR,
+    CHAT_DIR,
     BLOCKLIST_DIR,
     WATCHLIST_DIR,
     MEDIA_AUTOMATION_DIR,
@@ -4098,6 +4100,7 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             notifySupportTicket,
             notifySupportReply,
             notifySupportMediaIssue,
+            notifyChatMentionInApp,
             notifyWebPush,
             showDiscoverNowPlaying,
             uiLocale,
@@ -4161,6 +4164,7 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             notifySupportTicket,
             notifySupportReply,
             notifySupportMediaIssue,
+            notifyChatMentionInApp,
             notifyWebPush,
             showDiscoverNowPlaying,
             privacyShowName,
@@ -4716,6 +4720,7 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
         achievements: !!config.achievementsEnabled,
         achievementsLeaderboard: !!config.achievementsEnabled && config.achievementsLeaderboardEnabled !== false,
         support: config.supportTicketsEnabled !== false,
+        chat: !!config.chatEnabled,
         // Portal engine unlocks Discover; Seerr URL still works when using Seerr as engine.
         request: portalRequestNav || seerrRequestNav,
         requestsQueue: portalRequestNav || requestAppService.isRequestAppConfigured(config),
@@ -5151,6 +5156,8 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 editionsEnabled: !!config.editionsEnabled,
                 achievementsEnabled: !!config.achievementsEnabled,
                 supportTicketsEnabled: config.supportTicketsEnabled !== false,
+                chatEnabled: !!config.chatEnabled,
+                chatMentionNotifyInApp: config.chatMentionNotifyInApp !== false,
                 achievementsLeaderboardEnabled: config.achievementsLeaderboardEnabled !== false,
                 achievementsHomeWidgetEnabled: config.achievementsHomeWidgetEnabled !== false,
                 achievementsShowOnProfile: config.achievementsShowOnProfile !== false,
@@ -5318,6 +5325,8 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 editionsEnabled: false,
                 achievementsEnabled: false,
                 supportTicketsEnabled: true,
+                chatEnabled: false,
+                chatMentionNotifyInApp: true,
                 achievementsLeaderboardEnabled: true,
                 achievementsHomeWidgetEnabled: true,
                 achievementsShowOnProfile: true,
@@ -5392,7 +5401,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         inactiveCleanupEnabled, inactiveCleanupDays,
         primaryColor, customLogoUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
-        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, supportTicketsEnabled, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, scannerNotifyDeleted, scannerNotifyUpgrade, scannerNotifyImport, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
+        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, supportTicketsEnabled, chatEnabled, chatMentionNotifyInApp, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, scannerNotifyDeleted, scannerNotifyUpgrade, scannerNotifyImport, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
     } = req.body;
 
@@ -5824,6 +5833,12 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         supportTicketsEnabled: supportTicketsEnabled !== undefined
             ? !!supportTicketsEnabled
             : (existingConfig.supportTicketsEnabled !== false),
+        chatEnabled: chatEnabled !== undefined
+            ? !!chatEnabled
+            : !!existingConfig.chatEnabled,
+        chatMentionNotifyInApp: chatMentionNotifyInApp !== undefined
+            ? !!chatMentionNotifyInApp
+            : (existingConfig.chatMentionNotifyInApp !== false),
         achievementsLeaderboardEnabled: achievementsLeaderboardEnabled !== undefined
             ? !!achievementsLeaderboardEnabled
             : (existingConfig.achievementsLeaderboardEnabled !== false),
@@ -18003,6 +18018,22 @@ registerSupportTicketRoutes(app, {
     sendGotifyAlert,
     alertRuleEnabled,
     resolvePublicBaseUrl: resolvePublicBaseUrlFromConfig,
+    resolveLocalUser: async (sessionUser) => {
+        const users = await loadFile(USERS_PATH, []);
+        return findLocalUserForSession(users, sessionUser);
+    },
+    log,
+});
+
+registerChatRoutes(app, {
+    requireAuth,
+    requireMember,
+    loadFile,
+    CONFIG_PATH,
+    USERS_PATH,
+    dataDir: CHAT_DIR,
+    createInAppNotification,
+    appendAuditLog,
     resolveLocalUser: async (sessionUser) => {
         const users = await loadFile(USERS_PATH, []);
         return findLocalUserForSession(users, sessionUser);

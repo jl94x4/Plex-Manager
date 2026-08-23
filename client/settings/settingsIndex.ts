@@ -95,6 +95,8 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
     { id: 'overlays', tabId: 'overlays', label: 'Overlays', group: 'Automation', keywords: ['overlays', 'new season', 'banner', 'layer', 'poster overlay', 'season overlay'] },
     { id: 'editions', tabId: 'editions', label: 'Editions', group: 'Automation', keywords: ['editions', 'edition manager', 'plex edition', 'cut', 'remux', 'hdr', 'audio codec', 'webhook'] },
     { id: 'system', tabId: 'system', label: 'System', group: 'Automation', keywords: ['system', 'diagnostics', 'backup'] },
+    { id: 'system/community-chat', tabId: 'system', sectionId: 'community-chat', label: 'Community chat', group: 'Automation', keywords: ['chat', 'community', 'channels', 'discord', 'messaging', 'live chat', 'rooms', 'mention', 'mentions', '@'] },
+    { id: 'system/chat-mention-notify', tabId: 'system', sectionId: 'community-chat', label: 'Chat @mention notifications', group: 'Automation', keywords: ['chat', 'mention', 'mentions', '@', 'notify', 'notification', 'bell'] },
     { id: 'system/support-tickets', tabId: 'system', sectionId: 'support-tickets', label: 'Support tickets', group: 'Automation', keywords: ['support', 'tickets', 'inbox', 'messaging', 'help', 'contact admin'] },
     { id: 'system/health', tabId: 'system', sectionId: 'health', label: 'Health Dashboard', group: 'Automation', keywords: ['health', 'score', 'alerts', 'integrations'] },
     { id: 'system/maintenance', tabId: 'system', sectionId: 'maintenance', label: 'Cleaner Experimental Mode', group: 'Automation', keywords: ['cleaner', 'maintenance', 'experimental'] },

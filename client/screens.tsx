@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react';
 import ReactDOM from 'react-dom';
-import { Home, Film, Activity, Sparkles, LogOut, Settings, FileText, BarChart3, Users, PlaySquare, TrendingUp, X, Star, Layers, HardDrive, Calendar, Tv, Clock, DownloadCloud, MonitorSmartphone, Copy, ChevronUp, ChevronDown, List, Palette, Music, Play, Pause, Upload, Shield, CheckCircle, AlertCircle, RefreshCw, ChevronLeft, ChevronRight, Trophy, PlayCircle, Coffee, Compass, PieChart, Clapperboard, AlertTriangle, Check, Cpu, Monitor, LineChart as LucideLineChart, Share2, Search, BookOpen, Loader2, Eye, EyeOff, ClipboardList, ArrowUpCircle, MoreHorizontal, ExternalLink, Info, GitFork, MapPin, Radar, Image as ImageIcon, SlidersHorizontal, LifeBuoy, User } from 'lucide-react';
+import { Home, Film, Activity, Sparkles, LogOut, Settings, FileText, BarChart3, Users, PlaySquare, TrendingUp, X, Star, Layers, HardDrive, Calendar, Tv, Clock, DownloadCloud, MonitorSmartphone, Copy, ChevronUp, ChevronDown, List, Palette, Music, Play, Pause, Upload, Shield, CheckCircle, AlertCircle, RefreshCw, ChevronLeft, ChevronRight, Trophy, PlayCircle, Coffee, Compass, PieChart, Clapperboard, AlertTriangle, Check, Cpu, Monitor, LineChart as LucideLineChart, Share2, Search, BookOpen, Loader2, Eye, EyeOff, ClipboardList, ArrowUpCircle, MoreHorizontal, ExternalLink, Info, GitFork, MapPin, Radar, Image as ImageIcon, SlidersHorizontal, LifeBuoy, MessageSquare, User } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
 
 import { SettingsDashboard } from './settings/SettingsDashboard';
@@ -11700,6 +11700,7 @@ interface NavigationProps {
     setActiveTheme: (theme: string) => void;
     pendingRequestCount?: number;
     supportUnreadCount?: number;
+    chatUnreadCount?: number;
     watchingCount?: number;
     downloadCount?: number;
     mediaAutomationActiveCount?: number;
@@ -11709,7 +11710,7 @@ interface NavigationProps {
     sidebarIdentityPosition?: 'top' | 'bottom';
 }
 
-export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate, onLogout, isAdmin, serverName, adminThumb, customLogoUrl, requestUrl, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, navFeatures, appVersion, activeTheme, setActiveTheme, pendingRequestCount = 0, supportUnreadCount = 0, watchingCount = 0, downloadCount = 0, mediaAutomationActiveCount = 0, showDashboardWatchingBadge = false, sessionInfo, mediaServerType = 'plex', sidebarIdentityPosition = 'bottom' }) => {
+export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate, onLogout, isAdmin, serverName, adminThumb, customLogoUrl, requestUrl, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, navFeatures, appVersion, activeTheme, setActiveTheme, pendingRequestCount = 0, supportUnreadCount = 0, chatUnreadCount = 0, watchingCount = 0, downloadCount = 0, mediaAutomationActiveCount = 0, showDashboardWatchingBadge = false, sessionInfo, mediaServerType = 'plex', sidebarIdentityPosition = 'bottom' }) => {
     const { t } = useDiscoverI18n();
     const serverIcon = customLogoUrl ? resolvePortalAssetUrl(customLogoUrl) : (adminThumb ? (adminThumb.startsWith('http') ? adminThumb : portalUrl(`/api/plex/image?path=${encodeURIComponent(adminThumb)}&width=256&height=256`)) : logoUrl());
     const providerName = String(mediaServerType || 'plex').toLowerCase() === 'jellyfin'
@@ -11971,6 +11972,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         'logs': { label: t('navigation.logs'), icon: FileText, route: 'logs', adminOnly: true },
         'analytics': { label: t('navigation.analytics'), icon: BarChart3, route: 'analytics', adminOnly: false },
         'achievements': { label: t('navigation.achievements'), icon: Trophy, route: 'achievements', adminOnly: false },
+        'chat': { label: t('navigation.chat'), icon: MessageSquare, route: 'chat', adminOnly: false },
         'support': { label: t('navigation.support'), icon: LifeBuoy, route: 'support', adminOnly: false },
         'downloads': { label: t('navigation.downloads'), icon: DownloadCloud, route: 'downloads', adminOnly: false },
         'mediastack': { label: t('navigation.calendar'), icon: Calendar, route: 'mediastack', adminOnly: false },
@@ -12005,6 +12007,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     const getNavBadgeCount = (key: string) => {
         if (key === 'request') return pendingRequestCount;
         if (key === 'support') return supportUnreadCount;
+        if (key === 'chat') return chatUnreadCount;
         if (key === 'discover' && showDashboardWatchingBadge) return watchingCount;
         if (key === 'downloads') return downloadCount;
         if (key === 'media-automation') return mediaAutomationActiveCount;

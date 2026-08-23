@@ -15,6 +15,8 @@ export type NavFeatureFlags = {
     requestsQueue?: boolean;
     /** When false, Downloads is hidden from non-admins. Default/undefined = visible. */
     downloads?: boolean;
+    /** Community live chat (Discord-style channels). */
+    chat?: boolean;
 };
 
 /** Default sidebar order matching Settings → Layout → Navigation stock layout. */
@@ -36,6 +38,7 @@ export const DEFAULT_NAV_ORDER = [
     'status',
     // After the usual primary/secondary slots so stock mobile bars stay uncrowded.
     'achievements',
+    'chat',
     'support',
     'maintenance',
     'about',
@@ -55,6 +58,7 @@ export const NAV_ITEM_LABELS: Record<string, string> = {
     request: 'Discover & Request',
     analytics: 'Analytics',
     achievements: 'Achievements',
+    chat: 'Chat',
     support: 'Support',
     users: 'Users',
     downloads: 'Downloads',
@@ -325,6 +329,7 @@ export const filterNavOrder = (
     const editionsEnabled = !!features.editions;
     const achievementsEnabled = !!features.achievements;
     const supportEnabled = features.support !== false;
+    const chatEnabled = !!features.chat;
     const requestsQueueEnabled = !!features.requestsQueue;
     const requestEnabled = features.request !== false || requestsQueueEnabled;
     const hidden = new Set(
@@ -351,6 +356,7 @@ export const filterNavOrder = (
         if (key === 'editions' && !editionsEnabled) return false;
         if (key === 'achievements' && !achievementsEnabled) return false;
         if (key === 'support' && !supportEnabled) return false;
+        if (key === 'chat' && !chatEnabled) return false;
         if (key === 'request' && !requestEnabled) return false;
         return true;
     });
