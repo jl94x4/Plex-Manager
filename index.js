@@ -4818,20 +4818,6 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
     });
 });
 
-const handleCustomTabEmbedProxy = createCustomTabEmbedProxyHandler({
-    loadConfig: () => loadFile(CONFIG_PATH, {}),
-    normalizeCustomNavTabs,
-    resolveCurrentAdmin,
-    getSessionActor,
-    effectiveViewerIsAdmin,
-    withBasePath,
-    fetchWithTimeout,
-    log,
-});
-
-app.all('/api/custom-tab-embed/:tabId', requireAuth, requireMember, handleCustomTabEmbedProxy);
-app.all('/api/custom-tab-embed/:tabId/*', requireAuth, requireMember, handleCustomTabEmbedProxy);
-
 app.post('/api/admin/impersonate/:userId', requireAdmin, async (req, res) => {
     try {
         const config = await loadFile(CONFIG_PATH, {});
@@ -6937,6 +6923,20 @@ const fetchWithTimeout = async (url, options = {}, timeoutMs = 15000) => {
         if (timer) clearTimeout(timer);
     }
 };
+
+const handleCustomTabEmbedProxy = createCustomTabEmbedProxyHandler({
+    loadConfig: () => loadFile(CONFIG_PATH, {}),
+    normalizeCustomNavTabs,
+    resolveCurrentAdmin,
+    getSessionActor,
+    effectiveViewerIsAdmin,
+    withBasePath,
+    fetchWithTimeout,
+    log,
+});
+
+app.all('/api/custom-tab-embed/:tabId', requireAuth, requireMember, handleCustomTabEmbedProxy);
+app.all('/api/custom-tab-embed/:tabId/*', requireAuth, requireMember, handleCustomTabEmbedProxy);
 
 const requestAppService = createRequestAppService({
     fetchWithTimeout,
