@@ -16,6 +16,13 @@ import fsSync from 'fs';
 import net from 'net';
 import dns from 'dns/promises';
 import { makeCircularPwaIconPng } from './lib/circular-icon.js';
+import {
+    getPortalBrandingIconCacheKey,
+    fetchPortalBrandingRasterBuffer,
+    syncPortalPwaStaticIcons,
+    fetchPortalEmailLogoBuffer,
+    resolvePortalPushIconUrl,
+} from './lib/portal-branding.js';
 import { resolvePackageVersion } from './lib/resolve-package-version.js';
 import {
     getDefaultScannerConfig,
@@ -1898,6 +1905,21 @@ const normalizeAlertRules = (rules = {}) => ({
 
 const alertRuleEnabled = (config, rule) => normalizeAlertRules(config?.alertRules)[rule] !== false;
 
+async function getEmailLogoAttachments(config) {
+    try {
+        const profile = await getAdminProfile(config);
+        const logoBuf = await fetchPortalEmailLogoBuffer(config, profile, getPortalBrandingDeps());
+        if (!logoBuf) return [];
+        return [{
+            filename: 'logo.png',
+            content: logoBuf,
+            cid: 'logo',
+        }];
+    } catch {
+        return [];
+    }
+}
+
 const sendEmail = async (config, to, subject, html, customTransporter = null) => {
     if (!config.smtpHost || !config.smtpUser || !config.smtpPass) {
         log('SMTP is not fully configured. Skipping email send.');
@@ -1914,25 +1936,14 @@ const sendEmail = async (config, to, subject, html, customTransporter = null) =>
         },
     });
 
-    const logoPath = path.join(process.cwd(), 'static', 'logo.png');
-    let hasLogo = false;
-    try {
-        await fs.access(logoPath);
-        hasLogo = true;
-    } catch (e) {
-        // Logo doesn't exist
-    }
+    const logoAttachments = await getEmailLogoAttachments(config);
 
     const mailOptions = {
         from: config.smtpFrom || config.smtpUser,
         to,
         subject,
         html,
-        attachments: hasLogo ? [{
-            filename: 'logo.png',
-            path: logoPath,
-            cid: 'logo' // same CID value as in the HTML img src
-        }] : []
+        attachments: logoAttachments,
     };
 
     try {
@@ -1958,12 +1969,19 @@ setInAppNotificationCreatedHook(async (item) => {
         const users = await loadFile(USERS_PATH, []);
         const user = users.find((entry) => String(entry?.id) === String(item.userId)) || null;
         if (user?.notifyWebPush === false) return;
+        const profile = await getAdminProfile(config);
+        const iconUrl = resolvePortalPushIconUrl(
+            config,
+            profile,
+            resolvePublicBaseUrlFromConfig(config) || config.publicDomain || '',
+        );
         await sendWebPushToUser(item.userId, {
             title: item.title,
             body: item.body,
             href: item.href || '/portal',
             type: item.type,
             tag: String(item.type || item.id || 'portal'),
+            ...(iconUrl ? { icon: iconUrl } : {}),
         }, { config, user, log });
     } catch (error) {
         log(`[WebPush] in-app fan-out failed: ${error?.message || error}`);
@@ -6035,6 +6053,10 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
     await saveFile(CONFIG_PATH, collexionsConfig);
     refreshRuntimePublicBaseUrl(collexionsConfig);
     syncIntegrationServicesInStatusConfig(collexionsConfig);
+    const brandingProfile = await getAdminProfile(collexionsConfig);
+    void refreshPortalBrandingAssets(collexionsConfig, brandingProfile).catch((error) => {
+        log(`[Branding] settings-save icon sync failed: ${error.message}`);
+    });
     try {
         await saveFile(STATUS_CONFIG_PATH, statusConfig);
     } catch (e) {
@@ -6305,6 +6327,15 @@ const saveUploadedBrandingImage = async (req, res, assetName, responseKey) => {
             .map((ext) => fs.unlink(path.join(assetDir, `${assetName}.${ext}`)).catch(() => null)));
         const assetPath = path.join(assetDir, `${assetName}.${extension}`);
         await fs.writeFile(assetPath, buf);
+        if (assetName === 'logo') {
+            try {
+                const config = await loadFile(CONFIG_PATH, {});
+                const profile = await getAdminProfile(config);
+                await refreshPortalBrandingAssets(config, profile);
+            } catch (error) {
+                log(`[Branding] logo-upload icon sync failed: ${error.message}`);
+            }
+        }
         res.json({ message: `${assetName === 'logo' ? 'Logo' : 'Background'} uploaded successfully.`, [responseKey]: `/static/${assetName}.${extension}` });
     } catch (e) {
         log(`Failed to upload ${assetName}: ${e.message}`);
@@ -7838,8 +7869,8 @@ const generateNewsletterHtml = async (config, options = {}) => {
     let cidCounter = 1;
 
     try {
-        const logoPath = path.join(process.cwd(), 'static', 'logo.png');
-        const logoBuf = await fs.readFile(logoPath).catch(() => null);
+        const profile = await getAdminProfile(config);
+        const logoBuf = await fetchPortalEmailLogoBuffer(config, profile, getPortalBrandingDeps());
         if (logoBuf) {
             attachments.push({ filename: 'logo.png', content: logoBuf, cid: 'logo' });
         }
@@ -8016,12 +8047,13 @@ const generateNewsletterHtml = async (config, options = {}) => {
     }
 
     const uptimeStr = `${calculateUptime30Days(healthData).toFixed(2)}%`;
+    const hasNewsletterLogo = attachments.some((entry) => entry.cid === 'logo');
 
     const htmlContent = `
                         <!-- Header -->
                         <tr>
                             <td align="center" style="padding: 40px 30px; background-color: #0b0f19; border-bottom: 1px solid #1f2937;">
-                                <img src="cid:logo" alt="Server Portal" style="max-width: 280px; height: auto; display: block; margin: 0 auto 10px auto;" />
+                                ${hasNewsletterLogo ? '<img src="cid:logo" alt="Server Portal" style="max-width: 280px; height: auto; display: block; margin: 0 auto 10px auto;" />' : ''}
                                 <p style="color: #9ca3af; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 16px; margin: 0;">Here is what's happening on the server</p>
                             </td>
                         </tr>
@@ -13481,17 +13513,27 @@ async function getAdminProfile(config) {
     }
 }
 
-/** Prefer custom logo, then Jellyfin branding, then Plex/admin thumb — same order as the in-app nav icon. */
-const getPortalBrandingIconCacheKey = (config = {}, profile = {}) => createHash('sha1')
-    .update([
-        String(config.pwaIconSource || 'server'),
-        String(config.customLogoUrl || ''),
-        String(config.mediaServerType || ''),
-        String(profile.thumb || ''),
-        String(profile.serverName || ''),
-    ].join('|'))
-    .digest('hex')
-    .slice(0, 12);
+function getPortalBrandingDeps() {
+    return {
+        fetchWithTimeout,
+        isBlockedHostName,
+        stripBasePathFromUrl,
+        normalizeBrandingAssetForMediaServer,
+        isJellyfinConfigured,
+        resolveIntegrationUrlForFetch,
+        jellyfinHeaders,
+        getPlexConnectionUri,
+        isSafePlexMediaPath,
+        plexClientHeaders,
+        normalizePwaIconSource,
+        log,
+    };
+}
+
+const refreshPortalBrandingAssets = async (config, profile = null) => {
+    const profileData = profile || await getAdminProfile(config);
+    return syncPortalPwaStaticIcons(config, profileData, getPortalBrandingDeps());
+};
 
 const sendStaticLogoFallback = async (res) => {
     const logoPath = path.join(process.cwd(), 'static', 'logo.png');
@@ -18505,11 +18547,9 @@ const buildPwaManifest = async () => {
     // App home is /portal when BASE_PATH is empty — matches login redirect + client router.
     const startUrl = BASE_PATH ? `${BASE_PATH}/` : '/portal';
     const scope = BASE_PATH ? `${BASE_PATH}/` : '/';
-    // ALWAYS use exact-size static PNGs for installability.
-    // Dynamic /api/public/pwa-icon branding (even "fast") makes Chrome Android fall back to
-    // Create shortcut only (WebAPK minting times out / rejects), and Firefox aborts Install entirely.
-    // Server branding still applies to in-app favicon via branding-icon.
-    const iconVer = '4';
+    // Static PNGs are regenerated from the selected branding source so install icons,
+    // push notifications, and email headers stay in sync with Settings.
+    const iconVer = getPortalBrandingIconCacheKey(config, profile);
     const icon192 = `${resolvePublicAssetHref('/static/pwa-icon-192.png')}?v=${iconVer}`;
     const icon512 = `${resolvePublicAssetHref('/static/pwa-icon-512.png')}?v=${iconVer}`;
     const iconMaskable = `${resolvePublicAssetHref('/static/pwa-icon-maskable-512.png')}?v=${iconVer}`;
@@ -18552,7 +18592,7 @@ if (BASE_PATH) {
 
 // Chromium Android uses this for WebAPK installability. Firefox deliberately does not
 // register it (a bad SW makes Firefox Install silently no-op).
-const serviceWorkerScript = `/* portal-sw v8 */
+const serviceWorkerScript = `/* portal-sw v9 */
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
@@ -18584,13 +18624,14 @@ self.addEventListener('push', (event) => {
   const href = toAbsoluteHref(data.href);
   let icon = '';
   try { icon = new URL('static/pwa-icon-192.png', self.registration.scope).href; } catch (_) {}
-  const image = typeof data.image === 'string' && /^https?:\/\//i.test(data.image) ? data.image : '';
+  const iconUrl = typeof data.icon === 'string' && /^https?:\\/\\//i.test(data.icon) ? data.icon : '';
+  const image = typeof data.image === 'string' && /^https?:\\/\\//i.test(data.image) ? data.image : '';
   event.waitUntil(self.registration.showNotification(String(data.title || 'Notification'), {
     body: String(data.body || ''),
     tag: String(data.tag || 'portal'),
     data: { href },
-    icon: image || icon || undefined,
-    badge: icon || undefined,
+    icon: iconUrl || image || icon || undefined,
+    badge: iconUrl || icon || undefined,
     image: image || undefined,
     renotify: true,
   }));
@@ -28711,6 +28752,9 @@ app.listen(PORT, BIND_HOST, async () => {
     process.env.PLEXAPI_HEADER_PLATFORM = 'Server Manager Portal';
     log(`Plex client identity: product=Server Manager Portal clientId=${String(CLIENT_ID).slice(0, 8)}…`);
     await syncAdminPlexIdFromConfigToken(config, { persist: true });
+    void getAdminProfile(config).then((profile) => refreshPortalBrandingAssets(config, profile)).catch((error) => {
+        log(`[Branding] startup icon sync failed: ${error.message}`);
+    });
 
     await loadStatusState();
     runMonitorCycle();
