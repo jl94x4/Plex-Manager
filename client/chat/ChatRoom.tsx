@@ -306,12 +306,37 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
         stickToBottomRef.current = node.scrollHeight - node.scrollTop - node.clientHeight < 96;
     }, []);
 
+    const scrollMessagesToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
+        const node = scrollRef.current;
+        if (!node) return;
+        stickToBottomRef.current = true;
+        node.scrollTo({ top: node.scrollHeight, behavior });
+    }, []);
+
     useEffect(() => {
         const node = scrollRef.current;
         if (!node) return;
         if (!stickToBottomRef.current && composeFocusedRef.current) return;
-        node.scrollTop = node.scrollHeight;
-    }, [messages, activeRoomId]);
+        scrollMessagesToBottom();
+    }, [messages, activeRoomId, scrollMessagesToBottom]);
+
+    useLayoutEffect(() => {
+        if (!composeFocused) return;
+        scrollMessagesToBottom();
+        const viewport = window.visualViewport;
+        if (!viewport) return undefined;
+        const handleViewportChange = () => {
+            scrollMessagesToBottom();
+        };
+        viewport.addEventListener('resize', handleViewportChange);
+        viewport.addEventListener('scroll', handleViewportChange);
+        const timerId = window.setTimeout(() => scrollMessagesToBottom(), 120);
+        return () => {
+            viewport.removeEventListener('resize', handleViewportChange);
+            viewport.removeEventListener('scroll', handleViewportChange);
+            window.clearTimeout(timerId);
+        };
+    }, [composeFocused, keyboardInset, scrollMessagesToBottom]);
 
     useLayoutEffect(() => {
         restoreComposeFocus();
@@ -695,9 +720,9 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                                     />
                                     <textarea
                                         ref={draftRef}
-                                        className="min-h-[88px] max-md:min-h-[72px] flex-1 resize-y rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-base md:text-sm text-text placeholder:text-muted focus:border-plex/40 focus:outline-none"
+                                        className="h-11 max-h-24 min-h-0 flex-1 resize-none rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-base leading-5 md:min-h-[88px] md:max-h-none md:h-auto md:resize-y md:text-sm text-text placeholder:text-muted focus:border-plex/40 focus:outline-none"
                                         placeholder={`Message #${activeRoom.name} · type @ to mention`}
-                                        rows={4}
+                                        rows={1}
                                         enterKeyHint="send"
                                         autoComplete="off"
                                         autoCorrect="on"
@@ -719,6 +744,7 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                                             setComposeFocused(true);
                                             setEmojiOpen(false);
                                             syncSelection();
+                                            scrollMessagesToBottom();
                                         }}
                                         onBlur={() => {
                                             setComposeFocused(false);
@@ -727,6 +753,7 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                                             if (document.activeElement === event.currentTarget) return;
                                             event.preventDefault();
                                             event.currentTarget.focus({ preventScroll: true });
+                                            scrollMessagesToBottom();
                                         }}
                                         onKeyDown={(event) => {
                                             if (mentionOpen && mentionables.length) {
@@ -760,7 +787,7 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                                     />
                                     <button
                                         type="button"
-                                        className="inline-flex h-[88px] max-md:h-[72px] w-11 shrink-0 items-center justify-center rounded-xl bg-plex text-background hover:bg-plex-hover disabled:opacity-50"
+                                        className="inline-flex h-11 md:h-[88px] w-11 shrink-0 items-center justify-center rounded-xl bg-plex text-background hover:bg-plex-hover disabled:opacity-50"
                                         disabled={sending || !draft.trim()}
                                         onClick={() => void handleSend()}
                                     >
