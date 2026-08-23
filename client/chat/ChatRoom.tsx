@@ -688,7 +688,7 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                                 className="shrink-0 border-t border-white/10 bg-[#0a0b0f] p-3 md:bg-transparent md:p-4"
                                 style={keyboardInset > 0 ? { transform: `translateY(-${keyboardInset}px)` } : undefined}
                             >
-                                <div className="relative flex items-end gap-2">
+                                <div className="relative flex items-center gap-2">
                                     {mentionOpen ? (
                                         <div className="absolute bottom-full left-0 right-[5.5rem] z-20 mb-2 max-h-48 overflow-y-auto rounded-xl border border-white/10 bg-[#12141c] p-1 shadow-2xl">
                                             {mentionables.map((user, index) => (
@@ -720,7 +720,7 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                                     />
                                     <textarea
                                         ref={draftRef}
-                                        className="h-11 max-h-24 min-h-0 flex-1 resize-none rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-base leading-5 md:min-h-[88px] md:max-h-none md:h-auto md:resize-y md:text-sm text-text placeholder:text-muted focus:border-plex/40 focus:outline-none"
+                                        className="h-10 min-h-10 max-h-10 flex-1 resize-none rounded-xl border border-white/10 bg-black/30 px-3 text-base leading-10 md:text-sm text-text placeholder:text-muted focus:border-plex/40 focus:outline-none"
                                         placeholder={`Message #${activeRoom.name} · type @ to mention`}
                                         rows={1}
                                         enterKeyHint="send"
@@ -787,7 +787,7 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                                     />
                                     <button
                                         type="button"
-                                        className="inline-flex h-11 md:h-[88px] w-11 shrink-0 items-center justify-center rounded-xl bg-plex text-background hover:bg-plex-hover disabled:opacity-50"
+                                        className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-plex text-background hover:bg-plex-hover disabled:opacity-50"
                                         disabled={sending || !draft.trim()}
                                         onClick={() => void handleSend()}
                                     >
