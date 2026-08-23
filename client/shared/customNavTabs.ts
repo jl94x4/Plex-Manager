@@ -142,3 +142,52 @@ export const createDefaultCustomNavTab = (): CustomNavTab => ({
     adminOnly: false,
     enabled: true,
 });
+
+export type CustomTabEmbedIssue = 'mixed-content' | 'blocked-host';
+
+const BLOCKED_EMBED_HOST_SUFFIXES = [
+    'google.com',
+    'youtube.com',
+    'facebook.com',
+    'twitter.com',
+    'x.com',
+    'instagram.com',
+    'microsoft.com',
+    'live.com',
+    'office.com',
+    'apple.com',
+];
+
+/** Predict iframe failures before the browser shows a broken embed. */
+export const detectCustomTabEmbedIssue = (
+    url: string,
+    portalProtocol = typeof window !== 'undefined' ? window.location.protocol : 'https:',
+): CustomTabEmbedIssue | null => {
+    const trimmed = String(url || '').trim();
+    if (!trimmed) return null;
+    try {
+        const parsed = new URL(trimmed, typeof window !== 'undefined' ? window.location.origin : 'https://localhost');
+        if (portalProtocol === 'https:' && parsed.protocol === 'http:') return 'mixed-content';
+        const host = parsed.hostname.toLowerCase();
+        for (const suffix of BLOCKED_EMBED_HOST_SUFFIXES) {
+            if (host === suffix || host.endsWith(`.${suffix}`)) return 'blocked-host';
+        }
+    } catch {
+        return null;
+    }
+    return null;
+};
+
+export const isPrivateOrLocalHost = (url: string) => {
+    try {
+        const host = new URL(String(url || '').trim(), 'https://localhost').hostname.toLowerCase();
+        return host === 'localhost'
+            || host.endsWith('.local')
+            || /^192\.168\./.test(host)
+            || /^10\./.test(host)
+            || /^172\.(1[6-9]|2\d|3[0-1])\./.test(host)
+            || host === '127.0.0.1';
+    } catch {
+        return false;
+    }
+};

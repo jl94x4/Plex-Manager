@@ -5,6 +5,7 @@ import {
     CUSTOM_NAV_ICON_OPTIONS,
     createDefaultCustomNavTab,
     customNavTabKey,
+    detectCustomTabEmbedIssue,
     insertNavKeyBefore,
     removeNavKey,
     resolveCustomNavIcon,
@@ -186,6 +187,16 @@ export const CustomNavTabsSettings: React.FC<Props> = ({
                                             }))}
                                         />
                                         <SettingHint>{t(`settings.navigation.customTabs.openMode.hint.${tab.openMode}`)}</SettingHint>
+                                        {tab.openMode === 'embed' && detectCustomTabEmbedIssue(tab.url) === 'mixed-content' ? (
+                                            <p className="mt-2 text-xs font-semibold text-yellow-300/90">
+                                                {t('settings.navigation.customTabs.embedWarningMixedContent')}
+                                            </p>
+                                        ) : null}
+                                        {tab.openMode === 'embed' && detectCustomTabEmbedIssue(tab.url) === 'blocked-host' ? (
+                                            <p className="mt-2 text-xs font-semibold text-yellow-300/90">
+                                                {t('settings.navigation.customTabs.embedWarningBlockedHost')}
+                                            </p>
+                                        ) : null}
                                     </label>
                                 </div>
 

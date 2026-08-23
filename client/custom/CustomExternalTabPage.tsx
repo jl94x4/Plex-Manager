@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ExternalLink, Globe, RefreshCw } from 'lucide-react';
+import { useDiscoverI18n } from '../discovery/i18n';
 import type { CustomNavTab } from '../shared/types';
-import { canAccessCustomNavTab } from '../shared/customNavTabs';
+import { canAccessCustomNavTab, detectCustomTabEmbedIssue } from '../shared/customNavTabs';
 
 type Props = {
     tabId: string | null;
@@ -10,12 +11,17 @@ type Props = {
 };
 
 export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = [], isAdmin = false }) => {
+    const { t } = useDiscoverI18n();
     const tab = useMemo(
         () => customNavTabs.find((entry) => String(entry.id) === String(tabId || '')),
         [customNavTabs, tabId],
     );
     const [iframeKey, setIframeKey] = useState(0);
     const [embedBlocked, setEmbedBlocked] = useState(false);
+    const predictedEmbedIssue = useMemo(
+        () => (tab?.url ? detectCustomTabEmbedIssue(tab.url) : null),
+        [tab?.url],
+    );
 
     useEffect(() => {
         setEmbedBlocked(false);
@@ -26,7 +32,7 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = 
         return (
             <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 p-8 text-center">
                 <Globe className="h-10 w-10 text-muted" />
-                <p className="text-sm text-muted">This external tab is unavailable or you do not have access.</p>
+                <p className="text-sm text-muted">{t('settings.navigation.customTabs.embed.unavailable')}</p>
             </div>
         );
     }
@@ -46,11 +52,18 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = 
                     className="inline-flex items-center gap-2 rounded-xl bg-plex px-4 py-2 text-sm font-bold text-background hover:bg-plex-hover"
                 >
                     <ExternalLink className="h-4 w-4" />
-                    Open {tab.name}
+                    {t('settings.navigation.customTabs.embed.openNamed', { name: tab.name })}
                 </a>
             </div>
         );
     }
+
+    const showEmbedWarning = predictedEmbedIssue || embedBlocked;
+    const embedWarningText = predictedEmbedIssue === 'mixed-content'
+        ? t('settings.navigation.customTabs.embed.mixedContent')
+        : predictedEmbedIssue === 'blocked-host'
+            ? t('settings.navigation.customTabs.embed.blockedHost')
+            : t('settings.navigation.customTabs.embed.genericBlocked');
 
     return (
         <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-3">
@@ -62,17 +75,19 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = 
                     ) : null}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
-                    <button
-                        type="button"
-                        className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm font-semibold text-text hover:bg-white/5"
-                        onClick={() => {
-                            setEmbedBlocked(false);
-                            setIframeKey((value) => value + 1);
-                        }}
-                    >
-                        <RefreshCw className="h-4 w-4" />
-                        Reload
-                    </button>
+                    {!predictedEmbedIssue ? (
+                        <button
+                            type="button"
+                            className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm font-semibold text-text hover:bg-white/5"
+                            onClick={() => {
+                                setEmbedBlocked(false);
+                                setIframeKey((value) => value + 1);
+                            }}
+                        >
+                            <RefreshCw className="h-4 w-4" />
+                            {t('settings.navigation.customTabs.embed.reload')}
+                        </button>
+                    ) : null}
                     <a
                         href={tab.url}
                         target="_blank"
@@ -80,42 +95,59 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = 
                         className="inline-flex items-center gap-2 rounded-xl bg-plex px-3 py-2 text-sm font-bold text-background hover:bg-plex-hover"
                     >
                         <ExternalLink className="h-4 w-4" />
-                        Open in browser
+                        {t('settings.navigation.customTabs.embed.openInBrowser')}
                     </a>
                 </div>
             </div>
 
-            {embedBlocked ? (
-                <div className="rounded-2xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-100">
-                    This site may block embedding inside the portal. Use <strong>Open in browser</strong> instead.
+            {showEmbedWarning ? (
+                <div className="rounded-2xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm leading-relaxed text-yellow-100">
+                    <p>{embedWarningText}</p>
+                    <p className="mt-2 text-yellow-200/90">{t('settings.navigation.customTabs.embed.useOpenInBrowser')}</p>
                 </div>
             ) : null}
 
-            <div className="min-h-[60vh] flex-1 overflow-hidden rounded-2xl border border-white/10 bg-black/30">
-                <iframe
-                    key={iframeKey}
-                    title={tab.name}
-                    src={tab.url}
-                    className="h-full min-h-[60vh] w-full border-0 bg-background"
-                    sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-downloads"
-                    referrerPolicy="no-referrer"
-                    onLoad={(event) => {
-                        try {
-                            const doc = (event.currentTarget as HTMLIFrameElement).contentDocument;
-                            if (!doc) {
+            {predictedEmbedIssue ? (
+                <div className="flex min-h-[50vh] flex-1 flex-col items-center justify-center gap-4 rounded-2xl border border-dashed border-white/15 bg-black/20 p-8 text-center">
+                    <Globe className="h-12 w-12 text-muted" />
+                    <p className="max-w-xl text-sm text-muted">{embedWarningText}</p>
+                    <a
+                        href={tab.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-2 rounded-xl bg-plex px-4 py-2 text-sm font-bold text-background hover:bg-plex-hover"
+                    >
+                        <ExternalLink className="h-4 w-4" />
+                        {t('settings.navigation.customTabs.embed.openInBrowser')}
+                    </a>
+                </div>
+            ) : (
+                <div className="min-h-[60vh] flex-1 overflow-hidden rounded-2xl border border-white/10 bg-black/30">
+                    <iframe
+                        key={iframeKey}
+                        title={tab.name}
+                        src={tab.url}
+                        className="h-full min-h-[60vh] w-full border-0 bg-background"
+                        sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-downloads"
+                        referrerPolicy="no-referrer"
+                        onLoad={(event) => {
+                            try {
+                                const doc = (event.currentTarget as HTMLIFrameElement).contentDocument;
+                                if (!doc) {
+                                    setEmbedBlocked(false);
+                                    return;
+                                }
+                                const bodyText = doc.body?.innerText?.trim() || '';
+                                if (/refused to connect|x-frame-options|frame-ancestors|content is blocked/i.test(bodyText)) {
+                                    setEmbedBlocked(true);
+                                }
+                            } catch {
                                 setEmbedBlocked(false);
-                                return;
                             }
-                            const bodyText = doc.body?.innerText?.trim() || '';
-                            if (/refused to connect|x-frame-options|frame-ancestors/i.test(bodyText)) {
-                                setEmbedBlocked(true);
-                            }
-                        } catch {
-                            setEmbedBlocked(false);
-                        }
-                    }}
-                />
-            </div>
+                        }}
+                    />
+                </div>
+            )}
         </div>
     );
 };
