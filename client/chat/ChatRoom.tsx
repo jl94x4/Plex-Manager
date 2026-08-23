@@ -790,7 +790,7 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                                     />
                                     <textarea
                                         ref={draftRef}
-                                        className="h-10 min-h-10 max-h-10 flex-1 resize-none rounded-xl border border-white/10 bg-black/30 px-3 text-base leading-10 md:text-sm text-text placeholder:text-muted focus:border-plex/40 focus:outline-none"
+                                        className="h-10 min-h-10 max-h-10 flex-1 resize-none overflow-hidden rounded-xl border border-white/10 bg-black/30 px-3 py-[7px] text-base leading-6 md:py-[9px] md:text-sm md:leading-5 text-text placeholder:text-muted focus:border-plex/40 focus:outline-none"
                                         placeholder={`Message #${activeRoom.name} · type @ to mention`}
                                         rows={1}
                                         enterKeyHint="send"
