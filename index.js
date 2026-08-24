@@ -18870,7 +18870,7 @@ const lockViewportForAppleClients = (html, userAgent = '') => {
     );
 };
 
-// *arr SPAs request /Content/*.css from the portal origin. Catch those
+// *arr SPAs request /Content/*.css and /api/v3/* from the portal origin. Catch those
 // leaked assets (using the embed Referer) before the HTML catch-all.
 app.use((req, res, next) => {
     if (!isLeakedArrEmbedAssetPath(req.path)) return next();
