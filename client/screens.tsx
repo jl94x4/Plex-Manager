@@ -9,7 +9,8 @@ import { appConfirm } from './shared/confirm';
 import { apiFetch, apiFetchShared } from './shared/api';
 import { InAppNotificationsBell } from './shared/InAppNotificationsBell';
 import { IN_APP_NOTIFICATIONS_CHANGED_EVENT } from './shared/inAppNotificationsRefresh';
-import { getPublicOrigin, logoUrl, portalUrl, resolvePortalAssetUrl, stripBasePath } from './shared/basePath';
+import { getPublicOrigin, logoUrl, portalUrl, resolvePortalAssetUrl, stripBasePath, PLEX_ICON_URL, JELLYFIN_ICON_URL, EMBY_ICON_URL } from './shared/basePath';
+import { LoginBrandMark } from './shared/LoginBrandMark';
 import { formatDate, getDaysUntilExpiry, getAccessProgressPct, addMonths, addYears, formatTime, formatEventName, formatDateTime, hexToRgb, formatSizeCeil, formatStreamingHour } from './shared/format';
 import { CustomSelect, ConfirmModal, StyledCheckbox, ScrollReveal } from './shared/ui';
 import { PeriodDropdown } from './shared/PeriodDropdown';
@@ -97,8 +98,6 @@ import {
 import { getHomeCustomModuleLabel, isHomeCustomModuleSectionId } from './shared/homeCustomModules';
 import { NowPlayingCompanionPanel } from './home/NowPlayingCompanionPanel';
 
-const JELLYFIN_ICON_URL = 'https://cdn.jsdelivr.net/gh/selfhst/icons/svg/jellyfin.svg';
-const EMBY_ICON_URL = 'https://cdn.jsdelivr.net/gh/selfhst/icons/svg/emby.svg';
 const STATUS_ICON_BASE = 'https://cdn.jsdelivr.net/gh/selfhst/icons/svg';
 const SIMPLE_STATUS_ICON_BASE = 'https://cdn.simpleicons.org';
 const STATUS_SERVICE_ICONS: Record<string, string> = {
@@ -6555,7 +6554,7 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, p
                                 You&apos;ll need a free Plex account to continue. You can create one securely on the next screen.
                             </p>
                             <button type="button" className={loginPrimaryBtnClass} onClick={handlePlexLogin} disabled={isLoading}>
-                                <img src={logoUrl()} alt="" className="w-5 h-5 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                                <img src={PLEX_ICON_URL} alt="" className="w-5 h-5 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                                 Request Temporary Access
                             </button>
                         </div>
@@ -6567,21 +6566,9 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, p
                                 {publicConfigWarning}
                             </div>
                         )}
-                        <div className="relative mb-8">
+                        <div className="relative mb-8 flex justify-center">
                             {!loginLogoSrc && <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-36 h-36 bg-plex/20 rounded-full blur-[60px] pointer-events-none" />}
-                            {loginLogoSrc ? (
-                                <img
-                                    src={loginLogoSrc}
-                                    alt="Server Logo"
-                                    className="w-28 h-28 sm:w-32 sm:h-32 object-cover rounded-full border-2 border-plex/40 shadow-[0_0_40px_rgba(229,160,13,0.25)] relative z-10"
-                                    onError={(e) => {
-                                        e.currentTarget.src = logoUrl();
-                                        e.currentTarget.className = 'w-28 h-28 sm:w-32 sm:h-32 object-cover rounded-full border-2 border-plex/40 shadow-[0_0_40px_rgba(229,160,13,0.25)] relative z-10';
-                                    }}
-                                />
-                            ) : (
-                                <img src={logoUrl()} alt="Server Logo" className="w-28 h-28 sm:w-32 sm:h-32 object-cover rounded-full border-2 border-plex/40 shadow-[0_0_40px_rgba(229,160,13,0.25)] relative z-10" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-                            )}
+                            <LoginBrandMark src={loginLogoSrc} />
                         </div>
 
                         {!showTrialAccess && (
@@ -6681,7 +6668,7 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, p
                             </div>
                         ) : (
                             <button type="button" className={loginSecondaryBtnClass} onClick={handlePlexLogin} disabled={isLoading}>
-                                <img src={logoUrl()} alt="" className="w-5 h-5 object-contain opacity-80" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                                <img src={PLEX_ICON_URL} alt="" className="w-5 h-5 object-contain opacity-90" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                                 Login with Plex
                             </button>
                         )}
@@ -12925,13 +12912,15 @@ export const PublicInviteClaim: React.FC<{ code: string }> = ({ code }) => {
 
     return (
         <div className="flex flex-col items-center justify-center min-h-[60vh] text-center max-w-lg w-full animate-fade-in mx-auto px-4 mt-20">
-            <div className="relative mb-8">
+            <div className="relative mb-8 flex justify-center">
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 bg-plex rounded-full blur-[50px] opacity-20 pointer-events-none"></div>
-                {info.customLoginLogoUrl || info.customLogoUrl || info.thumb ? (
-                    <img src={resolvePortalAssetUrl(info.customLoginLogoUrl || info.customLogoUrl || info.thumb)} alt="Server Logo" className="w-32 h-32 object-cover rounded-full border-2 border-plex drop-shadow-[0_0_15px_rgba(229,160,13,0.25)] relative z-10" onError={(e) => { e.currentTarget.src = logoUrl(); e.currentTarget.className = 'w-40 object-contain drop-shadow-[0_0_15px_rgba(229,160,13,0.25)] relative z-10'; }} />
-                ) : (
-                    <img src={logoUrl()} alt="Server Logo" className="w-40 object-contain drop-shadow-[0_0_15px_rgba(229,160,13,0.25)] relative z-10" onError={(e) => e.currentTarget.style.display = 'none'} />
-                )}
+                <LoginBrandMark
+                    size="lg"
+                    src={info.customLoginLogoUrl || info.customLogoUrl || info.thumb
+                        ? resolvePortalAssetUrl(info.customLoginLogoUrl || info.customLogoUrl || info.thumb)
+                        : null}
+                    className="drop-shadow-[0_0_15px_rgba(229,160,13,0.25)]"
+                />
             </div>
 
             <h1 className="text-4xl md:text-5xl font-bold text-text mb-4">You've been invited!</h1>
@@ -12950,6 +12939,9 @@ export const PublicInviteClaim: React.FC<{ code: string }> = ({ code }) => {
                 disabled={isClaiming}
                 className="w-full max-w-sm px-6 py-4 bg-plex text-background text-lg font-bold rounded-xl hover:bg-plex-hover transition-all transform hover:scale-105 active:scale-95 shadow-lg shadow-plex/20 flex items-center justify-center gap-3 disabled:opacity-50 disabled:cursor-not-allowed"
             >
+                {!isClaiming ? (
+                    <img src={PLEX_ICON_URL} alt="" className="w-6 h-6 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                ) : null}
                 {isClaiming ? 'Claiming...' : 'Sign in with Plex to Claim'}
             </button>
             <p className="mt-6 text-sm text-muted">You will be redirected to Plex.tv to securely authenticate your account.</p>

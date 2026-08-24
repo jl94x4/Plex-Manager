@@ -6,6 +6,11 @@ declare global {
 
 export const LOGO_PATH = '/static/logo.png';
 
+/** Official brand marks for auth buttons (not the portal SMP logo). */
+export const PLEX_ICON_URL = 'https://cdn.jsdelivr.net/gh/selfhst/icons/svg/plex.svg';
+export const JELLYFIN_ICON_URL = 'https://cdn.jsdelivr.net/gh/selfhst/icons/svg/jellyfin.svg';
+export const EMBY_ICON_URL = 'https://cdn.jsdelivr.net/gh/selfhst/icons/svg/emby.svg';
+
 const readBasePathFromBaseTag = (): string => {
     const baseEl = document.querySelector('base[href]');
     if (!baseEl) return '';

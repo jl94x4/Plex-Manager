@@ -3,7 +3,7 @@ import {
     Settings, Sparkles, ChevronRight, ChevronLeft, Check, Palette, Mail, Layers, Server, PartyPopper, BookOpen, Upload,
 } from 'lucide-react';
 import { apiFetch, PORTAL_CSRF_HEADER, PORTAL_CSRF_VALUE } from '../shared/api';
-import { getPublicOrigin, logoUrl, portalUrl, stripBasePath } from '../shared/basePath';
+import { getPublicOrigin, logoUrl, portalUrl, stripBasePath, PLEX_ICON_URL } from '../shared/basePath';
 import { IntegrationTestButton } from '../shared/IntegrationTestButton';
 import { CustomSelect } from '../shared/ui';
 import { AuthPageBackground, themeClasses } from '../shared/theme';
@@ -131,7 +131,7 @@ const MEDIA_SERVER_OPTIONS = [
     { label: 'Emby', value: 'emby' },
 ];
 const MEDIA_SERVER_LOGOS: Record<string, string> = {
-    plex: 'https://cdn.jsdelivr.net/gh/selfhst/icons/svg/plex.svg',
+    plex: PLEX_ICON_URL,
     jellyfin: 'https://cdn.jsdelivr.net/gh/selfhst/icons/svg/jellyfin.svg',
     emby: 'https://cdn.jsdelivr.net/gh/selfhst/icons/svg/emby.svg',
 };
@@ -800,7 +800,7 @@ export const SetupWizard: React.FC<{ onComplete: () => void }> = ({ onComplete }
                                         disabled={isLoading}
                                         className={`${primaryBtnClass} w-full sm:w-auto text-base py-4`}
                                     >
-                                        <img src={logoUrl()} alt="" className="w-5 h-5 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                                        <img src={PLEX_ICON_URL} alt="" className="w-5 h-5 object-contain" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
                                         {isLoading ? 'Redirecting to Plex…' : 'Sign in with Plex'}
                                     </button>
                                     <p className="text-xs text-muted leading-relaxed">Uses secure Plex OAuth — we&apos;ll fetch your owned servers automatically. No password stored.</p>

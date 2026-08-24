@@ -52,6 +52,7 @@ import { HomeLayoutSettings } from './HomeLayoutSettings';
 import { AchievementsSettings } from './AchievementsSettings';
 import { AnalyticsSettings } from './AnalyticsSettings';
 import { MemoryDiagnosticsSection } from './MemoryDiagnosticsSection';
+import { LoginBrandMark } from '../shared/LoginBrandMark';
 import { NavigationOrderSettings } from './NavigationOrderSettings';
 import { CustomNavTabsSettings } from './CustomNavTabsSettings';
 import { HomeCustomModulesSettings } from './HomeCustomModulesSettings';
@@ -4146,7 +4147,7 @@ export const SettingsDashboard: React.FC = () => {
                                                 </div>
 
                                                 <div>
-                                                    <SettingFieldLabel hint={<SettingHint>Round or square mark on the login screen and invite pages. Falls back to the sidebar logo when empty.</SettingHint>}>
+                                                    <SettingFieldLabel hint={<SettingHint>Shown in the circular frame on the login screen. Wide logos are scaled to fit inside the circle; use a square image for a full-bleed look.</SettingHint>}>
                                                         Login Page Logo
                                                     </SettingFieldLabel>
                                                     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_14rem] gap-3 mt-1">
@@ -4310,13 +4311,9 @@ export const SettingsDashboard: React.FC = () => {
                                                     >
                                                         <div className="text-center w-full">
                                                             {splashPreviewLogoSrc ? (
-                                                                <img
-                                                                    key={splashPreviewLogoSrc}
+                                                                <LoginBrandMark
                                                                     src={splashPreviewLogoSrc}
-                                                                    alt="Server icon preview"
-                                                                    className="max-w-32 max-h-28 object-contain mx-auto mb-4 drop-shadow-[0_0_24px_rgba(0,0,0,0.75)]"
-                                                                    onLoad={(e) => { e.currentTarget.style.display = ''; }}
-                                                                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                                                    className="mx-auto mb-4"
                                                                 />
                                                             ) : (
                                                                 <div className="w-24 h-24 rounded-full border-2 border-plex/50 bg-background/80 mx-auto mb-4 p-3 shadow-[0_0_36px_rgba(0,164,220,0.28)]">
