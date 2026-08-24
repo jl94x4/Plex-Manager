@@ -271,7 +271,7 @@ export const ConfirmModal: React.FC<{
             onMouseDown={(event) => event.stopPropagation()}
         >
             <div
-                className={`modal-glass animate-slide-up max-w-md w-full pointer-events-auto ${
+                className={`glass-card overflow-hidden animate-slide-up max-w-md w-full p-6 pointer-events-auto ${
                     danger ? 'border border-red-500/40 shadow-[0_0_40px_rgba(239,68,68,0.15)]' : ''
                 }`}
                 role="dialog"
@@ -304,7 +304,7 @@ export const ConfirmModal: React.FC<{
                         className={
                             danger
                                 ? 'rounded-lg border border-red-500/60 bg-red-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-red-500'
-                                : 'btn-primary px-4 py-2.5 text-sm'
+                                : 'inline-flex items-center justify-center rounded-xl bg-plex px-4 py-2.5 text-sm font-bold text-background hover:bg-plex-hover'
                         }
                         onClick={onConfirm}
                     >
