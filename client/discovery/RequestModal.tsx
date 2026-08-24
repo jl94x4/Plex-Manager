@@ -865,9 +865,10 @@ export const RequestModal: React.FC<Props> = ({
 
     return (
         <ModalPortal open={open}>
-        {/* #170: size with top + bottom only. A second h-[calc(100dvh-…)] fights
-            the insets on iOS (height wins, bottom is ignored) and the sheet
-            becomes taller than the visible viewport, so Advanced never scrolls. */}
+        {/* Hug the form (no full-screen gap under Advanced). Cap at the overlay
+            height so long TV season lists still scroll above the tab bar.
+            Size the overlay with top + bottom only — a second h-[calc(100dvh-…)]
+            fights iOS insets (height wins, bottom is ignored). */}
         <div className="fixed inset-x-0 top-0 z-[340] flex min-h-0 items-end overflow-hidden sm:items-center justify-center p-0 sm:p-4 bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] sm:inset-0">
             <button
                 type="button"
@@ -880,7 +881,7 @@ export const RequestModal: React.FC<Props> = ({
                 aria-modal="true"
                 aria-labelledby="request-modal-title"
                 onMouseDown={(event) => event.stopPropagation()}
-                className="absolute inset-0 sm:relative sm:inset-auto h-full w-full sm:h-auto sm:max-w-3xl lg:max-w-4xl sm:max-h-[85vh] min-h-0 bg-card border border-white/10 rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+                className="relative w-full max-h-full sm:max-w-3xl lg:max-w-4xl sm:max-h-[85vh] min-h-0 bg-card border border-white/10 rounded-t-2xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden"
             >
                 <div className="flex items-start justify-between gap-4 p-5 border-b border-white/10 bg-black/20 shrink-0">
                     <div className="flex items-start gap-4 min-w-0">

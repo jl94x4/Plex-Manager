@@ -26,6 +26,43 @@ type Options = {
 
 /** First paint: two batches (~60 titles), then +30 on each scroll. */
 const INITIAL_BATCH_COUNT = 2;
+const MAX_BROWSE_CACHE_ENTRIES = 8;
+
+type BrowseCacheEntry = {
+    results: any[];
+    loadedPage: number;
+    totalPages: number;
+};
+
+const browseCache = new Map<string, BrowseCacheEntry>();
+
+const peekBrowseCache = (key: string): BrowseCacheEntry | null => {
+    const entry = browseCache.get(key);
+    return entry?.results?.length ? entry : null;
+};
+
+const readBrowseCache = (key: string): BrowseCacheEntry | null => {
+    const entry = peekBrowseCache(key);
+    if (!entry) return null;
+    browseCache.delete(key);
+    browseCache.set(key, entry);
+    return entry;
+};
+
+const writeBrowseCache = (key: string, entry: BrowseCacheEntry) => {
+    if (!key || !entry.results.length) return;
+    browseCache.delete(key);
+    browseCache.set(key, {
+        results: entry.results,
+        loadedPage: entry.loadedPage,
+        totalPages: entry.totalPages,
+    });
+    while (browseCache.size > MAX_BROWSE_CACHE_ENTRIES) {
+        const oldest = browseCache.keys().next().value;
+        if (!oldest) break;
+        browseCache.delete(oldest);
+    }
+};
 
 export function useDiscoverInfiniteScroll({
     resetKey,
@@ -36,10 +73,11 @@ export function useDiscoverInfiniteScroll({
 }: Options) {
     const filterOptionsRef = useRef(filterOptions);
     filterOptionsRef.current = filterOptions;
-    const [results, setResults] = useState<any[]>([]);
-    const [loadedPage, setLoadedPage] = useState(0);
-    const [totalPages, setTotalPages] = useState(1);
-    const [loading, setLoading] = useState(true);
+    const [results, setResults] = useState<any[]>(() => peekBrowseCache(resetKey)?.results ?? []);
+    const [loadedPage, setLoadedPage] = useState(() => peekBrowseCache(resetKey)?.loadedPage ?? 0);
+    const [totalPages, setTotalPages] = useState(() => peekBrowseCache(resetKey)?.totalPages ?? 1);
+    const [loading, setLoading] = useState(() => !peekBrowseCache(resetKey)?.results?.length);
+    const committedKeyRef = useRef(peekBrowseCache(resetKey)?.results?.length ? resetKey : '');
     const [loadingMore, setLoadingMore] = useState(false);
     const sentinelRef = useRef<HTMLDivElement>(null);
     const fetchingRef = useRef(false);
@@ -92,10 +130,29 @@ export function useDiscoverInfiniteScroll({
     }, [fetchPage]);
 
     useEffect(() => {
+        if (committedKeyRef.current === resetKey && results.length) {
+            writeBrowseCache(resetKey, { results, loadedPage, totalPages });
+        }
+    }, [resetKey, results, loadedPage, totalPages]);
+
+    useEffect(() => {
         let cancelled = false;
         generationRef.current += 1;
         prefetchRef.current = null;
         prefetchingRef.current = false;
+
+        const cachedOnKey = readBrowseCache(resetKey);
+        if (cachedOnKey?.results?.length) {
+            committedKeyRef.current = resetKey;
+            setResults(cachedOnKey.results);
+            setLoadedPage(cachedOnKey.loadedPage);
+            setTotalPages(cachedOnKey.totalPages);
+            setLoading(false);
+            void prefetchNextBatch(cachedOnKey.loadedPage + 1, cachedOnKey.totalPages);
+            return () => {
+                cancelled = true;
+            };
+        }
 
         const runInitialLoad = async () => {
             setLoading(true);
@@ -126,9 +183,16 @@ export function useDiscoverInfiniteScroll({
                 if (!cancelled) {
                     // Server stamps mediaInfo (disk cache + warm catalog). Re-apply hide only —
                     // do not client availability-batch (that made badges pop in after paint).
-                    setResults(filterDiscoverBrowseItems(merged, filterOptionsRef.current || {}));
+                    const nextResults = filterDiscoverBrowseItems(merged, filterOptionsRef.current || {});
+                    committedKeyRef.current = resetKey;
+                    setResults(nextResults);
                     setLoadedPage(lastPage);
                     setTotalPages(maxTotalPages);
+                    writeBrowseCache(resetKey, {
+                        results: nextResults,
+                        loadedPage: lastPage,
+                        totalPages: maxTotalPages,
+                    });
                     void prefetchNextBatch(lastPage + 1, maxTotalPages);
                 }
             } catch (e) {

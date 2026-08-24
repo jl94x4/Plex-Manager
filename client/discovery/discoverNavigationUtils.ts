@@ -50,16 +50,37 @@ const writeScrollMap = (value: Record<string, number>) => {
     }
 };
 
+const SCROLL_RESTORE_SLACK_PX = 48;
+const SCROLL_RESTORE_TIMEOUT_MS = 2500;
+
+/** Desktop Discover scrolls `#main-scroll-container`; mobile uses the document. */
+const discoverScrollerIsContainer = () => {
+    const container = document.getElementById('main-scroll-container');
+    if (!container) return false;
+    const overflowY = window.getComputedStyle(container).overflowY;
+    return overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay';
+};
+
+const readDiscoverScrollTop = () => {
+    const container = document.getElementById('main-scroll-container');
+    if (container && discoverScrollerIsContainer()) {
+        return Math.max(0, Math.round(container.scrollTop || 0));
+    }
+    return Math.max(0, Math.round(window.scrollY || document.documentElement.scrollTop || 0));
+};
+
+const writeDiscoverScrollTop = (top: number) => {
+    const container = document.getElementById('main-scroll-container');
+    if (container) container.scrollTop = top;
+    window.scrollTo(0, top);
+};
+
 export const stashDiscoverScrollPosition = (path = currentDiscoverPathWithSearch()) => {
     if (typeof window === 'undefined') return;
     const key = toDiscoveryPath(path);
     if (!key) return;
-    const container = document.getElementById('main-scroll-container');
-    const scrollTop = container
-        ? Math.max(0, Math.round(container.scrollTop || 0))
-        : Math.max(0, Math.round(window.scrollY || 0));
     const next = readScrollMap();
-    next[key] = scrollTop;
+    next[key] = readDiscoverScrollTop();
     writeScrollMap(next);
 };
 
@@ -69,10 +90,42 @@ export const restoreDiscoverScrollPosition = (path = currentDiscoverPathWithSear
     if (!key) return false;
     const top = Number(readScrollMap()[key]);
     if (!Number.isFinite(top)) return false;
-    const container = document.getElementById('main-scroll-container');
-    if (container) container.scrollTop = top;
-    window.scrollTo(0, top);
-    return true;
+    writeDiscoverScrollTop(top);
+    const applied = readDiscoverScrollTop();
+    return Math.abs(applied - top) <= SCROLL_RESTORE_SLACK_PX || top <= SCROLL_RESTORE_SLACK_PX;
+};
+
+/** Keep applying a saved offset until the poster grid is tall enough (or we time out). */
+export const restoreDiscoverScrollPositionWhenReady = (
+    path = currentDiscoverPathWithSearch(),
+    { fallbackToTop = true }: { fallbackToTop?: boolean } = {},
+) => {
+    if (typeof window === 'undefined') return () => undefined;
+    const key = toDiscoveryPath(path);
+    if (!key) return () => undefined;
+    const top = Number(readScrollMap()[key]);
+    if (!Number.isFinite(top)) {
+        if (fallbackToTop) scrollPortalToTop();
+        return () => undefined;
+    }
+
+    let cancelled = false;
+    let raf = 0;
+    const started = Date.now();
+
+    const tick = () => {
+        if (cancelled) return;
+        if (restoreDiscoverScrollPosition(path) || Date.now() - started >= SCROLL_RESTORE_TIMEOUT_MS) {
+            return;
+        }
+        raf = window.requestAnimationFrame(tick);
+    };
+    raf = window.requestAnimationFrame(tick);
+
+    return () => {
+        cancelled = true;
+        window.cancelAnimationFrame(raf);
+    };
 };
 
 export const stashDiscoverBrowsePath = (path = currentDiscoverPathWithSearch()) => {

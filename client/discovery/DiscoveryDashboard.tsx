@@ -24,8 +24,7 @@ import { RequestQueueDashboard } from '../requests/RequestQueueDashboard';
 import {
     currentDiscoverPathWithSearch,
     readDiscoverBrowsePath,
-    restoreDiscoverScrollPosition,
-    scrollPortalToTop,
+    restoreDiscoverScrollPositionWhenReady,
     stashDiscoverBrowsePath,
     stashDiscoverDetailSeed,
     stashDiscoverScrollPosition,
@@ -141,22 +140,24 @@ const DiscoveryDashboardInner: React.FC<{
         };
     }, [refreshPath]);
 
+    const stopScrollRestoreRef = useRef<(() => void) | null>(null);
+    const startScrollRestore = useCallback((
+        restorePath = currentDiscoverPathWithSearch(),
+        options?: { fallbackToTop?: boolean },
+    ) => {
+        stopScrollRestoreRef.current?.();
+        stopScrollRestoreRef.current = restoreDiscoverScrollPositionWhenReady(restorePath, options);
+    }, []);
+
     useEffect(() => {
         const fullPath = currentDiscoverPathWithSearch();
         stashDiscoverBrowsePath(fullPath);
-        let raf2 = 0;
-        const raf = window.requestAnimationFrame(() => {
-            raf2 = window.requestAnimationFrame(() => {
-                if (!restoreDiscoverScrollPosition(fullPath)) {
-                    scrollPortalToTop();
-                }
-            });
-        });
+        startScrollRestore(fullPath);
         return () => {
-            window.cancelAnimationFrame(raf);
-            if (raf2) window.cancelAnimationFrame(raf2);
+            stopScrollRestoreRef.current?.();
+            stopScrollRestoreRef.current = null;
         };
-    }, [path]);
+    }, [path, startScrollRestore]);
 
     const navigate = useCallback((newPath: string) => {
         const currentPath = currentDiscoverPathWithSearch();
@@ -334,7 +335,8 @@ const DiscoveryDashboardInner: React.FC<{
             const tag = target?.tagName;
             if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target?.isContentEditable) return;
             event.preventDefault();
-            searchInputRef.current?.focus();
+            stashDiscoverScrollPosition();
+            searchInputRef.current?.focus({ preventScroll: true });
             searchInputRef.current?.select();
         };
         window.addEventListener('keydown', onKeyDown);
@@ -444,7 +446,10 @@ const DiscoveryDashboardInner: React.FC<{
         searchLoading,
         searchError,
         searchResults,
-        onClose: () => setSearchOpen(false),
+        onClose: () => {
+            setSearchOpen(false);
+            startScrollRestore(currentDiscoverPathWithSearch(), { fallbackToTop: false });
+        },
         onClear: () => {
             searchAbortRef.current?.abort();
             setQuery('');
@@ -461,9 +466,13 @@ const DiscoveryDashboardInner: React.FC<{
             } catch {
                 /* ignore */
             }
+            startScrollRestore(currentDiscoverPathWithSearch(), { fallbackToTop: false });
         },
         onQueryChange: setQuery,
-        onFocus: () => query.trim().length >= 2 && setSearchOpen(true),
+        onFocus: () => {
+            stashDiscoverScrollPosition();
+            if (query.trim().length >= 2) setSearchOpen(true);
+        },
         onRetrySearch: () => setSearchRetryToken((n) => n + 1),
         formatItem,
         navigate,
