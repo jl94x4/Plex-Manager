@@ -12089,36 +12089,17 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     const navListRef = useRef<HTMLDivElement>(null);
     const [navDensity, setNavDensity] = useState(0);
 
-    const recomputeNavDensity = useCallback(() => {
-        const nav = navListRef.current;
-        if (!nav) return;
-        const overflow = nav.scrollHeight - nav.clientHeight;
-        let density = 0;
-        if (overflow > 2) density = 1;
-        if (overflow > 32) density = 2;
-        if (overflow > 64) density = 3;
-        setNavDensity((prev) => (prev === density ? prev : density));
-    }, []);
-
-    useLayoutEffect(() => {
-        const nav = navListRef.current;
-        if (!nav) return;
-        const run = () => recomputeNavDensity();
-        run();
-        const ro = new ResizeObserver(() => run());
-        ro.observe(nav);
-        window.addEventListener('resize', run);
-        return () => {
-            ro.disconnect();
-            window.removeEventListener('resize', run);
-        };
-    }, [normalizedNavOrder, sidebarIdentityPosition, navDensity, recomputeNavDensity]);
+    const desktopNavKeys = useMemo(() => (
+        normalizedNavOrder.filter((key) => key !== 'logs' && navItemsConfig[key])
+    ), [normalizedNavOrder, navItemsConfig]);
 
     const DESKTOP_NAV_DENSITY_STYLES = [
         { gap: 'gap-2.5', px: 'px-3', py: 'py-1', text: 'text-[15px]', icon: 'w-5 h-5' },
         { gap: 'gap-2', px: 'px-3', py: 'py-0.5', text: 'text-sm', icon: 'w-[18px] h-[18px]' },
         { gap: 'gap-1.5', px: 'px-2.5', py: 'py-0.5', text: 'text-[13px]', icon: 'w-4 h-4' },
-        { gap: 'gap-1.5', px: 'px-2', py: 'py-0', text: 'text-xs', icon: 'w-3.5 h-3.5' },
+        { gap: 'gap-1.5', px: 'px-2', py: 'py-0', text: 'text-xs leading-tight', icon: 'w-3.5 h-3.5' },
+        { gap: 'gap-1', px: 'px-2', py: 'py-0', text: 'text-[11px] leading-none', icon: 'w-3.5 h-3.5' },
+        { gap: 'gap-0', px: 'px-1.5', py: 'py-0', text: 'text-[10px] leading-tight', icon: 'w-3.5 h-3.5' },
     ];
     const IDENTITY_DENSITY_STYLES = [
         {
@@ -12127,6 +12108,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             round: 'w-[5.75rem] h-[5.75rem]',
             title: 'text-[1.3rem]',
             showPortal: true,
+            hideTitle: false,
             logoMb: 'mb-2',
             sectionTop: 'pb-2 mb-2',
             sectionBottom: 'pt-2 mt-2',
@@ -12137,6 +12119,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             round: 'w-[4.5rem] h-[4.5rem]',
             title: 'text-[1.1rem]',
             showPortal: true,
+            hideTitle: false,
             logoMb: 'mb-1.5',
             sectionTop: 'pb-1.5 mb-1.5',
             sectionBottom: 'pt-1.5 mt-1.5',
@@ -12147,6 +12130,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             round: 'w-[3.75rem] h-[3.75rem]',
             title: 'text-base',
             showPortal: true,
+            hideTitle: false,
             logoMb: 'mb-1',
             sectionTop: 'pb-1 mb-1',
             sectionBottom: 'pt-1 mt-1',
@@ -12157,12 +12141,71 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             round: 'w-[3rem] h-[3rem]',
             title: 'text-sm',
             showPortal: false,
+            hideTitle: false,
             logoMb: 'mb-0.5',
             sectionTop: 'pb-1 mb-1',
             sectionBottom: 'pt-1 mt-1',
         },
+        {
+            customWrap: 'w-[2.75rem]',
+            customImg: 'max-w-[2.75rem] max-h-[2rem]',
+            round: 'w-[2.5rem] h-[2.5rem]',
+            title: 'text-xs',
+            showPortal: false,
+            hideTitle: false,
+            logoMb: 'mb-0',
+            sectionTop: 'pb-0.5 mb-0.5',
+            sectionBottom: 'pt-0.5 mt-0.5',
+        },
+        {
+            customWrap: 'w-[2.25rem]',
+            customImg: 'max-w-[2.25rem] max-h-[1.75rem]',
+            round: 'w-8 h-8',
+            title: 'text-[10px]',
+            showPortal: false,
+            hideTitle: true,
+            logoMb: 'mb-0',
+            sectionTop: 'pb-0 mb-0',
+            sectionBottom: 'pt-0 mt-0',
+        },
     ];
-    const densityLevel = Math.min(Math.max(navDensity, 0), DESKTOP_NAV_DENSITY_STYLES.length - 1);
+    const maxNavDensity = DESKTOP_NAV_DENSITY_STYLES.length - 1;
+    const hintedNavDensity = useMemo(() => (
+        Math.min(maxNavDensity, Math.max(0, Math.floor((desktopNavKeys.length - 12) / 3)))
+    ), [desktopNavKeys, maxNavDensity]);
+
+    useLayoutEffect(() => {
+        setNavDensity(hintedNavDensity);
+    }, [desktopNavKeys, sidebarIdentityPosition, hintedNavDensity]);
+
+    useLayoutEffect(() => {
+        const nav = navListRef.current;
+        if (!nav) return;
+        const overflow = nav.scrollHeight - nav.clientHeight;
+        if (overflow > 1 && navDensity < maxNavDensity) {
+            setNavDensity((density) => Math.min(maxNavDensity, density + 1));
+        }
+    }, [navDensity, desktopNavKeys, maxNavDensity]);
+
+    useLayoutEffect(() => {
+        const nav = navListRef.current;
+        if (!nav) return;
+        const onResize = () => {
+            const overflow = nav.scrollHeight - nav.clientHeight;
+            if (overflow > 1) {
+                setNavDensity((density) => Math.min(maxNavDensity, density + 1));
+            }
+        };
+        const ro = new ResizeObserver(onResize);
+        ro.observe(nav);
+        window.addEventListener('resize', onResize);
+        return () => {
+            ro.disconnect();
+            window.removeEventListener('resize', onResize);
+        };
+    }, [maxNavDensity]);
+
+    const densityLevel = Math.min(Math.max(navDensity, 0), maxNavDensity);
     const desktopNavDensity = DESKTOP_NAV_DENSITY_STYLES[densityLevel];
     const identityDensity = IDENTITY_DENSITY_STYLES[densityLevel];
 
@@ -12262,9 +12305,11 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             </div>
 
             <div className="flex flex-col items-center text-center px-2">
-                <h2 className={`${identityDensity.title} font-black text-text tracking-tight leading-tight line-clamp-2 transition-all duration-300`}>
-                    {serverName}
-                </h2>
+                {!identityDensity.hideTitle && (
+                    <h2 className={`${identityDensity.title} font-black text-text tracking-tight leading-tight line-clamp-2 transition-all duration-300`}>
+                        {serverName}
+                    </h2>
+                )}
                 {identityDensity.showPortal && (
                     <div className="mt-1 flex items-center gap-2">
                         <div className="h-px w-6 bg-gradient-to-r from-transparent to-plex/50"></div>
@@ -12380,7 +12425,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
                 <div
                     ref={navListRef}
-                    className={`flex flex-col justify-start min-h-0 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar transition-all duration-300 ${densityLevel > 0 ? 'gap-0' : 'gap-0.5'} py-0.5`}
+                    className={`sidebar-nav-scroll flex flex-col justify-start min-h-0 flex-1 transition-all duration-300 ${densityLevel > 0 ? 'gap-0' : 'gap-0.5'} py-0.5`}
                     data-nav-density={densityLevel}
                 >
                     {normalizedNavOrder.map((key) => {
@@ -12397,7 +12442,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
                 {sidebarIdentityPosition !== 'top' && renderServerIdentity('bottom')}
 
-                <div className="mt-2 pt-2 border-t border-white/10 shrink-0 w-full min-w-0">
+                <div className={`${densityLevel >= 4 ? 'mt-1 pt-1' : 'mt-2 pt-2'} border-t border-white/10 shrink-0 w-full min-w-0`}>
                     <div className="grid grid-cols-[minmax(0,1fr)_2.75rem] gap-1.5 items-stretch w-full min-w-0">
                         <div
                             className={`min-w-0 flex items-center gap-0.5 rounded-xl border bg-white/5 hover:border-plex/40 transition-all overflow-hidden ${currentRoute === 'profile' ? 'border-plex/50 bg-plex/10' : 'border-white/10'}`}
