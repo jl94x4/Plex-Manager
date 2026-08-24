@@ -18663,8 +18663,6 @@ const staticAssetOptions = {
         }
     },
 };
-const staticDir = path.join(process.cwd(), 'static');
-
 const servePersistedBrandingAsset = async (req, res, next) => {
     const parsed = parseBrandingPublicPath(req.path);
     if (!parsed) return next();
