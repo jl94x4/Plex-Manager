@@ -256,6 +256,229 @@ const isRequestableRecommendation = (item: Recommendation): boolean => {
     return !shouldHideAvailableItem(item) && !shouldHideRequestedItem(item);
 };
 
+const CompanionOverviewText: React.FC<{ title: string; text: string }> = ({ title, text }) => {
+    const { t } = useDiscoverI18n();
+    const [expanded, setExpanded] = useState(false);
+    const trimmed = String(text || '').trim();
+    if (!trimmed) return null;
+    const isLong = trimmed.length > 240;
+
+    return (
+        <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2.5">
+            <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold mb-1.5">{title}</p>
+            <p className={`text-sm text-white/85 leading-relaxed whitespace-pre-line ${!expanded && isLong ? 'line-clamp-5' : ''}`}>
+                {trimmed}
+            </p>
+            {isLong ? (
+                <button
+                    type="button"
+                    onClick={() => setExpanded((value) => !value)}
+                    className="mt-1.5 text-xs font-semibold text-emerald-200 hover:text-emerald-100 transition-colors"
+                >
+                    {expanded
+                        ? t('homeDashboard.nowPlayingCompanion.overview.readLess')
+                        : t('homeDashboard.nowPlayingCompanion.overview.readMore')}
+                </button>
+            ) : null}
+        </div>
+    );
+};
+
+const CompanionArtBackdrop: React.FC<{ imagePath?: string | null; className?: string; size?: string }> = ({
+    imagePath,
+    className = '',
+    size = 'w780',
+}) => {
+    if (!imagePath) return null;
+    return (
+        <div className={`pointer-events-none absolute inset-0 overflow-hidden ${className}`}>
+            <img
+                src={posterUrl(imagePath, size)}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover opacity-[0.22] blur-2xl scale-110"
+            />
+            <div className="absolute inset-0 bg-gradient-to-br from-black/70 via-black/55 to-black/80" />
+        </div>
+    );
+};
+
+const CompanionProgressRing: React.FC<{ progress: number; size?: number }> = ({ progress, size = 76 }) => {
+    const radius = (size - 8) / 2;
+    const circumference = 2 * Math.PI * radius;
+    const offset = circumference - (Math.max(0, Math.min(100, progress)) / 100) * circumference;
+    return (
+        <svg width={size} height={size} className="absolute -inset-1.5">
+            <circle
+                cx={size / 2}
+                cy={size / 2}
+                r={radius}
+                fill="none"
+                stroke="rgba(255,255,255,0.12)"
+                strokeWidth="3"
+            />
+            <circle
+                cx={size / 2}
+                cy={size / 2}
+                r={radius}
+                fill="none"
+                stroke="rgba(52,211,153,0.95)"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeDasharray={circumference}
+                strokeDashoffset={offset}
+                transform={`rotate(-90 ${size / 2} ${size / 2})`}
+            />
+        </svg>
+    );
+};
+
+type CompanionHeroCardProps = {
+    title: string;
+    year: string;
+    mediaType: 'movie' | 'tv';
+    tagline: string;
+    posterPath: string | null;
+    heroArtPath: string | null;
+    seasonNumber: number;
+    episodeNumber: number;
+    episodeTitle: string;
+    progress: number;
+    metaChips: string[];
+    overviewBlocks: Array<{ key: string; title: string; text: string }>;
+    unavailableLabel: string;
+};
+
+const CompanionHeroCard: React.FC<CompanionHeroCardProps> = ({
+    title,
+    year,
+    mediaType,
+    tagline,
+    posterPath,
+    heroArtPath,
+    seasonNumber,
+    episodeNumber,
+    episodeTitle,
+    progress,
+    metaChips,
+    overviewBlocks,
+    unavailableLabel,
+}) => (
+    <div className="relative overflow-hidden rounded-2xl border border-white/15 bg-black/35 shadow-[0_24px_70px_rgba(0,0,0,0.45)]">
+        <div className="relative h-44 sm:h-52 lg:h-56">
+            {heroArtPath ? (
+                <img
+                    src={posterUrl(heroArtPath, 'w780')}
+                    alt=""
+                    className="absolute inset-0 h-full w-full object-cover"
+                />
+            ) : (
+                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/20 via-violet-500/10 to-black" />
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/55 to-black/10" />
+            <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-transparent to-black/35" />
+            <div className="absolute inset-x-0 bottom-0 p-3 sm:p-4 flex items-end gap-3 sm:gap-4">
+                <div className="relative shrink-0">
+                    {posterPath ? (
+                        <div className="relative">
+                            <CompanionProgressRing progress={progress} />
+                            <img
+                                src={posterUrl(posterPath, 'w342')}
+                                alt={title}
+                                className="relative z-[1] w-[4.5rem] sm:w-20 rounded-xl border border-white/25 shadow-[0_12px_30px_rgba(0,0,0,0.55)] object-cover aspect-[2/3]"
+                            />
+                        </div>
+                    ) : null}
+                </div>
+                <div className="min-w-0 flex-1">
+                    <p className="text-[10px] uppercase tracking-[0.22em] text-emerald-200/90 font-bold">
+                        {mediaType === 'tv' ? 'Series' : 'Feature'} · {progress}% watched
+                    </p>
+                    <h4 className="text-lg sm:text-xl font-black text-white leading-tight truncate">
+                        {title}{year ? ` (${year})` : ''}
+                    </h4>
+                    {mediaType === 'tv' && seasonNumber > 0 && episodeNumber > 0 ? (
+                        <p className="text-xs sm:text-sm text-white/80 mt-1 truncate">
+                            S{seasonNumber}E{episodeNumber}
+                            {episodeTitle ? ` · ${episodeTitle}` : ''}
+                        </p>
+                    ) : null}
+                    {tagline ? (
+                        <p className="text-xs italic text-emerald-100/90 mt-1.5 line-clamp-2">{tagline}</p>
+                    ) : null}
+                </div>
+            </div>
+        </div>
+        <div className="relative border-t border-white/10 bg-black/45 backdrop-blur-md p-3 sm:p-4 space-y-3">
+            {metaChips.length ? (
+                <div className="flex flex-wrap gap-1.5">
+                    {metaChips.map((chip) => (
+                        <span
+                            key={chip}
+                            className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-semibold text-white/85"
+                        >
+                            {chip}
+                        </span>
+                    ))}
+                </div>
+            ) : null}
+            {overviewBlocks.length ? (
+                <div className="space-y-2.5">
+                    {overviewBlocks.map((block) => (
+                        <CompanionOverviewText key={block.key} title={block.title} text={block.text} />
+                    ))}
+                </div>
+            ) : (
+                <p className="text-xs text-white/60">{unavailableLabel}</p>
+            )}
+        </div>
+    </div>
+);
+
+type EpisodeNavItem = {
+    episode?: any;
+    label: string;
+    active?: boolean;
+    disabled?: boolean;
+    onClick: () => void;
+    fallbackArt?: string | null;
+};
+
+const CompanionEpisodeNavButton: React.FC<EpisodeNavItem> = ({
+    episode,
+    label,
+    active = false,
+    disabled = false,
+    onClick,
+    fallbackArt = null,
+}) => {
+    const stillPath = episode?.still_path || fallbackArt;
+    return (
+        <button
+            type="button"
+            disabled={disabled}
+            onClick={onClick}
+            className={`w-full text-left rounded-xl border overflow-hidden transition-all disabled:opacity-45 ${
+                active
+                    ? 'border-emerald-400/45 bg-emerald-500/10 shadow-[0_0_24px_rgba(52,211,153,0.18)]'
+                    : 'border-white/10 bg-black/30 hover:bg-black/45'
+            }`}
+        >
+            <div className="flex items-stretch gap-0">
+                <div className="w-24 sm:w-28 shrink-0 aspect-video bg-white/5">
+                    {stillPath ? (
+                        <img src={posterUrl(stillPath, 'w300')} alt="" className="h-full w-full object-cover" />
+                    ) : (
+                        <div className="h-full w-full bg-gradient-to-br from-white/10 to-white/5" />
+                    )}
+                </div>
+                <div className="min-w-0 flex-1 px-2.5 py-2 text-xs text-white/85 flex items-center">
+                    <span className="line-clamp-2">{label}</span>
+                </div>
+            </div>
+        </button>
+    );
+};
+
 export const NowPlayingCompanionPanel: React.FC<Props> = ({
     session,
     userKey,
@@ -564,6 +787,116 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
         }
         return facts;
     }, [episodeContext.current?.air_date, episodeContext.current?.name, episodeNumber, mediaType, payload?.details, seasonNumber, session?.episodeTitle, t]);
+
+    const companionMetaChips = useMemo(() => {
+        const details = payload?.details;
+        if (!details) return [] as string[];
+        const chips: string[] = [];
+        const genres = Array.isArray(details?.genres)
+            ? details.genres.map((genre: any) => String(genre?.name || '').trim()).filter(Boolean).slice(0, 3)
+            : [];
+        if (genres.length) chips.push(genres.join(' · '));
+        const status = String(details?.status || '').trim();
+        if (status) chips.push(status);
+        const runtime = Number(details?.runtime || 0);
+        const avgRuntime = Number(Array.isArray(details?.episode_run_time) ? details.episode_run_time[0] : 0);
+        if (mediaType === 'movie' && runtime > 0) chips.push(t('common.runtimeMin', { count: runtime }));
+        else if (mediaType === 'tv' && avgRuntime > 0) chips.push(t('common.runtimeMin', { count: avgRuntime }));
+        const vote = Number(details?.vote_average || 0);
+        if (vote > 0) chips.push(`${vote.toFixed(1)} TMDB`);
+        const createdBy = Array.isArray(details?.created_by)
+            ? details.created_by.map((person: any) => String(person?.name || '').trim()).filter(Boolean).slice(0, 2)
+            : [];
+        if (createdBy.length) chips.push(createdBy.join(', '));
+        return chips;
+    }, [mediaType, payload?.details, t]);
+
+    const companionOverviewBlocks = useMemo(() => {
+        const details = payload?.details;
+        if (!details) return [] as Array<{ key: string; title: string; text: string }>;
+        const blocks: Array<{ key: string; title: string; text: string }> = [];
+        const pushBlock = (key: string, blockTitle: string, text: unknown) => {
+            const value = String(text || '').trim();
+            if (!value) return;
+            if (blocks.some((block) => block.text === value)) return;
+            blocks.push({ key, title: blockTitle, text: value });
+        };
+
+        if (mediaType === 'tv' && seasonNumber > 0 && episodeNumber > 0) {
+            const episodeName = String(
+                episodeContext.current?.name
+                || session?.episodeTitle
+                || '',
+            ).trim();
+            pushBlock(
+                'episode',
+                episodeName
+                    ? t('homeDashboard.nowPlayingCompanion.overview.episodeWithName', {
+                        season: seasonNumber,
+                        episode: episodeNumber,
+                        name: episodeName,
+                    })
+                    : t('homeDashboard.nowPlayingCompanion.overview.episode', {
+                        season: seasonNumber,
+                        episode: episodeNumber,
+                    }),
+                episodeContext.current?.overview,
+            );
+        }
+
+        if (mediaType === 'tv' && seasonNumber > 0) {
+            pushBlock(
+                'season',
+                t('homeDashboard.nowPlayingCompanion.overview.season', { season: seasonNumber }),
+                payload?.seasonDetails?.overview,
+            );
+        }
+
+        if (mediaType === 'tv') {
+            pushBlock(
+                'series',
+                t('homeDashboard.nowPlayingCompanion.overview.show'),
+                details.overview,
+            );
+        } else {
+            pushBlock(
+                'movie',
+                t('homeDashboard.nowPlayingCompanion.overview.movie'),
+                details.overview,
+            );
+        }
+
+        return blocks;
+    }, [
+        episodeContext.current?.name,
+        episodeContext.current?.overview,
+        episodeNumber,
+        mediaType,
+        payload?.details,
+        payload?.seasonDetails?.overview,
+        seasonNumber,
+        session?.episodeTitle,
+        t,
+    ]);
+
+    const companionTagline = useMemo(() => {
+        const tagline = String(payload?.details?.tagline || '').trim();
+        return tagline || '';
+    }, [payload?.details?.tagline]);
+
+    const companionPosterPath = payload?.details?.poster_path || payload?.details?.posterPath || null;
+    const companionBackdropPath = payload?.details?.backdrop_path || payload?.details?.backdropPath || null;
+    const companionSeasonPosterPath = payload?.seasonDetails?.poster_path || payload?.seasonDetails?.posterPath || null;
+    const companionEpisodeStillPath = episodeContext.current?.still_path || episodeContext.current?.stillPath || null;
+    const companionHeroArtPath = companionEpisodeStillPath || companionBackdropPath || companionSeasonPosterPath || companionPosterPath;
+    const companionAmbientArtPath = companionBackdropPath || companionEpisodeStillPath || companionSeasonPosterPath || companionPosterPath;
+    const companionEpisodeArtFallback = companionSeasonPosterPath || companionPosterPath;
+    const sessionProgress = Math.round(Number(session.progress) || 0);
+    const episodeDisplayTitle = String(
+        episodeContext.current?.name
+        || session?.episodeTitle
+        || '',
+    ).trim();
 
     const quoteMoments = useMemo(() => {
         const source = String(
@@ -937,14 +1270,24 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
     })();
 
     return (
-        <div className="glass-card mt-4 p-3 sm:p-4 md:p-5 border border-emerald-500/25 bg-black/25">
+        <div className="glass-card mt-4 relative overflow-hidden border border-emerald-500/25 bg-black/25">
+            <CompanionArtBackdrop imagePath={open ? companionAmbientArtPath : null} />
+            <div className="relative z-[1] p-3 sm:p-4 md:p-5">
             <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                 <button
                     type="button"
                     onClick={toggleOpen}
-                    className="min-w-0 text-left rounded-lg -m-1 p-1 hover:bg-white/5 transition-colors"
+                    className="min-w-0 text-left rounded-lg -m-1 p-1 hover:bg-white/5 transition-colors flex items-start gap-3"
                     aria-expanded={open}
                 >
+                    {companionPosterPath ? (
+                        <img
+                            src={posterUrl(companionPosterPath, 'w185')}
+                            alt=""
+                            className="w-11 h-16 rounded-lg border border-white/20 object-cover shadow-lg shrink-0 hidden sm:block"
+                        />
+                    ) : null}
+                    <div className="min-w-0">
                     <h3 className="text-sm sm:text-base font-black uppercase tracking-wider text-emerald-200 flex items-center gap-2">
                         <Sparkles className="w-4 h-4" />
                         {t('homeDashboard.nowPlayingCompanion.header.title')}
@@ -952,6 +1295,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                     <p className="text-xs text-white/70 mt-1">
                         {year ? t('homeDashboard.nowPlayingCompanion.header.subtitleWithYear', { title, year }) : t('homeDashboard.nowPlayingCompanion.header.subtitle', { title })}
                     </p>
+                    </div>
                 </button>
                 <div className="flex items-center justify-end">
                     <button
@@ -1029,17 +1373,30 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                     {tab === 'companion' && payload && (
                         <div className="space-y-4">
                             {nextBestAction ? (
-                                <div className={`rounded-xl border p-3 ${
+                                <div className={`relative overflow-hidden rounded-xl border p-3 ${
                                     nextBestAction.tone === 'violet'
                                         ? 'border-violet-400/30 bg-violet-500/10'
                                         : nextBestAction.tone === 'sky'
                                             ? 'border-sky-400/30 bg-sky-500/10'
                                             : 'border-emerald-400/30 bg-emerald-500/10'
                                 }`}>
-                                    <p className="text-[11px] uppercase tracking-widest font-bold text-white/70">
+                                    {firstRecommendation?.posterPath ? (
+                                        <img
+                                            src={posterUrl(firstRecommendation.posterPath, 'w185')}
+                                            alt=""
+                                            className="pointer-events-none absolute -right-3 -bottom-6 w-24 rounded-lg border border-white/15 opacity-35 rotate-6 shadow-2xl"
+                                        />
+                                    ) : companionPosterPath ? (
+                                        <img
+                                            src={posterUrl(companionPosterPath, 'w185')}
+                                            alt=""
+                                            className="pointer-events-none absolute -right-4 -bottom-8 w-24 rounded-lg border border-white/15 opacity-25 rotate-6 shadow-2xl"
+                                        />
+                                    ) : null}
+                                    <p className="text-[11px] uppercase tracking-widest font-bold text-white/70 relative">
                                         {t('homeDashboard.nowPlayingCompanion.sections.nextBestAction')}
                                     </p>
-                                    <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+                                    <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 relative z-[1]">
                                         <div className="min-w-0 flex-1">
                                             <p className="text-sm font-bold text-white">{nextBestAction.title}</p>
                                             <p className="text-xs text-white/70 mt-0.5">{nextBestAction.hint}</p>
@@ -1095,17 +1452,35 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                 ))}
                             </div>
 
+                            <CompanionHeroCard
+                                title={title}
+                                year={year}
+                                mediaType={mediaType}
+                                tagline={companionTagline}
+                                posterPath={companionPosterPath}
+                                heroArtPath={companionHeroArtPath}
+                                seasonNumber={seasonNumber}
+                                episodeNumber={episodeNumber}
+                                episodeTitle={episodeDisplayTitle}
+                                progress={sessionProgress}
+                                metaChips={companionMetaChips}
+                                overviewBlocks={companionOverviewBlocks}
+                                unavailableLabel={t('homeDashboard.nowPlayingCompanion.overview.unavailable')}
+                            />
+
                             <div className="grid grid-cols-1 xl:grid-cols-3 gap-3 items-stretch">
-                                <div className="xl:col-span-2 rounded-xl border border-white/10 bg-white/5 p-2.5 sm:p-3">
+                                <div className="xl:col-span-2 rounded-xl border border-white/10 bg-white/5 p-2.5 sm:p-3 relative overflow-hidden">
+                                    <CompanionArtBackdrop imagePath={companionBackdropPath || companionEpisodeStillPath} className="opacity-80" />
+                                    <div className="relative z-[1]">
                                     <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold mb-2 flex items-center gap-1.5">
                                         <Users className="w-3.5 h-3.5" />
                                         {t('homeDashboard.nowPlayingCompanion.sections.castIntelligence')}
                                     </p>
                                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
                                         {payload.castInsights.map((actor) => (
-                                            <div key={`cast-${actor.id}`} className="rounded-lg border border-white/10 bg-black/35 p-2">
+                                            <div key={`cast-${actor.id}`} className="rounded-lg border border-white/10 bg-black/35 p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
                                                 <div className="flex items-center gap-2">
-                                                    <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden bg-white/5 shrink-0 border border-white/15">
+                                                    <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden bg-white/5 shrink-0 border-2 border-emerald-300/25 shadow-[0_0_18px_rgba(52,211,153,0.18)]">
                                                         {actor.profilePath ? (
                                                             <img
                                                                 src={posterUrl(actor.profilePath, 'w185')}
@@ -1224,9 +1599,12 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                             <p className="text-xs text-white/55">{t('homeDashboard.nowPlayingCompanion.empty.noCrewHighlights')}</p>
                                         )}
                                     </div>
+                                    </div>
                                 </div>
 
-                                <div className="rounded-xl border border-white/10 bg-white/5 p-2.5 sm:p-3 flex flex-col min-h-0">
+                                <div className="rounded-xl border border-white/10 bg-white/5 p-2.5 sm:p-3 flex flex-col min-h-0 relative overflow-hidden">
+                                    <CompanionArtBackdrop imagePath={companionSeasonPosterPath || companionPosterPath} />
+                                    <div className="relative z-[1] flex flex-col min-h-0 flex-1">
                                     <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold mb-2 flex items-center gap-1.5 shrink-0">
                                         <Music2 className="w-3.5 h-3.5" />
                                         {t('homeDashboard.nowPlayingCompanion.sections.soundtrackCues')}
@@ -1285,7 +1663,9 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                         ) : null}
                                     </div>
 
-                                    <div className="mt-3 pt-3 border-t border-white/10 flex-1 min-h-0 flex flex-col">
+                                    <div className="mt-3 pt-3 border-t border-white/10 flex-1 min-h-0 flex flex-col relative overflow-hidden rounded-xl">
+                                        <CompanionArtBackdrop imagePath={companionEpisodeStillPath || companionBackdropPath} className="opacity-90" />
+                                        <div className="relative z-[1] p-2.5 flex-1 min-h-0 flex flex-col">
                                         <div className="relative overflow-hidden rounded-xl border border-fuchsia-400/25 bg-gradient-to-br from-fuchsia-500/10 via-violet-500/10 to-cyan-500/10 p-2.5 flex-1 min-h-0 flex flex-col">
                                             <div className="pointer-events-none absolute -top-10 right-0 w-28 h-28 rounded-full bg-fuchsia-400/20 blur-2xl animate-pulse motion-reduce:animate-none" />
                                             <div className="pointer-events-none absolute -bottom-12 -left-6 w-32 h-32 rounded-full bg-cyan-400/15 blur-2xl animate-pulse motion-reduce:animate-none" />
@@ -1351,64 +1731,66 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                                 )}
                                             </div>
                                         </div>
+                                        </div>
                                     </div>
 
                                     {mediaType === 'tv' && seasonNumber > 0 ? (
-                                        <div className="mt-3 pt-3 border-t border-white/10 space-y-2 shrink-0">
+                                        <div className="mt-3 pt-3 border-t border-white/10 space-y-2 shrink-0 relative z-[1]">
                                             <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold flex items-center gap-1.5">
                                                 <Clapperboard className="w-3.5 h-3.5" />
                                         {t('homeDashboard.nowPlayingCompanion.sections.episodeContext')}
                                             </p>
-                                            <div className="space-y-1 text-xs text-white/80">
-                                                <button
-                                                    type="button"
+                                            <div className="space-y-2">
+                                                <CompanionEpisodeNavButton
+                                                    episode={episodeContext.previous}
+                                                    label={t('homeDashboard.nowPlayingCompanion.episode.previous', { name: episodeContext.previous?.name || t('homeDashboard.nowPlayingCompanion.empty.notAvailable') })}
                                                     disabled={!episodeContext.previous}
+                                                    fallbackArt={companionEpisodeArtFallback}
                                                     onClick={() => goToPath(`${basePath}?season=${seasonNumber}&episode=${Number(episodeContext.previous?.episode_number)}`)}
-                                                    className="w-full text-left px-2 py-1.5 rounded-md border border-white/10 bg-black/30 hover:bg-black/45 disabled:opacity-50"
-                                                >
-                                            {t('homeDashboard.nowPlayingCompanion.episode.previous', { name: episodeContext.previous?.name || t('homeDashboard.nowPlayingCompanion.empty.notAvailable') })}
-                                                </button>
-                                                <button
-                                                    type="button"
+                                                />
+                                                <CompanionEpisodeNavButton
+                                                    episode={episodeContext.current}
+                                                    label={t('homeDashboard.nowPlayingCompanion.episode.current', { name: episodeContext.current?.name || session.episodeTitle || t('nowPlaying.episode', { number: episodeNumber }) })}
+                                                    active
                                                     disabled={!episodeContext.current}
+                                                    fallbackArt={companionEpisodeArtFallback}
                                                     onClick={() => goToPath(`${basePath}?season=${seasonNumber}&episode=${episodeNumber}`)}
-                                                    className="w-full text-left px-2 py-1.5 rounded-md border border-emerald-400/30 bg-emerald-500/10 hover:bg-emerald-500/20 disabled:opacity-50"
-                                                >
-                                            {t('homeDashboard.nowPlayingCompanion.episode.current', { name: episodeContext.current?.name || session.episodeTitle || t('nowPlaying.episode', { number: episodeNumber }) })}
-                                                </button>
-                                                <button
-                                                    type="button"
+                                                />
+                                                <CompanionEpisodeNavButton
+                                                    episode={episodeContext.next}
+                                                    label={t('homeDashboard.nowPlayingCompanion.episode.next', { name: episodeContext.next?.name || t('homeDashboard.nowPlayingCompanion.empty.notAvailable') })}
                                                     disabled={!episodeContext.next}
+                                                    fallbackArt={companionEpisodeArtFallback}
                                                     onClick={() => goToPath(`${basePath}?season=${seasonNumber}&episode=${Number(episodeContext.next?.episode_number)}`)}
-                                                    className="w-full text-left px-2 py-1.5 rounded-md border border-white/10 bg-black/30 hover:bg-black/45 disabled:opacity-50"
-                                                >
-                                            {t('homeDashboard.nowPlayingCompanion.episode.next', { name: episodeContext.next?.name || t('homeDashboard.nowPlayingCompanion.empty.notAvailable') })}
-                                                </button>
+                                                />
                                             </div>
                                         </div>
                                     ) : null}
+                                    </div>
                                 </div>
                             </div>
 
                             {payload.recommendations.length > 0 ? (
-                                <div className="rounded-xl border border-white/10 bg-white/5 p-3">
+                                <div className="rounded-xl border border-white/10 bg-white/5 p-3 relative overflow-hidden">
+                                    <CompanionArtBackdrop imagePath={companionBackdropPath} className="opacity-70" />
+                                    <div className="relative z-[1]">
                                     <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold mb-2">
                                         {t('homeDashboard.nowPlayingCompanion.sections.similarPicks')}
                                     </p>
                                     <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2">
                                         {payload.recommendations.slice(0, 6).map((item) => (
-                                            <div key={`rec-${item.mediaType}-${item.id}`} className="rounded-lg overflow-hidden border border-white/10 bg-black/30">
+                                            <div key={`rec-${item.mediaType}-${item.id}`} className="group rounded-lg overflow-hidden border border-white/10 bg-black/30 transition-all hover:-translate-y-0.5 hover:border-violet-400/35 hover:shadow-[0_12px_30px_rgba(139,92,246,0.22)]">
                                                 <button
                                                     type="button"
                                                     onClick={() => goToPath(`/discovery/${item.mediaType}/${item.id}`)}
                                                     className="w-full text-left"
                                                 >
-                                                    <div className="aspect-[2/3] bg-white/5">
+                                                    <div className="aspect-[2/3] bg-white/5 overflow-hidden">
                                                         {item.posterPath ? (
                                                             <img
                                                                 src={posterUrl(item.posterPath)}
                                                                 alt={item.title}
-                                                                className="w-full h-full object-cover"
+                                                                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                                                             />
                                                         ) : (
                                                             <NoPosterPlaceholder compact />
@@ -1429,6 +1811,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                             </div>
                                         ))}
                                     </div>
+                                    </div>
                                 </div>
                             ) : null}
                         </div>
@@ -1436,6 +1819,22 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
 
                     {tab === 'deep-dive' && payload && (
                         <div className="space-y-3">
+                            <div className="relative overflow-hidden rounded-2xl border border-white/10 min-h-[9rem]">
+                                {companionHeroArtPath ? (
+                                    <img src={posterUrl(companionHeroArtPath, 'w780')} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                                ) : null}
+                                <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/55 to-black/25" />
+                                <div className="relative z-[1] p-4 flex items-end gap-3 min-h-[9rem]">
+                                    {companionPosterPath ? (
+                                        <img src={posterUrl(companionPosterPath, 'w185')} alt="" className="w-14 rounded-lg border border-white/20 shadow-xl object-cover aspect-[2/3]" />
+                                    ) : null}
+                                    <div className="min-w-0">
+                                        <p className="text-[10px] uppercase tracking-[0.2em] text-violet-200/90 font-bold">Deep dive</p>
+                                        <p className="text-lg font-black text-white truncate">{title}</p>
+                                        <p className="text-xs text-white/70 mt-1">{sessionProgress}% through this session</p>
+                                    </div>
+                                </div>
+                            </div>
                             <div className="rounded-xl border border-white/10 bg-white/5 p-3">
                                 <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold mb-2 flex items-center gap-1.5">
                                     <Sparkles className="w-3.5 h-3.5" />
@@ -1540,6 +1939,22 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
 
                     {tab === 'watch-room' && payload && (
                         <div className="space-y-3">
+                            <div className="relative overflow-hidden rounded-2xl border border-white/10 min-h-[8.5rem]">
+                                {companionBackdropPath || companionEpisodeStillPath ? (
+                                    <img src={posterUrl(companionBackdropPath || companionEpisodeStillPath, 'w780')} alt="" className="absolute inset-0 h-full w-full object-cover" />
+                                ) : null}
+                                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-black/20" />
+                                <div className="relative z-[1] p-4 flex items-end justify-between gap-3 min-h-[8.5rem]">
+                                    <div className="min-w-0">
+                                        <p className="text-[10px] uppercase tracking-[0.2em] text-sky-200/90 font-bold">Watch room</p>
+                                        <p className="text-base font-black text-white truncate">{title}</p>
+                                        <p className="text-xs text-white/70 mt-1">{t('homeDashboard.nowPlayingCompanion.poll.summaryHint')}</p>
+                                    </div>
+                                    {companionPosterPath ? (
+                                        <img src={posterUrl(companionPosterPath, 'w185')} alt="" className="w-12 rounded-lg border border-white/20 shadow-xl object-cover aspect-[2/3] shrink-0" />
+                                    ) : null}
+                                </div>
+                            </div>
                             <div className="rounded-xl border border-white/10 bg-white/5 p-3">
                                 <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold mb-2">
                                     {t('homeDashboard.nowPlayingCompanion.sections.sharedReactions')}
@@ -1629,6 +2044,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                     )}
                 </div>
             )}
+            </div>
         </div>
     );
 };

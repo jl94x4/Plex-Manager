@@ -2727,7 +2727,17 @@ Object.assign(en, { homeDashboard: { ...en.homeDashboard, nowPlayingCompanion: {
         soundtrackCues: 'Soundtrack cues', ratingsAndLinks: 'Ratings and links', factOverload: 'Fact overload',
         episodeContext: 'Episode context', similarPicks: 'Similar picks', liveTriviaTimeline: 'Live trivia timeline',
         productionFacts: 'Production facts', actorGraph: 'Actor deep-link graph', subtitleQuoteContext: 'Subtitle quote context',
-        sharedReactions: 'Shared reactions', quickPoll: 'Quick poll',
+        sharedReactions: 'Shared reactions', quickPoll: 'Quick poll', storySnapshot: 'Story snapshot',
+    },
+    overview: {
+        show: 'About the show',
+        movie: 'About the movie',
+        season: 'Season {season} overview',
+        episode: 'Episode S{season}E{episode}',
+        episodeWithName: 'Episode S{season}E{episode}: {name}',
+        readMore: 'Read more',
+        readLess: 'Show less',
+        unavailable: 'No synopsis is available for this title yet.',
     },
     empty: {
         noKnownFor: 'No known-for links available.', noCastData: 'No cast data was returned for this title.',
