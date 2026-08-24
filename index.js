@@ -104,6 +104,7 @@ import {
 import {
     createCustomTabEmbedProxyHandler,
     createHomeModuleEmbedProxyHandler,
+    createEmbedProxyFetch,
     isLeakedArrEmbedAssetPath,
     isPortalEmbedProxyPath,
     parseEmbedProxyFromReferer,
@@ -193,6 +194,10 @@ app.use(compression({
         // Speed tests must stay uncompressed — gzip of repetitive payloads skews Mbps badly.
         const url = String(req.originalUrl || req.url || '');
         if (url.includes('/api/speedtest/')) return false;
+        // Embed proxy streams large JS/CSS/image payloads; compressing them duplicates buffers in RAM.
+        if (isPortalEmbedProxyPath(url)) return false;
+        const pathOnly = url.split('?')[0];
+        if (isLeakedArrEmbedAssetPath(pathOnly)) return false;
         return compression.filter(req, res);
     },
 }));
@@ -7002,6 +7007,8 @@ const fetchWithTimeout = async (url, options = {}, timeoutMs = 15000) => {
     }
 };
 
+const embedProxyFetch = createEmbedProxyFetch(fetchWithTimeout);
+
 const handleCustomTabEmbedProxy = createCustomTabEmbedProxyHandler({
     loadConfig: () => loadFile(CONFIG_PATH, {}),
     normalizeCustomNavTabs,
@@ -7009,7 +7016,7 @@ const handleCustomTabEmbedProxy = createCustomTabEmbedProxyHandler({
     getSessionActor,
     effectiveViewerIsAdmin,
     withBasePath,
-    fetchWithTimeout,
+    fetchWithTimeout: embedProxyFetch,
     log,
 });
 
@@ -7020,7 +7027,7 @@ const handleHomeModuleEmbedProxy = createHomeModuleEmbedProxyHandler({
     getSessionActor,
     effectiveViewerIsAdmin,
     withBasePath,
-    fetchWithTimeout,
+    fetchWithTimeout: embedProxyFetch,
     log,
 });
 
