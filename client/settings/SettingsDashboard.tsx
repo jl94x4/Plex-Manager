@@ -773,6 +773,7 @@ export const SettingsDashboard: React.FC = () => {
     // Branding & UI States
     const [customLogoUrl, setCustomLogoUrl] = useState('');
     const [customLoginLogoUrl, setCustomLoginLogoUrl] = useState('');
+    const [loginLogoCircleFrame, setLoginLogoCircleFrame] = useState(true);
     const [customFaviconUrl, setCustomFaviconUrl] = useState('');
     const [backgroundImageUrl, setBackgroundImageUrl] = useState('');
     const [useScrollRevealAnimations, setUseScrollRevealAnimations] = useState(false);
@@ -1526,6 +1527,7 @@ export const SettingsDashboard: React.FC = () => {
             setBrandingTheme(savedBrandingTheme === 'light' ? 'plex' : savedBrandingTheme);
             setCustomLogoUrl(initialSettings.mediaServerType === 'emby' && isJellyfinBrandingAsset(initialSettings.customLogoUrl) ? '' : (initialSettings.customLogoUrl || ''));
             setCustomLoginLogoUrl(initialSettings.customLoginLogoUrl || '');
+            setLoginLogoCircleFrame(initialSettings.loginLogoCircleFrame !== false);
             setCustomFaviconUrl(initialSettings.customFaviconUrl || '');
             setSidebarIdentityPosition(initialSettings.sidebarIdentityPosition === 'top' ? 'top' : 'bottom');
             setPwaIconSource(initialSettings.pwaIconSource === 'application' ? 'application' : 'server');
@@ -2147,6 +2149,7 @@ export const SettingsDashboard: React.FC = () => {
             primaryColor: '',
             customLogoUrl: savedCustomLogoUrl,
             customLoginLogoUrl: savedCustomLoginLogoUrl,
+            loginLogoCircleFrame,
             customFaviconUrl: savedCustomFaviconUrl,
             brandingTheme,
             sidebarIdentityPosition,
@@ -4146,7 +4149,7 @@ export const SettingsDashboard: React.FC = () => {
                                                 </div>
 
                                                 <div>
-                                                    <SettingFieldLabel hint={<SettingHint>Shown in the circular frame on the login screen. Wide logos are scaled to fit inside the circle; use a square image for a full-bleed look.</SettingHint>}>
+                                                    <SettingFieldLabel hint={<SettingHint>Shown on the login and invite screens. Use a separate asset here if your sidebar logo is wide or should not be cropped into a circle.</SettingHint>}>
                                                         Login Page Logo
                                                     </SettingFieldLabel>
                                                     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_14rem] gap-3 mt-1">
@@ -4172,6 +4175,15 @@ export const SettingsDashboard: React.FC = () => {
                                                         />
                                                     </div>
                                                     {loginLogoFile && <p className="text-xs text-muted mt-2">{loginLogoFile.name}</p>}
+                                                    <div className="mt-3 rounded-xl border border-border/60 bg-black/15 px-3 py-2">
+                                                        <SettingsToggleRow
+                                                            title="Circular login logo frame"
+                                                            description="On by default. Turn off to show wide logos at full width without the round crop."
+                                                            checked={loginLogoCircleFrame}
+                                                            onChange={setLoginLogoCircleFrame}
+                                                            border={false}
+                                                        />
+                                                    </div>
                                                 </div>
 
                                                 <div>
@@ -4312,6 +4324,7 @@ export const SettingsDashboard: React.FC = () => {
                                                             {splashPreviewLogoSrc ? (
                                                                 <LoginBrandMark
                                                                     src={splashPreviewLogoSrc}
+                                                                    circleFrame={loginLogoCircleFrame}
                                                                     className="mx-auto mb-4"
                                                                 />
                                                             ) : (

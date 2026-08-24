@@ -5259,6 +5259,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 primaryColor: config.primaryColor || '#F7C600',
                 customLogoUrl: normalizeBrandingAssetForMediaServer(config.customLogoUrl, config.mediaServerType),
                 customLoginLogoUrl: String(config.customLoginLogoUrl || '').trim(),
+                loginLogoCircleFrame: config.loginLogoCircleFrame !== false,
                 customFaviconUrl: String(config.customFaviconUrl || '').trim(),
                 brandingTheme: config.brandingTheme || 'plex',
                 sidebarIdentityPosition: ['top', 'bottom'].includes(String(config.sidebarIdentityPosition || '').toLowerCase()) ? String(config.sidebarIdentityPosition).toLowerCase() : 'bottom',
@@ -5443,6 +5444,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 primaryColor: '#F7C600',
                 customLogoUrl: '',
                 customLoginLogoUrl: '',
+                loginLogoCircleFrame: true,
                 customFaviconUrl: '',
                 brandingTheme: 'plex',
                 sidebarIdentityPosition: 'bottom',
@@ -5570,7 +5572,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         autoApproveMovies4k, autoApproveTv4k, portalAutoRequestMovies, portalAutoRequestTv,
         seriesMetadataProvider, animeMetadataProvider, tvdbApiKey,
         inactiveCleanupEnabled, inactiveCleanupDays,
-        primaryColor, customLogoUrl, customLoginLogoUrl, customFaviconUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, customNavTabs, homeCustomModules, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
+        primaryColor, customLogoUrl, customLoginLogoUrl, loginLogoCircleFrame, customFaviconUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, customNavTabs, homeCustomModules, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
         autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, supportTicketsEnabled, chatEnabled, chatMentionNotifyInApp, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, scannerNotifyDeleted, scannerNotifyUpgrade, scannerNotifyImport, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
@@ -5926,6 +5928,9 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         customLoginLogoUrl: customLoginLogoUrl !== undefined
             ? String(customLoginLogoUrl || '').trim()
             : String(existingConfig.customLoginLogoUrl || '').trim(),
+        loginLogoCircleFrame: loginLogoCircleFrame !== undefined
+            ? loginLogoCircleFrame !== false
+            : existingConfig.loginLogoCircleFrame !== false,
         customFaviconUrl: customFaviconUrl !== undefined
             ? String(customFaviconUrl || '').trim()
             : String(existingConfig.customFaviconUrl || '').trim(),
@@ -6363,6 +6368,7 @@ app.get('/api/config/public', async (req, res) => {
             primaryColor: config.primaryColor || '#F7C600',
             customLogoUrl: normalizeBrandingAssetForMediaServer(config.customLogoUrl, config.mediaServerType),
             customLoginLogoUrl: String(config.customLoginLogoUrl || '').trim(),
+            loginLogoCircleFrame: config.loginLogoCircleFrame !== false,
             customFaviconUrl: String(config.customFaviconUrl || '').trim(),
             brandingTheme: config.brandingTheme || 'plex',
             sidebarIdentityPosition: ['top', 'bottom'].includes(String(config.sidebarIdentityPosition || '').toLowerCase()) ? String(config.sidebarIdentityPosition).toLowerCase() : 'bottom',
@@ -6405,6 +6411,7 @@ app.get('/api/config/public', async (req, res) => {
             primaryColor: '#F7C600',
             customLogoUrl: '',
             customLoginLogoUrl: '',
+            loginLogoCircleFrame: true,
             customFaviconUrl: '',
             brandingTheme: 'plex',
             sidebarIdentityPosition: 'bottom',
@@ -12517,6 +12524,7 @@ app.get('/api/invites/:code/info', publicReadRateLimit, async (req, res) => {
         serverName: adminProfile.serverName || 'Our Server',
         customLogoUrl: normalizeBrandingAssetForMediaServer(config.customLogoUrl, config.mediaServerType),
         customLoginLogoUrl: String(config.customLoginLogoUrl || '').trim(),
+        loginLogoCircleFrame: config.loginLogoCircleFrame !== false,
         thumb: adminProfile.thumb,
         showPublicLibraryStats: arePublicLibraryStatsVisible(config)
     });
@@ -14130,6 +14138,7 @@ app.get('/api/public/info', publicReadRateLimit, async (req, res) => {
             ...profile,
             customLogoUrl: normalizeBrandingAssetForMediaServer(config.customLogoUrl, config.mediaServerType),
             customLoginLogoUrl: String(config.customLoginLogoUrl || '').trim(),
+            loginLogoCircleFrame: config.loginLogoCircleFrame !== false,
             customFaviconUrl: String(config.customFaviconUrl || '').trim(),
             isConfigured,
             mediaServerType: config.mediaServerType || 'plex',
@@ -14149,6 +14158,7 @@ app.get('/api/public/info', publicReadRateLimit, async (req, res) => {
                 thumb: null,
                 customLogoUrl: normalizeBrandingAssetForMediaServer(config.customLogoUrl, config.mediaServerType),
                 customLoginLogoUrl: String(config.customLoginLogoUrl || '').trim(),
+                loginLogoCircleFrame: config.loginLogoCircleFrame !== false,
                 customFaviconUrl: String(config.customFaviconUrl || '').trim(),
                 serverName: 'Server Portal',
                 isConfigured,

@@ -6565,9 +6565,14 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, p
                                 {publicConfigWarning}
                             </div>
                         )}
-                        <div className="relative mb-8 flex justify-center">
-                            {!loginLogoSrc && <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-36 h-36 bg-plex/20 rounded-full blur-[60px] pointer-events-none" />}
-                            <LoginBrandMark src={loginLogoSrc} />
+                        <div className={`relative mb-8 flex justify-center w-full ${publicConfig?.loginLogoCircleFrame !== false ? '' : 'max-w-lg px-2'}`}>
+                            {!loginLogoSrc && publicConfig?.loginLogoCircleFrame !== false && (
+                                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-36 h-36 bg-plex/20 rounded-full blur-[60px] pointer-events-none" />
+                            )}
+                            <LoginBrandMark
+                                src={loginLogoSrc}
+                                circleFrame={publicConfig?.loginLogoCircleFrame !== false}
+                            />
                         </div>
 
                         {!showTrialAccess && (
@@ -12918,6 +12923,7 @@ export const PublicInviteClaim: React.FC<{ code: string }> = ({ code }) => {
                     src={info.customLoginLogoUrl || info.customLogoUrl || info.thumb
                         ? resolvePortalAssetUrl(info.customLoginLogoUrl || info.customLogoUrl || info.thumb)
                         : null}
+                    circleFrame={info.loginLogoCircleFrame !== false}
                     className="drop-shadow-[0_0_15px_rgba(229,160,13,0.25)]"
                 />
             </div>
