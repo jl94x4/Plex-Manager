@@ -302,7 +302,7 @@ const isJellyfinBrandingAsset = (value: string | null | undefined) => (
     [JELLYFIN_BRAND_LOGO_URL, JELLYFIN_BRAND_BACKGROUND_URL].includes(String(value || '').trim())
 );
 
-const getUploadedBrandingImagePath = (file: File, assetName: 'logo' | 'background') => {
+const getUploadedBrandingImagePath = (file: File, assetName: 'logo' | 'background' | 'favicon') => {
     const name = file.name.toLowerCase();
     const type = file.type.toLowerCase();
     const extension = type.includes('webp') || name.endsWith('.webp')
@@ -770,6 +770,7 @@ export const SettingsDashboard: React.FC = () => {
 
     // Branding & UI States
     const [customLogoUrl, setCustomLogoUrl] = useState('');
+    const [customFaviconUrl, setCustomFaviconUrl] = useState('');
     const [backgroundImageUrl, setBackgroundImageUrl] = useState('');
     const [useScrollRevealAnimations, setUseScrollRevealAnimations] = useState(false);
     const [useCinematicLoading, setUseCinematicLoading] = useState(false);
@@ -802,6 +803,7 @@ export const SettingsDashboard: React.FC = () => {
     const [homeCustomModules, setHomeCustomModules] = useState<HomeCustomModule[]>([]);
     const [downloadsVisibleToMembers, setDownloadsVisibleToMembers] = useState(true);
     const [logoFile, setLogoFile] = useState<File | null>(null);
+    const [faviconFile, setFaviconFile] = useState<File | null>(null);
     const [backgroundFile, setBackgroundFile] = useState<File | null>(null);
     const [logoPreviewUrl, setLogoPreviewUrl] = useState('');
     const [backgroundPreviewUrl, setBackgroundPreviewUrl] = useState('');
@@ -859,6 +861,12 @@ export const SettingsDashboard: React.FC = () => {
         setLogoPreviewUrl(objectUrl);
         setCustomLogoUrl(getUploadedBrandingImagePath(file, 'logo'));
     }, [clearLogoPreview]);
+
+    const handleFaviconFileChange = useCallback((file: File | null) => {
+        setFaviconFile(file);
+        if (!file) return;
+        setCustomFaviconUrl(getUploadedBrandingImagePath(file, 'favicon'));
+    }, []);
 
     const handleBackgroundFileChange = useCallback((file: File | null) => {
         clearBackgroundPreview();
@@ -1493,6 +1501,7 @@ export const SettingsDashboard: React.FC = () => {
             const savedBrandingTheme = localStorage.getItem('portal-theme') || initialSettings.brandingTheme || 'plex';
             setBrandingTheme(savedBrandingTheme === 'light' ? 'plex' : savedBrandingTheme);
             setCustomLogoUrl(initialSettings.mediaServerType === 'emby' && isJellyfinBrandingAsset(initialSettings.customLogoUrl) ? '' : (initialSettings.customLogoUrl || ''));
+            setCustomFaviconUrl(initialSettings.customFaviconUrl || '');
             setSidebarIdentityPosition(initialSettings.sidebarIdentityPosition === 'top' ? 'top' : 'bottom');
             setPwaIconSource(initialSettings.pwaIconSource === 'application' ? 'application' : 'server');
             setBackgroundImageUrl(initialSettings.mediaServerType === 'emby' && isJellyfinBrandingAsset(initialSettings.backgroundImageUrl) ? '' : (initialSettings.backgroundImageUrl || ''));
@@ -1921,6 +1930,7 @@ export const SettingsDashboard: React.FC = () => {
         }
 
         let savedCustomLogoUrl = logoFile ? getUploadedBrandingImagePath(logoFile, 'logo') : customLogoUrl;
+        let savedCustomFaviconUrl = faviconFile ? getUploadedBrandingImagePath(faviconFile, 'favicon') : customFaviconUrl;
         let savedBackgroundImageUrl = backgroundImageUrl;
         if (mediaServerType === 'emby') {
             if (isJellyfinBrandingAsset(savedCustomLogoUrl)) savedCustomLogoUrl = '';
@@ -1949,6 +1959,31 @@ export const SettingsDashboard: React.FC = () => {
                 clearLogoPreview();
             } catch (e) {
                 addToast(e instanceof Error ? e.message : 'Failed to upload logo', 'error');
+                return;
+            }
+        }
+
+        if (faviconFile) {
+            try {
+                const uploadResponse = await fetch(portalUrl('/api/config/favicon'), {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': faviconFile.type || (faviconFile.name.toLowerCase().endsWith('.png') ? 'image/png' : (faviconFile.name.toLowerCase().endsWith('.webp') ? 'image/webp' : 'image/jpeg')),
+                        [PORTAL_CSRF_HEADER]: PORTAL_CSRF_VALUE,
+                    },
+                    body: faviconFile,
+                });
+                if (!uploadResponse.ok) {
+                    const errorData = await uploadResponse.json().catch(() => ({ error: 'Failed to upload favicon' }));
+                    throw new Error(errorData.error || 'Failed to upload favicon');
+                }
+                const uploadResult = await uploadResponse.json().catch(() => ({}));
+                savedCustomFaviconUrl = uploadResult.faviconUrl || savedCustomFaviconUrl;
+                setCustomFaviconUrl(savedCustomFaviconUrl);
+                setFaviconFile(null);
+            } catch (e) {
+                addToast(e instanceof Error ? e.message : 'Failed to upload favicon', 'error');
                 return;
             }
         }
@@ -2059,6 +2094,7 @@ export const SettingsDashboard: React.FC = () => {
             tvdbApiKey,
             primaryColor: '',
             customLogoUrl: savedCustomLogoUrl,
+            customFaviconUrl: savedCustomFaviconUrl,
             brandingTheme,
             sidebarIdentityPosition,
             pwaIconSource,
@@ -4051,6 +4087,34 @@ export const SettingsDashboard: React.FC = () => {
                                                         />
                                                     </div>
                                                     {logoFile && <p className="text-xs text-muted mt-2">{logoFile.name}</p>}
+                                                </div>
+
+                                                <div>
+                                                    <SettingFieldLabel hint={<SettingHint>Square icon for browser tabs (PNG/JPEG/WebP, max 2MB). Use this when your logo is wide — the tab icon otherwise crops your logo into a circle.</SettingHint>}>
+                                                        Browser Tab Favicon
+                                                    </SettingFieldLabel>
+                                                    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_14rem] gap-3 mt-1">
+                                                        <input
+                                                            type="url"
+                                                            className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex transition-all"
+                                                            value={customFaviconUrl}
+                                                            onChange={e => {
+                                                                setFaviconFile(null);
+                                                                setCustomFaviconUrl(e.target.value);
+                                                            }}
+                                                            placeholder="https://example.com/favicon.png"
+                                                        />
+                                                        <input
+                                                            type="file"
+                                                            accept="image/png,image/jpeg,image/webp"
+                                                            className="w-full p-2 rounded-lg border border-border bg-background text-muted text-sm outline-none focus:border-plex transition-all file:mr-3 file:py-2 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-bold file:bg-white/10 file:text-text hover:file:bg-white/20 file:cursor-pointer cursor-pointer"
+                                                            onChange={e => {
+                                                                const file = e.target.files?.[0] || null;
+                                                                handleFaviconFileChange(file);
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    {faviconFile && <p className="text-xs text-muted mt-2">{faviconFile.name}</p>}
                                                 </div>
 
                                                 <div>

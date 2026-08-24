@@ -21,7 +21,8 @@ mkdir -p \
   "$POSTER_SETS_CONFIG_DIR" \
   "$OVERLAYS_CONFIG_DIR" \
   "$EDITIONS_CONFIG_DIR" \
-  "$EDITIONS_CONFIG_DIR/metadata_backup"
+  "$EDITIONS_CONFIG_DIR/metadata_backup" \
+  "$CONFIG_DIR/branding"
 chown -R "$PUID:$PGID" \
   "$CONFIG_DIR" \
   /app/backup \

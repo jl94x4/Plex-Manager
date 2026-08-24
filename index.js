@@ -95,7 +95,19 @@ import {
     pruneDashboardLayoutCustomModules,
     sanitizeHomeCustomModulesForSession,
 } from './lib/home-custom-modules.js';
-import { registrableDomainFromHost } from './lib/registrable-domain.js';
+import {
+    migrateLegacyBrandingAssets,
+    parseBrandingPublicPath,
+    readBrandingAssetByPublicPath,
+    writeBrandingAsset,
+} from './lib/branding-storage.js';
+import {
+    createCustomTabEmbedProxyHandler,
+    createHomeModuleEmbedProxyHandler,
+    isLeakedArrEmbedAssetPath,
+    isPortalEmbedProxyPath,
+    parseEmbedProxyFromReferer,
+} from './lib/custom-tab-embed-proxy.js';
 import { createSupportTicketFromMediaIssue, attachTicketIdsToIssues } from './lib/support-tickets/fromIssue.js';
 import { mapTautulliHistoryRowToPlexItem } from './lib/achievements/tautulliHistory.js';
 import { isTautulliWatchHistorySource, buildAchievementsHomeRankContext, summarizeAchievementsBackfill, levelProgress } from './lib/achievements/index.js';
@@ -1334,6 +1346,8 @@ import {
     MEDIA_AUTOMATION_ACTIVITY_PATH,
     migrateConfigFiles,
 } from './lib/data-paths.js';
+
+const BRANDING_DIR = path.join(CONFIG_DIR, 'branding');
 import {
     applyCollexionsBundledDefaults,
     getCollexionsEmbeddedStatus,
@@ -5236,6 +5250,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 ...portalRequestDefaultsForClient(config, { secretMask: SECRET_MASK }),
                 primaryColor: config.primaryColor || '#F7C600',
                 customLogoUrl: normalizeBrandingAssetForMediaServer(config.customLogoUrl, config.mediaServerType),
+                customFaviconUrl: String(config.customFaviconUrl || '').trim(),
                 brandingTheme: config.brandingTheme || 'plex',
                 sidebarIdentityPosition: ['top', 'bottom'].includes(String(config.sidebarIdentityPosition || '').toLowerCase()) ? String(config.sidebarIdentityPosition).toLowerCase() : 'bottom',
                 pwaIconSource: normalizePwaIconSource(config.pwaIconSource),
@@ -5418,6 +5433,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 ...portalRequestDefaultsForClient({}),
                 primaryColor: '#F7C600',
                 customLogoUrl: '',
+                customFaviconUrl: '',
                 brandingTheme: 'plex',
                 sidebarIdentityPosition: 'bottom',
                 pwaIconSource: 'server',
@@ -5544,7 +5560,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         autoApproveMovies4k, autoApproveTv4k, portalAutoRequestMovies, portalAutoRequestTv,
         seriesMetadataProvider, animeMetadataProvider, tvdbApiKey,
         inactiveCleanupEnabled, inactiveCleanupDays,
-        primaryColor, customLogoUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, customNavTabs, homeCustomModules, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
+        primaryColor, customLogoUrl, customFaviconUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, customNavTabs, homeCustomModules, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
         autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, supportTicketsEnabled, chatEnabled, chatMentionNotifyInApp, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, scannerNotifyDeleted, scannerNotifyUpgrade, scannerNotifyImport, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
@@ -5897,6 +5913,9 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         tvdbApiKey: resolveSecret(tvdbApiKey, existingConfig.tvdbApiKey),
         primaryColor: primaryColor || '#F7C600',
         customLogoUrl: normalizeBrandingAssetForMediaServer(customLogoUrl, normalizedMediaServerType),
+        customFaviconUrl: customFaviconUrl !== undefined
+            ? String(customFaviconUrl || '').trim()
+            : String(existingConfig.customFaviconUrl || '').trim(),
         brandingTheme: ['dynamic', 'plex', 'slate', 'nordic', 'jellyfin', 'emby', 'emerald', 'midnight', 'crimson', 'amethyst', 'sunset', 'ocean', 'rose', 'royal', 'graphite', 'cyberlime', 'aurora'].includes(String(brandingTheme || '').toLowerCase()) ? String(brandingTheme).toLowerCase() : (existingConfig.brandingTheme || 'plex'),
         sidebarIdentityPosition: ['top', 'bottom'].includes(String(sidebarIdentityPosition || '').toLowerCase()) ? String(sidebarIdentityPosition).toLowerCase() : (existingConfig.sidebarIdentityPosition || 'bottom'),
         pwaIconSource: normalizePwaIconSource(pwaIconSource, normalizePwaIconSource(existingConfig.pwaIconSource)),
@@ -6330,6 +6349,7 @@ app.get('/api/config/public', async (req, res) => {
             jellyfinAnalyticsProvider: normalizeJellyfinAnalyticsProvider(config.jellyfinAnalyticsProvider, config),
             primaryColor: config.primaryColor || '#F7C600',
             customLogoUrl: normalizeBrandingAssetForMediaServer(config.customLogoUrl, config.mediaServerType),
+            customFaviconUrl: String(config.customFaviconUrl || '').trim(),
             brandingTheme: config.brandingTheme || 'plex',
             sidebarIdentityPosition: ['top', 'bottom'].includes(String(config.sidebarIdentityPosition || '').toLowerCase()) ? String(config.sidebarIdentityPosition).toLowerCase() : 'bottom',
             pwaIconSource: normalizePwaIconSource(config.pwaIconSource),
@@ -6370,6 +6390,7 @@ app.get('/api/config/public', async (req, res) => {
             mediaServerType: 'plex',
             primaryColor: '#F7C600',
             customLogoUrl: '',
+            customFaviconUrl: '',
             brandingTheme: 'plex',
             sidebarIdentityPosition: 'bottom',
             pwaIconSource: 'server',
@@ -6436,24 +6457,7 @@ const saveUploadedBrandingImage = async (req, res, assetName, responseKey) => {
         if (!Buffer.isBuffer(buf) || buf.length < 4) {
             return res.status(400).json({ error: 'Invalid image file.' });
         }
-        // Verify PNG, JPEG, or WebP magic bytes — Content-Type header and file extension are spoofable.
-        const isPng = buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47;
-        const isJpeg = buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF;
-        const isWebp = buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46
-            && buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50;
-        if (!isPng && !isJpeg && !isWebp) {
-            const signature = buf.subarray(0, 12).toString('hex').match(/.{1,2}/g)?.join(' ') || 'unknown';
-            log(`Rejected ${assetName} upload: unsupported image signature ${signature}`);
-            return res.status(400).json({ error: 'Invalid image format. Only PNG, JPEG, and WebP files are accepted.' });
-        }
-        const assetDir = path.join(process.cwd(), 'static');
-        await fs.mkdir(assetDir, { recursive: true });
-        const extension = isWebp ? 'webp' : (isJpeg ? 'jpg' : 'png');
-        await Promise.all(['png', 'jpg', 'jpeg', 'webp']
-            .filter((ext) => ext !== extension)
-            .map((ext) => fs.unlink(path.join(assetDir, `${assetName}.${ext}`)).catch(() => null)));
-        const assetPath = path.join(assetDir, `${assetName}.${extension}`);
-        await fs.writeFile(assetPath, buf);
+        const saved = await writeBrandingAsset(BRANDING_DIR, assetName, buf);
         if (assetName === 'logo') {
             try {
                 const config = await loadFile(CONFIG_PATH, {});
@@ -6463,15 +6467,24 @@ const saveUploadedBrandingImage = async (req, res, assetName, responseKey) => {
                 log(`[Branding] logo-upload icon sync failed: ${error.message}`);
             }
         }
-        res.json({ message: `${assetName === 'logo' ? 'Logo' : 'Background'} uploaded successfully.`, [responseKey]: `/static/${assetName}.${extension}` });
+        const label = assetName === 'logo' ? 'Logo' : (assetName === 'favicon' ? 'Favicon' : 'Background');
+        res.json({
+            message: `${label} uploaded successfully.`,
+            [responseKey]: saved.publicPath,
+        });
     } catch (e) {
         log(`Failed to upload ${assetName}: ${e.message}`);
-        res.status(500).json({ error: `Failed to upload ${assetName}.` });
+        const status = /invalid image/i.test(e.message) ? 400 : 500;
+        res.status(status).json({ error: e.message || `Failed to upload ${assetName}.` });
     }
 };
 
 app.post('/api/config/logo', requireLogoUploadAccess, express.raw({ type: ['image/*', 'application/octet-stream'], limit: '5mb' }), async (req, res) => {
     await saveUploadedBrandingImage(req, res, 'logo', 'logoUrl');
+});
+
+app.post('/api/config/favicon', requireLogoUploadAccess, express.raw({ type: ['image/*', 'application/octet-stream'], limit: '2mb' }), async (req, res) => {
+    await saveUploadedBrandingImage(req, res, 'favicon', 'faviconUrl');
 });
 
 app.post('/api/config/background', requireLogoUploadAccess, express.raw({ type: ['image/*', 'application/octet-stream'], limit: '10mb' }), async (req, res) => {
@@ -13866,9 +13879,15 @@ app.get('/api/public/pwa-icon', publicReadRateLimit, async (req, res) => {
 
         const profile = await getAdminProfile(config);
         const brandingDeps = getPortalBrandingDeps();
-        let buffer = await fetchPortalBrandingRasterBuffer(config, profile, brandingDeps, { timeoutMs: 5000 });
+        let buffer = await fetchPortalBrandingRasterBuffer(config, profile, brandingDeps, {
+            brandingDir: BRANDING_DIR,
+            timeoutMs: 5000,
+        });
         if (!buffer) {
-            buffer = await fetchPortalBrandingRasterBuffer(config, profile, brandingDeps, { timeoutMs: 10000 });
+            buffer = await fetchPortalBrandingRasterBuffer(config, profile, brandingDeps, {
+                brandingDir: BRANDING_DIR,
+                timeoutMs: 10000,
+            });
         }
         if (!buffer) {
             log('[Branding] PWA icon route: server branding unavailable');
@@ -13897,8 +13916,21 @@ app.get('/api/public/branding-icon', publicReadRateLimit, async (req, res) => {
         if (normalizePwaIconSource(config.pwaIconSource) === 'application') {
             return sendCircularStaticLogoFallback(res);
         }
+        const customFaviconUrl = String(config.customFaviconUrl || '').trim();
+        if (customFaviconUrl) {
+            const faviconBuffer = await readBrandingAssetByPublicPath(
+                stripBasePathFromUrl(customFaviconUrl),
+                BRANDING_DIR,
+            );
+            if (faviconBuffer) {
+                return sendBrandingImageBuffer(res, faviconBuffer);
+            }
+        }
         const profile = await getAdminProfile(config);
-        const buffer = await fetchPortalBrandingRasterBuffer(config, profile, getPortalBrandingDeps(), { timeoutMs: 10000 });
+        const buffer = await fetchPortalBrandingRasterBuffer(config, profile, getPortalBrandingDeps(), {
+            brandingDir: BRANDING_DIR,
+            timeoutMs: 10000,
+        });
         if (buffer) {
             return sendCircularFavicon(res, buffer);
         }
@@ -18624,8 +18656,25 @@ const staticAssetOptions = {
         }
     },
 };
+const staticDir = path.join(process.cwd(), 'static');
+
+const servePersistedBrandingAsset = async (req, res, next) => {
+    const parsed = parseBrandingPublicPath(req.path);
+    if (!parsed) return next();
+    const filePath = path.join(BRANDING_DIR, `${parsed.assetName}.${parsed.extension}`);
+    try {
+        await fs.access(filePath);
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        return res.sendFile(filePath);
+    } catch {
+        return next();
+    }
+};
+
+app.use('/static', servePersistedBrandingAsset);
 app.use('/static', express.static(staticDir, staticAssetOptions));
 if (BASE_PATH) {
+    app.use(`${BASE_PATH}/static`, servePersistedBrandingAsset);
     app.use(`${BASE_PATH}/static`, express.static(staticDir, staticAssetOptions));
 }
 
@@ -28914,6 +28963,14 @@ app.listen(PORT, BIND_HOST, async () => {
     }
 
     await migrateConfigFiles((message) => log(`[config] ${message}`));
+    try {
+        const migratedBranding = await migrateLegacyBrandingAssets(BRANDING_DIR, staticDir, (message) => log(message));
+        if (migratedBranding > 0) {
+            log(`[Branding] migrated ${migratedBranding} legacy static asset(s) into ${BRANDING_DIR}`);
+        }
+    } catch (error) {
+        log(`[Branding] legacy static migrate failed: ${error.message}`);
+    }
     try {
         const migratedTokens = await migratePlexAuthTokensAtRest();
         if (migratedTokens > 0) {

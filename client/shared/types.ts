@@ -166,7 +166,7 @@ export interface AppSettings {
     jellyglanceUrl?: string;
     jellyglanceApiKey?: string;
     primaryColor?: string;
-    customLogoUrl?: string;
+    customFaviconUrl?: string;
     sidebarIdentityPosition?: 'top' | 'bottom';
     backgroundImageUrl?: string;
     navOrder?: string[];

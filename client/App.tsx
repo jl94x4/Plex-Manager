@@ -165,8 +165,8 @@ export const MainApp: React.FC = () => {
             setPublicConfig(data);
             setPublicConfigWarning(null);
 
-            if (data.customLogoUrl) {
-                updateFavicon(data.customLogoUrl);
+            if (data.customFaviconUrl || data.customLogoUrl) {
+                updateFavicon(data.customFaviconUrl || data.customLogoUrl);
             }
         } catch (e) {
             console.error('[portal] Failed to load public config:', e);
