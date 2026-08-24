@@ -15,6 +15,7 @@ import {
     LifeBuoy,
     Radar,
     Layers,
+    Music,
     AlertTriangle,
     Cpu,
     Sparkles,
@@ -131,6 +132,12 @@ const typeVisual = (type?: string) => {
                 tone: 'text-rose-400 bg-rose-500/15 border-rose-500/35',
                 tile: 'from-rose-500/30 via-fuchsia-500/10 to-card',
             };
+        case 'spotify_sync_failed':
+            return {
+                Icon: Music,
+                tone: 'text-emerald-300 bg-emerald-500/15 border-emerald-500/35',
+                tile: 'from-emerald-500/25 via-green-500/10 to-card',
+            };
         case 'scanner_failed':
             return {
                 Icon: Radar,
@@ -198,6 +205,7 @@ const STACK_TITLE_TYPES = new Set([
     'request_not_released',
     'support_ticket',
     'collexions_failed',
+    'spotify_sync_failed',
     'scanner_failed',
     'scanner_deleted',
     'scanner_upgrade',

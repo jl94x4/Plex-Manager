@@ -367,6 +367,7 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
         episode: t('settings.notifications.events.episode'),
         admin_pending: t('settings.notifications.events.admin_pending'),
         collexions_failed: t('settings.notifications.events.collexions_failed'),
+        spotify_sync_failed: 'Spotify Sync failed',
         scanner_failed: t('settings.notifications.events.scanner_failed'),
         scanner_deleted: t('settings.notifications.events.scanner_deleted'),
         scanner_upgrade: t('settings.notifications.events.scanner_upgrade'),

@@ -110,6 +110,9 @@ export const resolveNotificationDestination = (item: NotificationLike): Notifica
         return { kind: 'settings', labelKey: 'notifications.openSettings' };
     }
 
+    if (href.startsWith('/spotify-sync') || type === 'spotify_sync_failed') {
+        return { kind: 'route', route: 'spotify-sync', labelKey: 'navigation.spotifySync' };
+    }
     if (href.startsWith('/collexions') || type === 'collexions_failed') {
         return { kind: 'route', route: 'collexions', labelKey: 'notifications.openCollexions' };
     }

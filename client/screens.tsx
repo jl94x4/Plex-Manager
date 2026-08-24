@@ -81,7 +81,7 @@ import { ANALYTICS_PERIOD_OPTIONS, persistAnalyticsDays, readPersistedAnalyticsD
 import { UserDashboardLayout } from './home/UserDashboardLayout';
 import { HomeCustomModuleSection } from './home/HomeCustomModuleSection';
 import { HomeHeroMovieBackdrop } from './home/HomeHeroMovieBackdrop';
-import { createBazarrToolsSectionRenderer, createMainGridWidgetRenderer, createMediaAutomationSectionRenderer, createPendingRequestsSectionRenderer, createRecentlyAddedWidgetRenderer, createScannerSectionRenderer } from './home/userDashboardWidgetRenderers';
+import { createBazarrToolsSectionRenderer, createMainGridWidgetRenderer, createMediaAutomationSectionRenderer, createPendingRequestsSectionRenderer, createRecentlyAddedWidgetRenderer, createScannerSectionRenderer, createSpotifySyncSectionRenderer } from './home/userDashboardWidgetRenderers';
 import {
     DEFAULT_DASHBOARD_LAYOUT,
     DASHBOARD_SECTION_LABELS,
@@ -7410,6 +7410,7 @@ export const UserDashboard: React.FC<{
     onViewLogs?: () => void;
     onViewCollexions?: () => void;
     onViewScanner?: () => void;
+    onViewSpotifySync?: () => void;
     onViewMediaAutomation?: () => void;
     onViewRequests?: (reviewId?: number) => void;
     onPendingRequestsChange?: () => void;
@@ -7426,6 +7427,7 @@ export const UserDashboard: React.FC<{
     onViewLogs,
     onViewCollexions,
     onViewScanner,
+    onViewSpotifySync,
     onViewMediaAutomation,
     onViewRequests,
     onPendingRequestsChange,
@@ -8074,12 +8076,13 @@ export const UserDashboard: React.FC<{
         requestsQueueEnabled: !!sessionInfo?.navFeatures?.requestsQueue,
         collexionsEnabled: !!sessionInfo?.navFeatures?.collexions,
         scannerHomeWidgetEnabled: !!sessionInfo?.navFeatures?.scannerHomeWidget,
+        spotifySyncHomeWidgetEnabled: !!sessionInfo?.navFeatures?.spotifySyncHomeWidget,
         mediaAutomationHomeWidgetEnabled: !!sessionInfo?.navFeatures?.mediaAutomationHomeWidget,
         achievementsEnabled: !!sessionInfo?.navFeatures?.achievements,
         achievementsHomeWidgetEnabled: publicConfig?.achievementsHomeWidgetEnabled !== false,
         mediaServerType: publicConfig?.mediaServerType || 'plex',
         homeCustomModules,
-    }), [sessionInfo.session.isAdmin, user, publicConfig?.referralEnabled, publicConfig?.mediaServerType, publicConfig?.achievementsHomeWidgetEnabled, sessionInfo?.navFeatures?.requestsQueue, sessionInfo?.navFeatures?.collexions, sessionInfo?.navFeatures?.scannerHomeWidget, sessionInfo?.navFeatures?.mediaAutomationHomeWidget, sessionInfo?.navFeatures?.achievements, homeCustomModules]);
+    }), [sessionInfo.session.isAdmin, user, publicConfig?.referralEnabled, publicConfig?.mediaServerType, publicConfig?.achievementsHomeWidgetEnabled, sessionInfo?.navFeatures?.requestsQueue, sessionInfo?.navFeatures?.collexions, sessionInfo?.navFeatures?.scannerHomeWidget, sessionInfo?.navFeatures?.spotifySyncHomeWidget, sessionInfo?.navFeatures?.mediaAutomationHomeWidget, sessionInfo?.navFeatures?.achievements, homeCustomModules]);
 
     const widgetDeps = useMemo(() => ({
         t,
@@ -8107,6 +8110,7 @@ export const UserDashboard: React.FC<{
         onViewLogs,
         onViewCollexions,
         onViewScanner,
+        onViewSpotifySync,
         onViewMediaAutomation,
         onViewRequests,
         onPendingRequestsChange,
@@ -8116,12 +8120,13 @@ export const UserDashboard: React.FC<{
     }), [
         t, sessionInfo, publicConfig, user, isRevoked, isExpiringSoon, daysLeft, progressPct,
         serverStats, serverDataLoading, analytics, analyticsLoading, analyticsDays, analyticsDaysOpen,
-        showQualityBadges, dashboardData, bazarrWidgets, onViewAdmin, onViewSettings, onViewLogs, onViewCollexions, onViewScanner, onViewMediaAutomation, onViewRequests, onPendingRequestsChange,
+        showQualityBadges, dashboardData, bazarrWidgets, onViewAdmin, onViewSettings, onViewLogs, onViewCollexions, onViewScanner, onViewSpotifySync, onViewMediaAutomation, onViewRequests, onPendingRequestsChange,
     ]);
 
     const renderMainGridWidget = useMemo(() => createMainGridWidgetRenderer(widgetDeps), [widgetDeps]);
     const renderPendingRequests = useMemo(() => createPendingRequestsSectionRenderer(widgetDeps), [widgetDeps]);
     const renderScanner = useMemo(() => createScannerSectionRenderer(widgetDeps), [widgetDeps]);
+    const renderSpotifySync = useMemo(() => createSpotifySyncSectionRenderer(widgetDeps), [widgetDeps]);
     const renderMediaAutomation = useMemo(() => createMediaAutomationSectionRenderer(widgetDeps), [widgetDeps]);
     const renderBazarrTools = useMemo(() => createBazarrToolsSectionRenderer(widgetDeps), [widgetDeps]);
     const renderRecentlyAddedWidget = useMemo(() => createRecentlyAddedWidgetRenderer(widgetDeps), [widgetDeps]);
@@ -8360,6 +8365,7 @@ export const UserDashboard: React.FC<{
                 renderMainGridWidget={renderMainGridWidget}
                 renderPendingRequests={renderPendingRequests}
                 renderScanner={renderScanner}
+                renderSpotifySync={renderSpotifySync}
                 renderMediaAutomation={renderMediaAutomation}
                 renderBazarrTools={renderBazarrTools}
                 renderRecentlyAddedWidget={renderRecentlyAddedWidget}

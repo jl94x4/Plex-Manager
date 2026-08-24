@@ -751,7 +751,7 @@ export const SettingsDashboard: React.FC = () => {
     const [ntfyPriority, setNtfyPriority] = useState(3);
     const [ntfyEvents, setNtfyEvents] = useState<Record<string, boolean>>({
         available: true, approved: true, declined: true, season: true, episode: false, admin_pending: true,
-        collexions_failed: true, scanner_failed: true, scanner_deleted: true, scanner_upgrade: true, scanner_import: true, status_down: true, status_up: true,
+        collexions_failed: true, scanner_failed: true, scanner_deleted: true, scanner_upgrade: true, scanner_import: true, spotify_sync_failed: true, status_down: true, status_up: true,
         media_job_failed: true, media_job_completed: false,
         support_ticket: true, support_reply: true, support_media_issue: true,
     });
@@ -760,7 +760,7 @@ export const SettingsDashboard: React.FC = () => {
     const [webhookHeadersJson, setWebhookHeadersJson] = useState('');
     const [webhookEvents, setWebhookEvents] = useState<Record<string, boolean>>({
         available: true, approved: false, declined: false, season: false, episode: false, admin_pending: false,
-        collexions_failed: false, scanner_failed: false, scanner_deleted: false, scanner_upgrade: false, scanner_import: false, status_down: false, status_up: false,
+        collexions_failed: false, scanner_failed: false, scanner_deleted: false, scanner_upgrade: false, scanner_import: false, spotify_sync_failed: false, status_down: false, status_up: false,
         media_job_failed: false, media_job_completed: false,
         support_ticket: false, support_reply: false, support_media_issue: false,
     });
@@ -777,7 +777,11 @@ export const SettingsDashboard: React.FC = () => {
     const [spotifyToPlexClientId, setSpotifyToPlexClientId] = useState('');
     const [spotifyToPlexClientSecret, setSpotifyToPlexClientSecret] = useState('');
     const [spotifyToPlexEncryptionKey, setSpotifyToPlexEncryptionKey] = useState('');
+    const [spotifyToPlexHomeWidgetEnabled, setSpotifyToPlexHomeWidgetEnabled] = useState(false);
     const [spotifySyncHealth, setSpotifySyncHealth] = useState<{ ok?: boolean; issues?: string[] } | null>(null);
+    const [spotifyPortalImportMessage, setSpotifyPortalImportMessage] = useState('');
+    const [spotifyPortalImporting, setSpotifyPortalImporting] = useState(false);
+    const [spotifySyncStarting, setSpotifySyncStarting] = useState(false);
     const [upgraderDefaultPreset, setUpgraderDefaultPreset] = useState('non_hevc');
     const [upgraderMinSizeGB, setUpgraderMinSizeGB] = useState(5);
     const [upgraderAutomationEnabled, setUpgraderAutomationEnabled] = useState(false);
@@ -1729,14 +1733,14 @@ export const SettingsDashboard: React.FC = () => {
                 initialSettings.ntfyEvents && typeof initialSettings.ntfyEvents === 'object'
                     ? {
                         available: true, approved: true, declined: true, season: true, episode: false, admin_pending: true,
-                        collexions_failed: true, scanner_failed: true, scanner_deleted: true, scanner_upgrade: true, scanner_import: true, status_down: true, status_up: true,
+                        collexions_failed: true, scanner_failed: true, scanner_deleted: true, scanner_upgrade: true, scanner_import: true, spotify_sync_failed: true, status_down: true, status_up: true,
                         media_job_failed: true, media_job_completed: false,
                         support_ticket: true, support_reply: true, support_media_issue: true,
                         ...initialSettings.ntfyEvents,
                     }
                     : {
                         available: true, approved: true, declined: true, season: true, episode: false, admin_pending: true,
-                        collexions_failed: true, scanner_failed: true, scanner_deleted: true, scanner_upgrade: true, scanner_import: true, status_down: true, status_up: true,
+                        collexions_failed: true, scanner_failed: true, scanner_deleted: true, scanner_upgrade: true, scanner_import: true, spotify_sync_failed: true, status_down: true, status_up: true,
                         media_job_failed: true, media_job_completed: false,
                         support_ticket: true, support_reply: true, support_media_issue: true,
                     },
@@ -1748,14 +1752,14 @@ export const SettingsDashboard: React.FC = () => {
                 initialSettings.webhookEvents && typeof initialSettings.webhookEvents === 'object'
                     ? {
                         available: true, approved: false, declined: false, season: false, episode: false, admin_pending: false,
-                        collexions_failed: false, scanner_failed: false, scanner_deleted: false, scanner_upgrade: false, scanner_import: false, status_down: false, status_up: false,
+                        collexions_failed: false, scanner_failed: false, scanner_deleted: false, scanner_upgrade: false, scanner_import: false, spotify_sync_failed: false, status_down: false, status_up: false,
                         media_job_failed: false, media_job_completed: false,
                         support_ticket: false, support_reply: false, support_media_issue: false,
                         ...initialSettings.webhookEvents,
                     }
                     : {
                         available: true, approved: false, declined: false, season: false, episode: false, admin_pending: false,
-                        collexions_failed: false, scanner_failed: false, scanner_deleted: false, scanner_upgrade: false, scanner_import: false, status_down: false, status_up: false,
+                        collexions_failed: false, scanner_failed: false, scanner_deleted: false, scanner_upgrade: false, scanner_import: false, spotify_sync_failed: false, status_down: false, status_up: false,
                         media_job_failed: false, media_job_completed: false,
                         support_ticket: false, support_reply: false, support_media_issue: false,
                     },
@@ -1899,6 +1903,7 @@ export const SettingsDashboard: React.FC = () => {
             if (initialSettings.spotifyToPlexClientId !== undefined) setSpotifyToPlexClientId(String(initialSettings.spotifyToPlexClientId || ''));
             if (initialSettings.spotifyToPlexClientSecret !== undefined) setSpotifyToPlexClientSecret(String(initialSettings.spotifyToPlexClientSecret || ''));
             if (initialSettings.spotifyToPlexEncryptionKey !== undefined) setSpotifyToPlexEncryptionKey(String(initialSettings.spotifyToPlexEncryptionKey || ''));
+            if (initialSettings.spotifyToPlexHomeWidgetEnabled !== undefined) setSpotifyToPlexHomeWidgetEnabled(!!initialSettings.spotifyToPlexHomeWidgetEnabled);
             if (initialSettings.upgraderDefaultPreset) setUpgraderDefaultPreset(initialSettings.upgraderDefaultPreset);
             if (initialSettings.upgraderMinSizeGB !== undefined) setUpgraderMinSizeGB(Math.max(0, Number(initialSettings.upgraderMinSizeGB) || 5));
             if (initialSettings.upgraderAutomationEnabled !== undefined) setUpgraderAutomationEnabled(!!initialSettings.upgraderAutomationEnabled);
@@ -2310,6 +2315,7 @@ export const SettingsDashboard: React.FC = () => {
             spotifyToPlexClientId,
             spotifyToPlexClientSecret,
             spotifyToPlexEncryptionKey,
+            spotifyToPlexHomeWidgetEnabled,
             upgraderDefaultPreset,
             upgraderMinSizeGB,
             upgraderAutomationEnabled,
@@ -4924,7 +4930,10 @@ export const SettingsDashboard: React.FC = () => {
                                     title="Enable Spotify Sync"
                                     hint={<SettingHint>Shows the Spotify Sync admin nav item and embeds the spotify-to-plex UI. OFF by default.</SettingHint>}
                                     checked={spotifyToPlexEnabled}
-                                    onChange={setSpotifyToPlexEnabled}
+                                    onChange={(next) => {
+                                        setSpotifyToPlexEnabled(next);
+                                        if (!next) setSpotifyToPlexHomeWidgetEnabled(false);
+                                    }}
                                     border={false}
                                 />
                                 <p className={`text-xs mt-2 font-semibold ${spotifyToPlexEnabled ? 'text-green-300' : 'text-yellow-300'}`}>
@@ -5000,6 +5009,69 @@ export const SettingsDashboard: React.FC = () => {
                                     After saving credential changes, restart the <code className="text-xs">spotify-to-plex</code> container once so it picks up the generated env file.
                                     Scheduled sync runs inside the sidecar (daily by default).
                                 </p>
+                                <SettingsToggleRow
+                                    title="Home dashboard widget"
+                                    hint={<SettingHint>Shows last sync status on Home for admins. Reorder under Home → Edit layout.</SettingHint>}
+                                    checked={spotifyToPlexHomeWidgetEnabled}
+                                    onChange={setSpotifyToPlexHomeWidgetEnabled}
+                                    disabled={!spotifyToPlexEnabled}
+                                    border={false}
+                                />
+                                <div className="flex flex-wrap gap-2 mt-3">
+                                    <button
+                                        type="button"
+                                        className="px-3 py-2 rounded-md text-xs font-bold border border-border hover:border-plex hover:text-plex disabled:opacity-50"
+                                        disabled={!spotifyToPlexEnabled || spotifyPortalImporting}
+                                        onClick={async () => {
+                                            setSpotifyPortalImporting(true);
+                                            setSpotifyPortalImportMessage('');
+                                            try {
+                                                const data = await apiFetch('/api/spotify-to-plex/apply-portal-defaults', { method: 'POST' });
+                                                setSpotifyPortalImportMessage(data?.message || 'Portal defaults applied to sidecar.');
+                                                pushToast(data?.message || 'Applied portal defaults', 'success');
+                                            } catch (e: any) {
+                                                setSpotifyPortalImportMessage(e?.message || 'Import failed');
+                                                pushToast(e?.message || 'Import failed', 'error');
+                                            } finally {
+                                                setSpotifyPortalImporting(false);
+                                            }
+                                        }}
+                                    >
+                                        {spotifyPortalImporting ? 'Applying…' : 'Apply Plex/Lidarr from portal'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="px-3 py-2 rounded-md text-xs font-bold border border-border hover:border-plex hover:text-plex disabled:opacity-50"
+                                        disabled={!spotifyToPlexEnabled || spotifySyncStarting}
+                                        onClick={async () => {
+                                            setSpotifySyncStarting(true);
+                                            try {
+                                                const data = await apiFetch('/api/spotify-to-plex/sync', {
+                                                    method: 'POST',
+                                                    body: JSON.stringify({ type: 'all' }),
+                                                });
+                                                pushToast(data?.message || 'Sync started', 'success');
+                                            } catch (e: any) {
+                                                pushToast(e?.message || 'Sync failed', 'error');
+                                            } finally {
+                                                setSpotifySyncStarting(false);
+                                            }
+                                        }}
+                                    >
+                                        {spotifySyncStarting ? 'Starting…' : 'Sync now'}
+                                    </button>
+                                    <a
+                                        href={portalUrl('/api/spotify-to-plex-embed/app/advanced/logs')}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-3 py-2 rounded-md text-xs font-bold border border-border hover:border-plex hover:text-plex"
+                                    >
+                                        Sidecar logs
+                                    </a>
+                                </div>
+                                {spotifyPortalImportMessage ? (
+                                    <p className="text-[11px] text-muted mt-2">{spotifyPortalImportMessage}</p>
+                                ) : null}
                                 {spotifyToPlexEnabled && (
                                     <button
                                         type="button"

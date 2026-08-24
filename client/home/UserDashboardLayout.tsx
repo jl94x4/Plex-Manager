@@ -40,6 +40,7 @@ type Props = {
     renderMainGridWidget: (id: MainGridWidgetId) => React.ReactNode;
     renderPendingRequests: () => React.ReactNode;
     renderScanner?: () => React.ReactNode;
+    renderSpotifySync?: () => React.ReactNode;
     renderMediaAutomation?: () => React.ReactNode;
     renderBazarrTools?: () => React.ReactNode;
     renderWatchRowLeft?: () => React.ReactNode;
@@ -59,6 +60,7 @@ export const UserDashboardLayout: React.FC<Props> = ({
     renderMainGridWidget,
     renderPendingRequests,
     renderScanner,
+    renderSpotifySync,
     renderMediaAutomation,
     renderBazarrTools,
     renderWatchRowLeft,
@@ -220,6 +222,16 @@ export const UserDashboardLayout: React.FC<Props> = ({
                 if (!content) break;
                 sectionNodes.push(
                     <div key="scanner" className="relative z-[1] w-full min-w-0">
+                        {content}
+                    </div>
+                );
+                break;
+            }
+            case 'spotifySync': {
+                const content = renderSpotifySync?.();
+                if (!content) break;
+                sectionNodes.push(
+                    <div key="spotifySync" className="relative z-[1] w-full min-w-0">
                         {content}
                     </div>
                 );

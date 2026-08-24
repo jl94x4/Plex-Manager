@@ -3,6 +3,7 @@ export type NavFeatureFlags = {
     upgrader?: boolean;
     collexions?: boolean;
     spotifySync?: boolean;
+    spotifySyncHomeWidget?: boolean;
     scanner?: boolean;
     mediaAutomation?: boolean;
     posterSets?: boolean;

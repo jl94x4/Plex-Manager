@@ -11,6 +11,7 @@ const EVENT_LABEL_KEYS: Record<string, string> = {
     admin_pending: 'settings.notifications.templates.events.admin_pending',
     not_released: 'settings.notifications.templates.events.not_released',
     collexions_failed: 'settings.notifications.templates.events.collexions_failed',
+    spotify_sync_failed: 'Spotify Sync failed',
     scanner_failed: 'settings.notifications.templates.events.scanner_failed',
     scanner_deleted: 'settings.notifications.templates.events.scanner_deleted',
     scanner_upgrade: 'settings.notifications.templates.events.scanner_upgrade',

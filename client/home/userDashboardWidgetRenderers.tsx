@@ -29,6 +29,7 @@ import { ANALYTICS_PERIOD_OPTIONS } from '../shared/analyticsPeriodOptions';
 import { PendingRequestsHomeWidget } from '../requests/PendingRequestsHomeWidget';
 import { CollexionsHomeWidget } from '../collexions/CollexionsHomeWidget';
 import { ScannerHomeWidget } from '../scanner/ScannerHomeWidget';
+import { SpotifySyncHomeWidget } from '../spotify-sync/SpotifySyncHomeWidget';
 import { MediaAutomationHomeWidget } from '../media-automation/MediaAutomationHomeWidget';
 import { AchievementsHomeWidget } from '../achievements/AchievementsDashboard';
 import { UnlockCelebration } from '../achievements/UnlockCelebration';
@@ -151,6 +152,7 @@ export type UserDashboardWidgetDeps = {
     onViewLogs?: () => void;
     onViewCollexions?: () => void;
     onViewScanner?: () => void;
+    onViewSpotifySync?: () => void;
     onViewMediaAutomation?: () => void;
     onViewRequests?: (reviewId?: number) => void;
     onPendingRequestsChange?: () => void;
@@ -782,6 +784,15 @@ export const createScannerSectionRenderer = (deps: UserDashboardWidgetDeps) => {
         if (!sessionInfo?.session?.isAdmin) return null;
         if (!sessionInfo?.navFeatures?.scannerHomeWidget) return null;
         return <ScannerHomeWidget onOpen={onViewScanner} />;
+    };
+};
+
+export const createSpotifySyncSectionRenderer = (deps: UserDashboardWidgetDeps) => {
+    const { sessionInfo, onViewSpotifySync } = deps;
+    return (): React.ReactNode => {
+        if (!sessionInfo?.session?.isAdmin) return null;
+        if (!sessionInfo?.navFeatures?.spotifySyncHomeWidget) return null;
+        return <SpotifySyncHomeWidget onOpen={onViewSpotifySync} />;
     };
 };
 

@@ -6,7 +6,7 @@ import {
     parseHomeCustomModuleSectionId,
 } from './homeCustomModules';
 
-export type BuiltInDashboardSectionId = 'wrapUp' | 'mainGrid' | 'pendingRequests' | 'watchRow' | 'scanner' | 'mediaAutomation' | 'recentlyAdded' | 'bazarrTools';
+export type BuiltInDashboardSectionId = 'wrapUp' | 'mainGrid' | 'pendingRequests' | 'watchRow' | 'scanner' | 'spotifySync' | 'mediaAutomation' | 'recentlyAdded' | 'bazarrTools';
 
 export type DashboardSectionId = BuiltInDashboardSectionId | `customModule:${string}`;
 
@@ -47,6 +47,7 @@ export const DASHBOARD_SECTION_LABELS: Record<DashboardSectionId, string> = {
     pendingRequests: 'Pending Requests',
     watchRow: 'Recently / Most Watched',
     scanner: 'Scanner',
+    spotifySync: 'Spotify Sync',
     mediaAutomation: 'Media Automation',
     recentlyAdded: 'Recently Added rows',
     bazarrTools: 'Bazarr Subtitle Tools',
@@ -74,7 +75,7 @@ export const RECENTLY_ADDED_WIDGET_META: Record<RecentlyAddedWidgetId, string> =
 
 export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayoutConfig = {
     version: 1,
-    sections: ['wrapUp', 'mainGrid', 'pendingRequests', 'watchRow', 'scanner', 'mediaAutomation', 'recentlyAdded', 'bazarrTools'],
+    sections: ['wrapUp', 'mainGrid', 'pendingRequests', 'watchRow', 'scanner', 'spotifySync', 'mediaAutomation', 'recentlyAdded', 'bazarrTools'],
     mainGridOrder: [
         'adminBadge',
         'quickActions',
@@ -96,7 +97,7 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayoutConfig = {
     topWatchedRows: 2,
 };
 
-const ALL_SECTIONS: BuiltInDashboardSectionId[] = ['wrapUp', 'mainGrid', 'pendingRequests', 'watchRow', 'scanner', 'mediaAutomation', 'recentlyAdded', 'bazarrTools'];
+const ALL_SECTIONS: BuiltInDashboardSectionId[] = ['wrapUp', 'mainGrid', 'pendingRequests', 'watchRow', 'scanner', 'spotifySync', 'mediaAutomation', 'recentlyAdded', 'bazarrTools'];
 const ALL_MAIN_GRID: MainGridWidgetId[] = Object.keys(MAIN_GRID_WIDGET_META) as MainGridWidgetId[];
 const ALL_RECENTLY_ADDED: RecentlyAddedWidgetId[] = ['recentMovies', 'recentShows', 'recentMusic'];
 const ALL_WIDGETS: DashboardWidgetId[] = [...ALL_MAIN_GRID, ...ALL_RECENTLY_ADDED];
@@ -183,6 +184,13 @@ const migrateDashboardSections = (sections: DashboardSectionId[]): DashboardSect
         if (insertAt >= 0) next.splice(insertAt, 0, 'mediaAutomation');
         else next.push('mediaAutomation');
     }
+    if (!next.includes('spotifySync')) {
+        const scannerIndex = next.indexOf('scanner');
+        const mediaAutomationIndex = next.indexOf('mediaAutomation');
+        const insertAt = scannerIndex >= 0 ? scannerIndex + 1 : mediaAutomationIndex;
+        if (insertAt >= 0) next.splice(insertAt, 0, 'spotifySync');
+        else next.push('spotifySync');
+    }
     if (!next.includes('bazarrTools')) next.push('bazarrTools');
     return next;
 };
@@ -239,6 +247,7 @@ export type DashboardLayoutContext = {
     requestsQueueEnabled?: boolean;
     collexionsEnabled?: boolean;
     scannerHomeWidgetEnabled?: boolean;
+    spotifySyncHomeWidgetEnabled?: boolean;
     mediaAutomationHomeWidgetEnabled?: boolean;
     achievementsEnabled?: boolean;
     achievementsHomeWidgetEnabled?: boolean;
@@ -295,6 +304,7 @@ export const isDashboardSectionAvailable = (id: DashboardSectionId, ctx: Dashboa
     if (id === 'pendingRequests') return !!ctx.isAdmin;
     if (id === 'bazarrTools') return !!ctx.isAdmin;
     if (id === 'scanner') return !!ctx.isAdmin && !!ctx.scannerHomeWidgetEnabled;
+    if (id === 'spotifySync') return !!ctx.isAdmin && !!ctx.spotifySyncHomeWidgetEnabled;
     if (id === 'mediaAutomation') return !!ctx.isAdmin && !!ctx.mediaAutomationHomeWidgetEnabled;
     return true;
 };
@@ -346,6 +356,11 @@ export const SECTION_PREVIEW_META: Record<
     scanner: {
         shortLabel: 'Scanner',
         description: 'Full-width library refresh status',
+        previewClass: 'h-14',
+    },
+    spotifySync: {
+        shortLabel: 'Spotify Sync',
+        description: 'Playlist sync sidecar status',
         previewClass: 'h-14',
     },
     mediaAutomation: {
