@@ -302,7 +302,7 @@ const isJellyfinBrandingAsset = (value: string | null | undefined) => (
     [JELLYFIN_BRAND_LOGO_URL, JELLYFIN_BRAND_BACKGROUND_URL].includes(String(value || '').trim())
 );
 
-const getUploadedBrandingImagePath = (file: File, assetName: 'logo' | 'background' | 'favicon') => {
+const getUploadedBrandingImagePath = (file: File, assetName: 'logo' | 'background' | 'favicon' | 'login') => {
     const name = file.name.toLowerCase();
     const type = file.type.toLowerCase();
     const extension = type.includes('webp') || name.endsWith('.webp')
@@ -770,6 +770,7 @@ export const SettingsDashboard: React.FC = () => {
 
     // Branding & UI States
     const [customLogoUrl, setCustomLogoUrl] = useState('');
+    const [customLoginLogoUrl, setCustomLoginLogoUrl] = useState('');
     const [customFaviconUrl, setCustomFaviconUrl] = useState('');
     const [backgroundImageUrl, setBackgroundImageUrl] = useState('');
     const [useScrollRevealAnimations, setUseScrollRevealAnimations] = useState(false);
@@ -803,11 +804,14 @@ export const SettingsDashboard: React.FC = () => {
     const [homeCustomModules, setHomeCustomModules] = useState<HomeCustomModule[]>([]);
     const [downloadsVisibleToMembers, setDownloadsVisibleToMembers] = useState(true);
     const [logoFile, setLogoFile] = useState<File | null>(null);
+    const [loginLogoFile, setLoginLogoFile] = useState<File | null>(null);
     const [faviconFile, setFaviconFile] = useState<File | null>(null);
     const [backgroundFile, setBackgroundFile] = useState<File | null>(null);
     const [logoPreviewUrl, setLogoPreviewUrl] = useState('');
+    const [loginLogoPreviewUrl, setLoginLogoPreviewUrl] = useState('');
     const [backgroundPreviewUrl, setBackgroundPreviewUrl] = useState('');
     const logoPreviewObjectUrlRef = useRef('');
+    const loginLogoPreviewObjectUrlRef = useRef('');
     const backgroundPreviewObjectUrlRef = useRef('');
     const [tasks, setTasks] = useState<any[]>([]);
     const [diagnostics, setDiagnostics] = useState<any>(null);
@@ -852,6 +856,14 @@ export const SettingsDashboard: React.FC = () => {
         setBackgroundPreviewUrl('');
     }, []);
 
+    const clearLoginLogoPreview = useCallback(() => {
+        if (loginLogoPreviewObjectUrlRef.current) {
+            URL.revokeObjectURL(loginLogoPreviewObjectUrlRef.current);
+            loginLogoPreviewObjectUrlRef.current = '';
+        }
+        setLoginLogoPreviewUrl('');
+    }, []);
+
     const handleLogoFileChange = useCallback((file: File | null) => {
         clearLogoPreview();
         setLogoFile(file);
@@ -861,6 +873,16 @@ export const SettingsDashboard: React.FC = () => {
         setLogoPreviewUrl(objectUrl);
         setCustomLogoUrl(getUploadedBrandingImagePath(file, 'logo'));
     }, [clearLogoPreview]);
+
+    const handleLoginLogoFileChange = useCallback((file: File | null) => {
+        clearLoginLogoPreview();
+        setLoginLogoFile(file);
+        if (!file) return;
+        const objectUrl = URL.createObjectURL(file);
+        loginLogoPreviewObjectUrlRef.current = objectUrl;
+        setLoginLogoPreviewUrl(objectUrl);
+        setCustomLoginLogoUrl(getUploadedBrandingImagePath(file, 'login'));
+    }, [clearLoginLogoPreview]);
 
     const handleFaviconFileChange = useCallback((file: File | null) => {
         setFaviconFile(file);
@@ -880,6 +902,7 @@ export const SettingsDashboard: React.FC = () => {
 
     useEffect(() => () => {
         if (logoPreviewObjectUrlRef.current) URL.revokeObjectURL(logoPreviewObjectUrlRef.current);
+        if (loginLogoPreviewObjectUrlRef.current) URL.revokeObjectURL(loginLogoPreviewObjectUrlRef.current);
         if (backgroundPreviewObjectUrlRef.current) URL.revokeObjectURL(backgroundPreviewObjectUrlRef.current);
     }, []);
 
@@ -1501,6 +1524,7 @@ export const SettingsDashboard: React.FC = () => {
             const savedBrandingTheme = localStorage.getItem('portal-theme') || initialSettings.brandingTheme || 'plex';
             setBrandingTheme(savedBrandingTheme === 'light' ? 'plex' : savedBrandingTheme);
             setCustomLogoUrl(initialSettings.mediaServerType === 'emby' && isJellyfinBrandingAsset(initialSettings.customLogoUrl) ? '' : (initialSettings.customLogoUrl || ''));
+            setCustomLoginLogoUrl(initialSettings.customLoginLogoUrl || '');
             setCustomFaviconUrl(initialSettings.customFaviconUrl || '');
             setSidebarIdentityPosition(initialSettings.sidebarIdentityPosition === 'top' ? 'top' : 'bottom');
             setPwaIconSource(initialSettings.pwaIconSource === 'application' ? 'application' : 'server');
@@ -1930,6 +1954,7 @@ export const SettingsDashboard: React.FC = () => {
         }
 
         let savedCustomLogoUrl = logoFile ? getUploadedBrandingImagePath(logoFile, 'logo') : customLogoUrl;
+        let savedCustomLoginLogoUrl = loginLogoFile ? getUploadedBrandingImagePath(loginLogoFile, 'login') : customLoginLogoUrl;
         let savedCustomFaviconUrl = faviconFile ? getUploadedBrandingImagePath(faviconFile, 'favicon') : customFaviconUrl;
         let savedBackgroundImageUrl = backgroundImageUrl;
         if (mediaServerType === 'emby') {
@@ -1959,6 +1984,32 @@ export const SettingsDashboard: React.FC = () => {
                 clearLogoPreview();
             } catch (e) {
                 addToast(e instanceof Error ? e.message : 'Failed to upload logo', 'error');
+                return;
+            }
+        }
+
+        if (loginLogoFile) {
+            try {
+                const uploadResponse = await fetch(portalUrl('/api/config/login-logo'), {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': loginLogoFile.type || (loginLogoFile.name.toLowerCase().endsWith('.png') ? 'image/png' : (loginLogoFile.name.toLowerCase().endsWith('.webp') ? 'image/webp' : 'image/jpeg')),
+                        [PORTAL_CSRF_HEADER]: PORTAL_CSRF_VALUE,
+                    },
+                    body: loginLogoFile,
+                });
+                if (!uploadResponse.ok) {
+                    const errorData = await uploadResponse.json().catch(() => ({ error: 'Failed to upload login logo' }));
+                    throw new Error(errorData.error || 'Failed to upload login logo');
+                }
+                const uploadResult = await uploadResponse.json().catch(() => ({}));
+                savedCustomLoginLogoUrl = uploadResult.loginLogoUrl || savedCustomLoginLogoUrl;
+                setCustomLoginLogoUrl(savedCustomLoginLogoUrl);
+                setLoginLogoFile(null);
+                clearLoginLogoPreview();
+            } catch (e) {
+                addToast(e instanceof Error ? e.message : 'Failed to upload login logo', 'error');
                 return;
             }
         }
@@ -2094,6 +2145,7 @@ export const SettingsDashboard: React.FC = () => {
             tvdbApiKey,
             primaryColor: '',
             customLogoUrl: savedCustomLogoUrl,
+            customLoginLogoUrl: savedCustomLoginLogoUrl,
             customFaviconUrl: savedCustomFaviconUrl,
             brandingTheme,
             sidebarIdentityPosition,
@@ -2363,7 +2415,10 @@ export const SettingsDashboard: React.FC = () => {
         }
     };
 
-    const splashPreviewLogoSrc = logoPreviewUrl || resolvePortalAssetUrl(customLogoUrl);
+    const splashPreviewLogoSrc = loginLogoPreviewUrl
+        || resolvePortalAssetUrl(customLoginLogoUrl)
+        || logoPreviewUrl
+        || resolvePortalAssetUrl(customLogoUrl);
     const splashPreviewBackgroundSrc = backgroundPreviewUrl || resolvePortalAssetUrl(backgroundImageUrl);
     const splashPreviewKey = `${splashPreviewLogoSrc || 'no-logo'}|${splashPreviewBackgroundSrc || 'no-background'}`;
 
@@ -4061,8 +4116,8 @@ export const SettingsDashboard: React.FC = () => {
                                                     </div>
                                                 )}
                                                 <div>
-                                                    <SettingFieldLabel hint={<SettingHint>Provide a URL or upload a file. Max 5MB.</SettingHint>}>
-                                                        Custom Logo
+                                                    <SettingFieldLabel hint={<SettingHint>Wide logo shown in the sidebar navigation. Provide a URL or upload a file. Max 5MB.</SettingHint>}>
+                                                        Sidebar Logo
                                                     </SettingFieldLabel>
                                                     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_14rem] gap-3 mt-1">
                                                         <input
@@ -4087,6 +4142,35 @@ export const SettingsDashboard: React.FC = () => {
                                                         />
                                                     </div>
                                                     {logoFile && <p className="text-xs text-muted mt-2">{logoFile.name}</p>}
+                                                </div>
+
+                                                <div>
+                                                    <SettingFieldLabel hint={<SettingHint>Round or square mark on the login screen and invite pages. Falls back to the sidebar logo when empty.</SettingHint>}>
+                                                        Login Page Logo
+                                                    </SettingFieldLabel>
+                                                    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_14rem] gap-3 mt-1">
+                                                        <input
+                                                            type="url"
+                                                            className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex transition-all"
+                                                            value={customLoginLogoUrl}
+                                                            onChange={e => {
+                                                                clearLoginLogoPreview();
+                                                                setLoginLogoFile(null);
+                                                                setCustomLoginLogoUrl(e.target.value);
+                                                            }}
+                                                            placeholder="https://example.com/login-logo.png"
+                                                        />
+                                                        <input
+                                                            type="file"
+                                                            accept="image/png,image/jpeg,image/webp"
+                                                            className="w-full p-2 rounded-lg border border-border bg-background text-muted text-sm outline-none focus:border-plex transition-all file:mr-3 file:py-2 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-bold file:bg-white/10 file:text-text hover:file:bg-white/20 file:cursor-pointer cursor-pointer"
+                                                            onChange={e => {
+                                                                const file = e.target.files?.[0] || null;
+                                                                handleLoginLogoFileChange(file);
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    {loginLogoFile && <p className="text-xs text-muted mt-2">{loginLogoFile.name}</p>}
                                                 </div>
 
                                                 <div>

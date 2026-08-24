@@ -6367,7 +6367,6 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, p
                     isConfigured: data.isConfigured !== false,
                     mediaServerType: data.mediaServerType || 'plex'
                 });
-                if (data.customLogoUrl || data.thumb) updateFavicon(data.customLogoUrl || data.thumb);
                 if (data.serverName) document.title = `${data.serverName} Portal`;
             }
         }).catch(() => {
@@ -6515,11 +6514,14 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, p
     const showMediaServerPasswordLogin = isEmbyAuth || showJellyfinPassword;
     // Opt-in only — undefined/empty publicConfig must not flash the trial panel before /api/config/public loads.
     const showTrialAccess = !isEmbyLikeAuth && publicConfig?.allowTemporaryAccess === true;
-    const logoSrc = publicConfig?.customLogoUrl
+    const sidebarLogoSrc = publicConfig?.customLogoUrl
         ? resolvePortalAssetUrl(publicConfig.customLogoUrl)
         : (publicInfo.customLogoUrl
             ? resolvePortalAssetUrl(publicInfo.customLogoUrl)
             : (publicInfo.thumb ? resolvePortalAssetUrl(publicInfo.thumb) : ''));
+    const loginLogoSrc = publicConfig?.customLoginLogoUrl
+        ? resolvePortalAssetUrl(publicConfig.customLoginLogoUrl)
+        : sidebarLogoSrc;
     const splashBackgroundUrl = publicConfig?.backgroundImageUrl ? resolvePortalAssetUrl(publicConfig.backgroundImageUrl) : undefined;
 
     return (
@@ -6566,10 +6568,10 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, p
                             </div>
                         )}
                         <div className="relative mb-8">
-                            {!logoSrc && <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-36 h-36 bg-plex/20 rounded-full blur-[60px] pointer-events-none" />}
-                            {logoSrc ? (
+                            {!loginLogoSrc && <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-36 h-36 bg-plex/20 rounded-full blur-[60px] pointer-events-none" />}
+                            {loginLogoSrc ? (
                                 <img
-                                    src={logoSrc}
+                                    src={loginLogoSrc}
                                     alt="Server Logo"
                                     className="w-28 h-28 sm:w-32 sm:h-32 object-cover rounded-full border-2 border-plex/40 shadow-[0_0_40px_rgba(229,160,13,0.25)] relative z-10"
                                     onError={(e) => {
@@ -12925,8 +12927,8 @@ export const PublicInviteClaim: React.FC<{ code: string }> = ({ code }) => {
         <div className="flex flex-col items-center justify-center min-h-[60vh] text-center max-w-lg w-full animate-fade-in mx-auto px-4 mt-20">
             <div className="relative mb-8">
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 bg-plex rounded-full blur-[50px] opacity-20 pointer-events-none"></div>
-                {info.customLogoUrl || info.thumb ? (
-                    <img src={resolvePortalAssetUrl(info.customLogoUrl || info.thumb)} alt="Server Logo" className="w-32 h-32 object-cover rounded-full border-2 border-plex drop-shadow-[0_0_15px_rgba(229,160,13,0.25)] relative z-10" onError={(e) => { e.currentTarget.src = logoUrl(); e.currentTarget.className = 'w-40 object-contain drop-shadow-[0_0_15px_rgba(229,160,13,0.25)] relative z-10'; }} />
+                {info.customLoginLogoUrl || info.customLogoUrl || info.thumb ? (
+                    <img src={resolvePortalAssetUrl(info.customLoginLogoUrl || info.customLogoUrl || info.thumb)} alt="Server Logo" className="w-32 h-32 object-cover rounded-full border-2 border-plex drop-shadow-[0_0_15px_rgba(229,160,13,0.25)] relative z-10" onError={(e) => { e.currentTarget.src = logoUrl(); e.currentTarget.className = 'w-40 object-contain drop-shadow-[0_0_15px_rgba(229,160,13,0.25)] relative z-10'; }} />
                 ) : (
                     <img src={logoUrl()} alt="Server Logo" className="w-40 object-contain drop-shadow-[0_0_15px_rgba(229,160,13,0.25)] relative z-10" onError={(e) => e.currentTarget.style.display = 'none'} />
                 )}
