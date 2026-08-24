@@ -12086,6 +12086,86 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         return 0;
     };
 
+    const navListRef = useRef<HTMLDivElement>(null);
+    const [navDensity, setNavDensity] = useState(0);
+
+    const recomputeNavDensity = useCallback(() => {
+        const nav = navListRef.current;
+        if (!nav) return;
+        const overflow = nav.scrollHeight - nav.clientHeight;
+        let density = 0;
+        if (overflow > 2) density = 1;
+        if (overflow > 32) density = 2;
+        if (overflow > 64) density = 3;
+        setNavDensity((prev) => (prev === density ? prev : density));
+    }, []);
+
+    useLayoutEffect(() => {
+        const nav = navListRef.current;
+        if (!nav) return;
+        const run = () => recomputeNavDensity();
+        run();
+        const ro = new ResizeObserver(() => run());
+        ro.observe(nav);
+        window.addEventListener('resize', run);
+        return () => {
+            ro.disconnect();
+            window.removeEventListener('resize', run);
+        };
+    }, [normalizedNavOrder, sidebarIdentityPosition, navDensity, recomputeNavDensity]);
+
+    const DESKTOP_NAV_DENSITY_STYLES = [
+        { gap: 'gap-2.5', px: 'px-3', py: 'py-1', text: 'text-[15px]', icon: 'w-5 h-5' },
+        { gap: 'gap-2', px: 'px-3', py: 'py-0.5', text: 'text-sm', icon: 'w-[18px] h-[18px]' },
+        { gap: 'gap-1.5', px: 'px-2.5', py: 'py-0.5', text: 'text-[13px]', icon: 'w-4 h-4' },
+        { gap: 'gap-1.5', px: 'px-2', py: 'py-0', text: 'text-xs', icon: 'w-3.5 h-3.5' },
+    ];
+    const IDENTITY_DENSITY_STYLES = [
+        {
+            customWrap: 'w-[6.9rem]',
+            customImg: 'max-w-[6.9rem] max-h-[5.75rem]',
+            round: 'w-[5.75rem] h-[5.75rem]',
+            title: 'text-[1.3rem]',
+            showPortal: true,
+            logoMb: 'mb-2',
+            sectionTop: 'pb-2 mb-2',
+            sectionBottom: 'pt-2 mt-2',
+        },
+        {
+            customWrap: 'w-[5.5rem]',
+            customImg: 'max-w-[5.5rem] max-h-[4.5rem]',
+            round: 'w-[4.5rem] h-[4.5rem]',
+            title: 'text-[1.1rem]',
+            showPortal: true,
+            logoMb: 'mb-1.5',
+            sectionTop: 'pb-1.5 mb-1.5',
+            sectionBottom: 'pt-1.5 mt-1.5',
+        },
+        {
+            customWrap: 'w-[4.5rem]',
+            customImg: 'max-w-[4.5rem] max-h-[3.5rem]',
+            round: 'w-[3.75rem] h-[3.75rem]',
+            title: 'text-base',
+            showPortal: true,
+            logoMb: 'mb-1',
+            sectionTop: 'pb-1 mb-1',
+            sectionBottom: 'pt-1 mt-1',
+        },
+        {
+            customWrap: 'w-[3.5rem]',
+            customImg: 'max-w-[3.5rem] max-h-[2.75rem]',
+            round: 'w-[3rem] h-[3rem]',
+            title: 'text-sm',
+            showPortal: false,
+            logoMb: 'mb-0.5',
+            sectionTop: 'pb-1 mb-1',
+            sectionBottom: 'pt-1 mt-1',
+        },
+    ];
+    const densityLevel = Math.min(Math.max(navDensity, 0), DESKTOP_NAV_DENSITY_STYLES.length - 1);
+    const desktopNavDensity = DESKTOP_NAV_DENSITY_STYLES[densityLevel];
+    const identityDensity = IDENTITY_DENSITY_STYLES[densityLevel];
+
     const renderNavAction = (
         key: string,
         item: { label: string; icon: React.FC<any>; route: string; href?: string; onClick?: (e: any) => void; customTabId?: string },
@@ -12094,14 +12174,15 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         const Icon = item.icon;
         const label = options.compactLabel || item.label;
         const badgeCount = options.badgeCount || 0;
+        const desktopDensity = options.mobile ? null : desktopNavDensity;
         const baseClass = options.mobile
             ? `relative flex flex-col items-center justify-center gap-0.5 h-full flex-1 min-w-0 px-0.5 text-center text-[0.6rem] sm:text-[0.65rem] transition-colors ${options.isCurrent ? 'text-plex font-bold' : 'text-muted hover:text-text'}`
-            : `flex items-center gap-2.5 px-3 py-1 no-underline rounded-lg transition-all text-[15px] font-medium ${options.isCurrent ? 'nav-item-active' : 'text-muted hover:bg-white/5 hover:text-text'}`;
+            : `flex items-center ${desktopDensity?.gap || 'gap-2.5'} ${desktopDensity?.px || 'px-3'} ${desktopDensity?.py || 'py-1'} no-underline rounded-lg transition-all ${desktopDensity?.text || 'text-[15px]'} font-medium ${options.isCurrent ? 'nav-item-active' : 'text-muted hover:bg-white/5 hover:text-text'}`;
 
         if (item.href) {
             return (
-                <a key={key} href={item.href} target="_blank" rel="noreferrer" className={options.mobile ? baseClass.replace('hover:text-text', 'hover:text-text') : 'flex items-center gap-2.5 px-3 py-1 text-muted no-underline rounded-lg transition-all text-[15px] font-medium hover:bg-white/5 hover:text-text'}>
-                    <Icon className="w-5 h-5 flex-shrink-0" /> {label}
+                <a key={key} href={item.href} target="_blank" rel="noreferrer" className={options.mobile ? baseClass.replace('hover:text-text', 'hover:text-text') : `flex items-center ${desktopDensity?.gap || 'gap-2.5'} ${desktopDensity?.px || 'px-3'} ${desktopDensity?.py || 'py-1'} text-muted no-underline rounded-lg transition-all ${desktopDensity?.text || 'text-[15px]'} font-medium hover:bg-white/5 hover:text-text`}>
+                    <Icon className={`${desktopDensity?.icon || 'w-5 h-5'} flex-shrink-0`} /> {label}
                 </a>
             );
         }
@@ -12124,7 +12205,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                 onClick={handleActivate}
             >
                 <span className="relative shrink-0">
-                    <Icon className="w-5 h-5" />
+                    <Icon className={options.mobile ? 'w-5 h-5' : (desktopDensity?.icon || 'w-5 h-5')} />
                     {badgeCount > 0 && options.mobile && (
                         <span className="absolute -top-1 -right-1.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-plex text-background text-[8px] font-bold flex items-center justify-center leading-none">
                             {badgeCount > 9 ? '9+' : badgeCount}
@@ -12149,13 +12230,13 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     };
 
     const renderServerIdentity = (placement: 'top' | 'bottom') => (
-        <div className={`flex flex-col items-center w-full shrink-0 ${placement === 'top' ? 'pb-2 mb-2 border-b' : 'pt-2 mt-2 border-t'} border-white/10 group cursor-default`}>
-            <div className={`relative mb-2 ${customLogoUrl ? 'w-[6.9rem] flex items-center justify-center' : ''}`}>
+        <div className={`flex flex-col items-center w-full shrink-0 transition-all duration-300 ${placement === 'top' ? identityDensity.sectionTop : identityDensity.sectionBottom} border-white/10 group cursor-default ${placement === 'top' ? 'border-b' : 'border-t'}`}>
+            <div className={`relative ${identityDensity.logoMb} ${customLogoUrl ? `${identityDensity.customWrap} flex items-center justify-center` : ''}`}>
                 {customLogoUrl ? (
                     <img
                         src={serverIcon}
                         alt="Server Logo"
-                        className="max-w-[6.9rem] max-h-[5.75rem] object-contain drop-shadow-[0_0_24px_rgba(0,0,0,0.75)] group-hover:scale-105 transition-transform duration-700 ease-out"
+                        className={`${identityDensity.customImg} object-contain drop-shadow-[0_0_24px_rgba(0,0,0,0.75)] group-hover:scale-105 transition-transform duration-700 ease-out`}
                         onError={(e) => {
                             (e.target as HTMLImageElement).src = logoUrl();
                         }}
@@ -12164,7 +12245,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                     <>
                         <div className="absolute inset-0 bg-plex blur-[29px] opacity-20 group-hover:opacity-40 transition-opacity duration-700 rounded-full"></div>
                         <div className="absolute -inset-1 rounded-full bg-gradient-to-tr from-plex via-amber-300 to-orange-600 opacity-60 group-hover:opacity-100 group-hover:rotate-180 transition-all duration-1000 ease-out"></div>
-                        <div className="relative w-[5.75rem] h-[5.75rem] rounded-full p-[3px] shadow-2xl bg-card">
+                        <div className={`relative ${identityDensity.round} rounded-full p-[3px] shadow-2xl bg-card transition-all duration-300`}>
                             <div className="w-full h-full rounded-full overflow-hidden bg-background">
                                 <img
                                     src={serverIcon}
@@ -12181,16 +12262,18 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             </div>
 
             <div className="flex flex-col items-center text-center px-2">
-                <h2 className="text-[1.3rem] font-black text-text tracking-tight leading-tight line-clamp-2">
+                <h2 className={`${identityDensity.title} font-black text-text tracking-tight leading-tight line-clamp-2 transition-all duration-300`}>
                     {serverName}
                 </h2>
-                <div className="mt-1 flex items-center gap-2">
-                    <div className="h-px w-6 bg-gradient-to-r from-transparent to-plex/50"></div>
-                    <span className="text-[10px] uppercase tracking-[0.3em] text-plex font-bold">
-                        Portal
-                    </span>
-                    <div className="h-px w-6 bg-gradient-to-l from-transparent to-plex/50"></div>
-                </div>
+                {identityDensity.showPortal && (
+                    <div className="mt-1 flex items-center gap-2">
+                        <div className="h-px w-6 bg-gradient-to-r from-transparent to-plex/50"></div>
+                        <span className="text-[10px] uppercase tracking-[0.3em] text-plex font-bold">
+                            Portal
+                        </span>
+                        <div className="h-px w-6 bg-gradient-to-l from-transparent to-plex/50"></div>
+                    </div>
+                )}
             </div>
         </div>
     );
@@ -12295,7 +12378,11 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             <div className="hidden md:flex flex-col w-72 nav-shell border-r px-5 py-2.5 sticky top-0 self-start h-dvh shadow-2xl overflow-hidden">
                 {sidebarIdentityPosition === 'top' && renderServerIdentity('top')}
 
-                <div className="flex flex-col justify-start gap-0.5 min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-0.5 custom-scrollbar">
+                <div
+                    ref={navListRef}
+                    className={`flex flex-col justify-start min-h-0 flex-1 overflow-y-auto overflow-x-hidden custom-scrollbar transition-all duration-300 ${densityLevel > 0 ? 'gap-0' : 'gap-0.5'} py-0.5`}
+                    data-nav-density={densityLevel}
+                >
                     {normalizedNavOrder.map((key) => {
                         const item = navItemsConfig[key];
                         if (!item) return null;
