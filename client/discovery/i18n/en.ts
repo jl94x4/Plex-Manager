@@ -2747,6 +2747,13 @@ Object.assign(en, { homeDashboard: { ...en.homeDashboard, nowPlayingCompanion: {
         noContextualLines: 'No contextual lines available.', notAvailable: 'N/A', unknownYear: 'Unknown year',
     },
     cast: { popularity: 'Popularity {value}' },
+    crew: {
+        popularity: 'Popularity {value}',
+        otherRoles: 'Also on this title: {roles}',
+        productionSnapshot: 'Production snapshot',
+        moreCrew: 'More crew',
+        networks: 'Networks',
+    },
     episode: { previous: 'Prev: {name}', current: 'Current: {name}', next: 'Next: {name}' },
     nextAction: {
         continueTitle: 'Continue with the next episode',

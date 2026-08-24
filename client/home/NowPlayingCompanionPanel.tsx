@@ -21,10 +21,12 @@ import {
     buildExternalLinks,
     buildMediaFactRows,
     fetchCombinedRatings,
+    getProductionStudios,
+    sortKeyCrew,
     type CombinedRatings,
 } from '../discovery/mediaDetailUtils';
 import { enrichDiscoverItemsWithAvailability } from '../discovery/discoverAvailabilityEnrich';
-import { useDiscoverI18n } from '../discovery/i18n';
+import { translateDiscoverStatus, useDiscoverI18n } from '../discovery/i18n';
 import {
     resolveMediaAvailabilityState,
     shouldHideAvailableItem,
@@ -77,12 +79,17 @@ type CrewInsight = {
     job: string;
     department: string;
     profilePath: string | null;
+    popularity: number;
+    biographySnippet: string;
+    knownFor: KnownForItem[];
+    otherCredits: string[];
 };
 
 type CompanionPayload = {
     details: any | null;
     recommendations: Recommendation[];
     castInsights: CastInsight[];
+    crewInsights: CrewInsight[];
     soundtrackPeople: string[];
     seasonDetails: any | null;
 };
@@ -639,6 +646,70 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                 } as CastInsight;
             }));
 
+            const allCrew = Array.isArray(details?.credits?.crew) ? details.credits.crew : [];
+            const crewJobsByPerson = new Map<number, string[]>();
+            for (const entry of allCrew) {
+                const personId = Number(entry?.id);
+                const job = String(entry?.job || '').trim();
+                if (!Number.isFinite(personId) || personId <= 0 || !job) continue;
+                const jobs = crewJobsByPerson.get(personId) || [];
+                if (!jobs.includes(job)) jobs.push(job);
+                crewJobsByPerson.set(personId, jobs);
+            }
+            const featuredCrewEntries: any[] = [];
+            const featuredCrewIds = new Set<number>();
+            for (const entry of sortKeyCrew(allCrew)) {
+                const personId = Number(entry?.id);
+                if (!Number.isFinite(personId) || personId <= 0 || featuredCrewIds.has(personId)) continue;
+                featuredCrewIds.add(personId);
+                featuredCrewEntries.push(entry);
+                if (featuredCrewEntries.length >= 8) break;
+            }
+            const crewInsights = await Promise.all(featuredCrewEntries.map(async (member: any) => {
+                const personId = Number(member?.id);
+                const primaryJob = String(member?.job || '').trim();
+                const profilePath = member?.profile_path || member?.profilePath || null;
+                const allJobs = crewJobsByPerson.get(personId) || (primaryJob ? [primaryJob] : []);
+                const otherCredits = allJobs.filter((job) => job !== primaryJob);
+                if (!Number.isFinite(personId) || personId <= 0) {
+                    return {
+                        id: 0,
+                        name: String(member?.name || '').trim(),
+                        job: primaryJob,
+                        department: String(member?.department || '').trim(),
+                        profilePath,
+                        popularity: 0,
+                        biographySnippet: '',
+                        knownFor: [],
+                        otherCredits,
+                    } as CrewInsight;
+                }
+                const [credits, personDetails] = await Promise.all([
+                    apiFetch(`/api/discovery/proxy/person/${personId}/combined_credits`).catch(() => null),
+                    apiFetch(`/api/discovery/proxy/person/${personId}`).catch(() => null),
+                ]);
+                const biographyRaw = String(personDetails?.biography || '').trim();
+                const biographySnippet = biographyRaw
+                    ? biographyRaw.replace(/\s+/g, ' ').slice(0, 180)
+                    : '';
+                return {
+                    id: personId,
+                    name: String(member?.name || personDetails?.name || '').trim(),
+                    job: primaryJob,
+                    department: String(
+                        member?.department
+                        || personDetails?.known_for_department
+                        || personDetails?.knownForDepartment
+                        || '',
+                    ).trim(),
+                    profilePath: profilePath || personDetails?.profile_path || personDetails?.profilePath || null,
+                    popularity: Number(member?.popularity ?? personDetails?.popularity) || 0,
+                    biographySnippet,
+                    knownFor: buildKnownFor(credits, tmdbId),
+                    otherCredits,
+                } as CrewInsight;
+            }));
+
             if (cancelled) return;
             const rawRecommendations = normalizeRecommendations(recRes?.results || []).slice(0, 20);
             const enrichedRecommendations = await enrichDiscoverItemsWithAvailability(rawRecommendations);
@@ -650,7 +721,8 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                 details,
                 recommendations: requestableRecommendations,
                 castInsights,
-                soundtrackPeople: extractSoundtrackPeople(Array.isArray(details?.credits?.crew) ? details.credits.crew : []),
+                crewInsights,
+                soundtrackPeople: extractSoundtrackPeople(allCrew),
                 seasonDetails,
             });
         };
@@ -982,47 +1054,55 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
         return facts.slice(0, 8);
     }, [episodeContext.current?.air_date, mediaType, normalizedDetails, payload?.castInsights, t]);
 
-    const crewHighlights = useMemo(() => {
+    const crewInsights = payload?.crewInsights || [];
+
+    const companionProductionStudios = useMemo(
+        () => (normalizedDetails ? getProductionStudios(normalizedDetails) : []),
+        [normalizedDetails],
+    );
+
+    const companionNetworks = useMemo(() => {
+        const networks = Array.isArray(payload?.details?.networks) ? payload.details.networks : [];
+        return networks
+            .map((network: any) => String(network?.name || '').trim())
+            .filter(Boolean)
+            .slice(0, 4);
+    }, [payload?.details?.networks]);
+
+    const companionProductionRows = useMemo(() => {
+        if (!normalizedDetails) return [] as Array<{ key: string; value: string; people?: Array<{ id: number; name: string }> }>;
+        return buildMediaFactRows(mediaType, normalizedDetails)
+            .slice(0, 6)
+            .map((row) => ({
+                key: row.key,
+                value: row.key === 'status' ? translateDiscoverStatus(t, row.value) : row.value,
+                people: row.people,
+            }));
+    }, [mediaType, normalizedDetails, t]);
+
+    const companionExtendedCrew = useMemo(() => {
         const crew = Array.isArray(payload?.details?.credits?.crew) ? payload.details.credits.crew : [];
-        if (!crew.length) return [] as CrewInsight[];
-        const byJob = new Map<string, CrewInsight>();
+        if (!crew.length) return [] as Array<{ department: string; members: Array<{ id: number; name: string; job: string }> }>;
+        const featuredIds = new Set(crewInsights.map((entry) => entry.id).filter((id) => id > 0));
+        const byDepartment = new Map<string, Array<{ id: number; name: string; job: string }>>();
         for (const entry of crew) {
-            const job = String(entry?.job || '').trim();
+            const id = Number(entry?.id);
             const name = String(entry?.name || '').trim();
-            if (!job || !name || byJob.has(job)) continue;
-            byJob.set(job, {
-                id: Number(entry?.id) || 0,
-                name,
-                job,
-                department: String(entry?.department || '').trim(),
-                profilePath: entry?.profile_path || entry?.profilePath || null,
-            });
+            const job = String(entry?.job || '').trim();
+            const department = String(entry?.department || 'Crew').trim() || 'Crew';
+            if (!name || !job || (id > 0 && featuredIds.has(id))) continue;
+            const members = byDepartment.get(department) || [];
+            const key = `${id}:${job}`;
+            if (members.some((member) => `${member.id}:${member.job}` === key)) continue;
+            members.push({ id, name, job });
+            byDepartment.set(department, members);
         }
-        const preferredJobs = [
-            'Director',
-            'Screenplay',
-            'Writer',
-            'Original Music Composer',
-            'Director of Photography',
-            'Editor',
-            'Producer',
-            'Executive Producer',
-        ];
-        const picked: CrewInsight[] = [];
-        for (const job of preferredJobs) {
-            const match = byJob.get(job);
-            if (!match) continue;
-            picked.push(match);
-            if (picked.length >= 6) break;
-        }
-        if (!picked.length) {
-            for (const match of byJob.values()) {
-                picked.push(match);
-                if (picked.length >= 6) break;
-            }
-        }
-        return picked;
-    }, [payload?.details?.credits?.crew]);
+        return Array.from(byDepartment.entries())
+            .map(([department, members]) => ({ department, members: members.slice(0, 5) }))
+            .filter((group) => group.members.length > 0)
+            .sort((left, right) => right.members.length - left.members.length)
+            .slice(0, 4);
+    }, [crewInsights, payload?.details?.credits?.crew]);
 
     const overloadFacts = useMemo(() => {
         const apiFacts = Array.isArray(factPayload?.facts) ? factPayload.facts : [];
@@ -1549,19 +1629,19 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                     {payload.castInsights.length === 0 ? (
                                         <p className="text-xs text-white/55 mt-2">{t('homeDashboard.nowPlayingCompanion.empty.noCastData')}</p>
                                     ) : null}
-                                    <div className="mt-3 pt-3 border-t border-white/10 space-y-2">
+                                    <div className="mt-3 pt-3 border-t border-white/10 space-y-3">
                                         <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold">
                                             {t('homeDashboard.nowPlayingCompanion.sections.crewIntelligence')}
                                         </p>
-                                        {crewHighlights.length > 0 ? (
-                                            <div className="flex gap-2 overflow-x-auto pb-1 pr-1 snap-x snap-mandatory">
-                                                {crewHighlights.map((entry, index) => (
+                                        {crewInsights.length > 0 ? (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                                {crewInsights.map((entry) => (
                                                     <div
-                                                        key={`crew-${entry.job}-${entry.name}-${index}`}
-                                                        className="snap-start min-w-[220px] sm:min-w-[240px] rounded-lg border border-white/10 bg-black/35 p-2.5"
+                                                        key={`crew-${entry.id}-${entry.job}`}
+                                                        className="rounded-lg border border-white/10 bg-black/35 p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
                                                     >
-                                                        <div className="flex items-center gap-2">
-                                                            <div className="w-10 h-10 rounded-full overflow-hidden bg-white/5 border border-white/15 shrink-0">
+                                                        <div className="flex items-start gap-2.5">
+                                                            <div className="w-14 h-14 rounded-full overflow-hidden bg-white/5 shrink-0 border-2 border-violet-300/25 shadow-[0_0_18px_rgba(167,139,250,0.18)]">
                                                                 {entry.profilePath ? (
                                                                     <img
                                                                         src={posterUrl(entry.profilePath, 'w185')}
@@ -1569,35 +1649,173 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                                                         className="w-full h-full object-cover"
                                                                     />
                                                                 ) : (
-                                                                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-violet-500/35 to-cyan-500/20 text-violet-100 text-[10px] font-black">
+                                                                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-violet-500/35 to-cyan-500/20 text-violet-100 text-xs font-black">
                                                                         {initialsForName(entry.name)}
                                                                     </div>
                                                                 )}
                                                             </div>
-                                                            <div className="min-w-0">
+                                                            <div className="min-w-0 flex-1">
                                                                 {entry.id > 0 ? (
                                                                     <button
                                                                         type="button"
                                                                         onClick={() => goToPath(`/discovery/person/${entry.id}`)}
-                                                                        className="text-left text-xs font-bold text-white hover:text-violet-200 truncate"
+                                                                        className="text-left text-sm font-bold text-white hover:text-violet-200 truncate max-w-full"
                                                                     >
                                                                         {entry.name}
                                                                     </button>
                                                                 ) : (
-                                                                    <p className="text-xs font-bold text-white truncate">{entry.name}</p>
+                                                                    <p className="text-sm font-bold text-white truncate">{entry.name}</p>
                                                                 )}
-                                                                <p className="text-[10px] text-violet-200/90">{entry.job}</p>
+                                                                <p className="text-[11px] font-semibold text-violet-200/95">{entry.job}</p>
                                                                 {entry.department ? (
                                                                     <p className="text-[10px] text-white/50 truncate">{entry.department}</p>
                                                                 ) : null}
+                                                                {entry.popularity > 0 ? (
+                                                                    <p className="text-[10px] text-violet-200/80">
+                                                                        {t('homeDashboard.nowPlayingCompanion.crew.popularity', { value: entry.popularity.toFixed(1) })}
+                                                                    </p>
+                                                                ) : null}
+                                                                {entry.otherCredits.length > 0 ? (
+                                                                    <p className="text-[10px] text-white/55 mt-1 leading-relaxed">
+                                                                        {t('homeDashboard.nowPlayingCompanion.crew.otherRoles', {
+                                                                            roles: entry.otherCredits.slice(0, 3).join(', '),
+                                                                        })}
+                                                                    </p>
+                                                                ) : null}
                                                             </div>
                                                         </div>
+                                                        {entry.biographySnippet ? (
+                                                            <p className="mt-2 text-[10px] text-white/60 leading-relaxed">
+                                                                {entry.biographySnippet}
+                                                                {entry.biographySnippet.length >= 180 ? '…' : ''}
+                                                            </p>
+                                                        ) : null}
+                                                        {entry.knownFor.length > 0 ? (
+                                                            <div className="mt-2 flex flex-wrap gap-1">
+                                                                {entry.knownFor.map((item) => (
+                                                                    <button
+                                                                        key={`crew-known-${entry.id}-${item.mediaType}-${item.id}`}
+                                                                        type="button"
+                                                                        onClick={() => goToPath(`/discovery/${item.mediaType}/${item.id}`)}
+                                                                        className="px-2 py-1 rounded-md text-[10px] border border-white/15 bg-white/5 text-white/80 hover:bg-white/10 transition-colors truncate max-w-full"
+                                                                    >
+                                                                        {item.title}{item.year ? ` (${item.year})` : ''}
+                                                                    </button>
+                                                                ))}
+                                                            </div>
+                                                        ) : null}
                                                     </div>
                                                 ))}
                                             </div>
                                         ) : (
                                             <p className="text-xs text-white/55">{t('homeDashboard.nowPlayingCompanion.empty.noCrewHighlights')}</p>
                                         )}
+
+                                        {(companionProductionRows.length > 0 || companionProductionStudios.length > 0 || companionNetworks.length > 0) ? (
+                                            <div className="rounded-xl border border-white/10 bg-black/25 p-3 space-y-3">
+                                                <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold">
+                                                    {t('homeDashboard.nowPlayingCompanion.crew.productionSnapshot')}
+                                                </p>
+                                                {companionProductionRows.length > 0 ? (
+                                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                        {companionProductionRows.map((row) => (
+                                                            <div key={`prod-${row.key}`} className="rounded-md border border-white/10 bg-white/5 px-2.5 py-2 min-w-0">
+                                                                <p className="text-[10px] uppercase tracking-wide text-white/50">
+                                                                    {t(`facts.${row.key}`)}
+                                                                </p>
+                                                                {row.people?.length ? (
+                                                                    <div className="mt-1 flex flex-wrap gap-1">
+                                                                        {row.people.map((person) => (
+                                                                            <button
+                                                                                key={`prod-person-${row.key}-${person.id}`}
+                                                                                type="button"
+                                                                                onClick={() => goToPath(`/discovery/person/${person.id}`)}
+                                                                                className="text-xs font-semibold text-violet-200 hover:text-violet-100"
+                                                                            >
+                                                                                {person.name}
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+                                                                ) : (
+                                                                    <p className="text-xs font-semibold text-white/85 mt-0.5 break-words">{row.value}</p>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                ) : null}
+                                                {companionProductionStudios.length > 0 ? (
+                                                    <div>
+                                                        <p className="text-[10px] uppercase tracking-wide text-white/50 mb-1.5">
+                                                            {companionProductionStudios.length === 1
+                                                                ? t('media.studio')
+                                                                : t('media.studios')}
+                                                        </p>
+                                                        <div className="flex flex-wrap gap-1.5">
+                                                            {companionProductionStudios.slice(0, 6).map((studio) => (
+                                                                <span
+                                                                    key={`studio-${studio.id}`}
+                                                                    className="px-2 py-1 rounded-md text-[10px] border border-white/15 bg-white/5 text-white/80"
+                                                                >
+                                                                    {studio.name}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ) : null}
+                                                {companionNetworks.length > 0 ? (
+                                                    <div>
+                                                        <p className="text-[10px] uppercase tracking-wide text-white/50 mb-1.5">
+                                                            {t('homeDashboard.nowPlayingCompanion.crew.networks')}
+                                                        </p>
+                                                        <div className="flex flex-wrap gap-1.5">
+                                                            {companionNetworks.map((network) => (
+                                                                <span
+                                                                    key={`network-${network}`}
+                                                                    className="px-2 py-1 rounded-md text-[10px] border border-sky-400/20 bg-sky-500/10 text-sky-100/90"
+                                                                >
+                                                                    {network}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ) : null}
+                                            </div>
+                                        ) : null}
+
+                                        {companionExtendedCrew.length > 0 ? (
+                                            <div className="space-y-2">
+                                                <p className="text-[11px] uppercase tracking-widest text-white/60 font-bold">
+                                                    {t('homeDashboard.nowPlayingCompanion.crew.moreCrew')}
+                                                </p>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                    {companionExtendedCrew.map((group) => (
+                                                        <div key={`crew-dept-${group.department}`} className="rounded-lg border border-white/10 bg-black/25 p-2.5">
+                                                            <p className="text-[10px] uppercase tracking-wide text-violet-200/90 font-bold mb-1.5">
+                                                                {group.department}
+                                                            </p>
+                                                            <div className="space-y-1">
+                                                                {group.members.map((member) => (
+                                                                    <div key={`crew-ext-${group.department}-${member.id}-${member.job}`} className="flex items-baseline justify-between gap-2 text-[11px]">
+                                                                        <span className="text-white/55 shrink-0">{member.job}</span>
+                                                                        {member.id > 0 ? (
+                                                                            <button
+                                                                                type="button"
+                                                                                onClick={() => goToPath(`/discovery/person/${member.id}`)}
+                                                                                className="text-white/85 hover:text-violet-200 truncate text-right"
+                                                                            >
+                                                                                {member.name}
+                                                                            </button>
+                                                                        ) : (
+                                                                            <span className="text-white/85 truncate text-right">{member.name}</span>
+                                                                        )}
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ) : null}
                                     </div>
                                     </div>
                                 </div>
