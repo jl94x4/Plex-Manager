@@ -89,7 +89,13 @@ import {
     pruneNavOrderCustomKeys,
     sanitizeCustomNavTabsForSession,
 } from './lib/custom-nav-tabs.js';
-import { createCustomTabEmbedProxyHandler } from './lib/custom-tab-embed-proxy.js';
+import {
+    normalizeDashboardSectionIds,
+    normalizeHomeCustomModules,
+    pruneDashboardLayoutCustomModules,
+    sanitizeHomeCustomModulesForSession,
+} from './lib/home-custom-modules.js';
+import { createCustomTabEmbedProxyHandler, createHomeModuleEmbedProxyHandler } from './lib/custom-tab-embed-proxy.js';
 import { createSupportTicketFromMediaIssue, attachTicketIdsToIssues } from './lib/support-tickets/fromIssue.js';
 import { mapTautulliHistoryRowToPlexItem } from './lib/achievements/tautulliHistory.js';
 import { isTautulliWatchHistorySource, buildAchievementsHomeRankContext, summarizeAchievementsBackfill, levelProgress } from './lib/achievements/index.js';
@@ -4808,6 +4814,7 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
             ? config.memberNavHiddenKeys.filter((key) => typeof key === 'string' && key && key !== 'home' && key !== 'logout')
             : [],
         customNavTabs: sanitizeCustomNavTabsForSession(config.customNavTabs),
+        homeCustomModules: sanitizeHomeCustomModulesForSession(config.homeCustomModules, isAdmin),
         navFeatures,
         impersonation: impersonating ? {
             active: true,
@@ -5003,7 +5010,12 @@ const migrateMainGridOrder = (order) => {
     return next;
 };
 
-const normalizeDashboardLayout = (raw) => {
+const normalizeDashboardLayout = (raw, options = {}) => {
+    const moduleIds = new Set(
+        normalizeHomeCustomModules(options.homeCustomModules || [])
+            .filter((module) => module.enabled)
+            .map((module) => module.id),
+    );
     const uniqueValid = (values, allowed, fallback, fillMissing = true) => {
         if (!Array.isArray(values)) return [...fallback];
         const seen = new Set();
@@ -5062,10 +5074,10 @@ const normalizeDashboardLayout = (raw) => {
     const input = raw && typeof raw === 'object' ? raw : {};
     return {
         version: 1,
-        sections: migrateDashboardSections(uniqueValid(input.sections, DASHBOARD_SECTIONS, DEFAULT_DASHBOARD_LAYOUT.sections)),
+        sections: migrateDashboardSections(normalizeDashboardSectionIds(input.sections, DASHBOARD_SECTIONS, DEFAULT_DASHBOARD_LAYOUT.sections, moduleIds)),
         mainGridOrder: migrateMainGridOrder(uniqueValid(input.mainGridOrder, DASHBOARD_MAIN_GRID_WIDGETS, DEFAULT_DASHBOARD_LAYOUT.mainGridOrder)),
         recentlyAddedOrder: uniqueValid(input.recentlyAddedOrder, DASHBOARD_RECENTLY_ADDED_WIDGETS, DEFAULT_DASHBOARD_LAYOUT.recentlyAddedOrder),
-        hiddenSections: uniqueValid(input.hiddenSections, DASHBOARD_SECTIONS, [], false),
+        hiddenSections: normalizeDashboardSectionIds(input.hiddenSections, DASHBOARD_SECTIONS, [], moduleIds, { fillMissingBuiltIn: false }),
         hiddenWidgets: uniqueValid(input.hiddenWidgets, DASHBOARD_WIDGETS, [], false),
         widgetSizes: normalizeWidgetSizes(input.widgetSizes),
         widgetColumns: normalizeWidgetColumns(input.widgetColumns),
@@ -5074,13 +5086,13 @@ const normalizeDashboardLayout = (raw) => {
     };
 };
 
-const normalizeSectionLayout = (raw) => {
-    const normalized = normalizeDashboardLayout(raw);
+const normalizeSectionLayout = (raw, options = {}) => {
+    const normalized = normalizeDashboardLayout(raw, options);
     const input = raw && typeof raw === 'object' ? raw : null;
     if (!input || !Array.isArray(input.hiddenSections)) {
         return { ...normalized, hiddenSections: [] };
     }
-    if (normalized.hiddenSections.length >= DEFAULT_DASHBOARD_LAYOUT.sections.length) {
+    if (normalized.hiddenSections.length >= normalized.sections.length) {
         return { ...normalized, hiddenSections: [] };
     }
     if (normalized.hiddenWidgets.length >= DASHBOARD_WIDGETS.length) {
@@ -5093,7 +5105,9 @@ const normalizeSectionLayout = (raw) => {
 app.post('/api/config/dashboard-layout', requireAdmin, async (req, res) => {
     try {
         const config = await loadFile(CONFIG_PATH, {});
-        const dashboardLayout = normalizeSectionLayout(req.body?.dashboardLayout || req.body || {});
+        const dashboardLayout = normalizeSectionLayout(req.body?.dashboardLayout || req.body || {}, {
+            homeCustomModules: config.homeCustomModules,
+        });
         const nextConfig = { ...config, dashboardLayout };
         await saveFile(CONFIG_PATH, nextConfig);
         res.json({ success: true, dashboardLayout });
@@ -5198,6 +5212,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 memberNavOrder: Array.isArray(config.memberNavOrder) ? config.memberNavOrder : [],
                 memberNavHiddenKeys: Array.isArray(config.memberNavHiddenKeys) ? config.memberNavHiddenKeys : [],
                 customNavTabs: sanitizeCustomNavTabsForSession(config.customNavTabs),
+                homeCustomModules: sanitizeHomeCustomModulesForSession(config.homeCustomModules, true),
                 downloadsVisibleToMembers: config.downloadsVisibleToMembers !== false,
                 defaultLibraryIds: config.defaultLibraryIds || null,
                 use24HourClock: !!config.use24HourClock,
@@ -5287,7 +5302,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 upgraderMaxActionsPerHour: Math.max(1, Number(config.upgraderMaxActionsPerHour) || 25),
                 upgraderDefaultSort: config.upgraderDefaultSort || 'sizeGB',
                 upgraderDrawerPosition: config.upgraderDrawerPosition || 'sidebar',
-                dashboardLayout: normalizeSectionLayout(config.dashboardLayout),
+                dashboardLayout: normalizeSectionLayout(config.dashboardLayout, { homeCustomModules: config.homeCustomModules }),
                 showUsernamesInAnalytics: !!config.showUsernamesInAnalytics,
                 useTrendingSlideshowOnLogin: config.useTrendingSlideshowOnLogin !== false
             },
@@ -5485,7 +5500,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         autoApproveMovies4k, autoApproveTv4k, portalAutoRequestMovies, portalAutoRequestTv,
         seriesMetadataProvider, animeMetadataProvider, tvdbApiKey,
         inactiveCleanupEnabled, inactiveCleanupDays,
-        primaryColor, customLogoUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, customNavTabs, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
+        primaryColor, customLogoUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, customNavTabs, homeCustomModules, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
         autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, supportTicketsEnabled, chatEnabled, chatMentionNotifyInApp, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, scannerNotifyDeleted, scannerNotifyUpgrade, scannerNotifyImport, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
@@ -5702,6 +5717,13 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
     }
 
     const normalizedCustomNavTabs = normalizeCustomNavTabs(customNavTabs, existingConfig.customNavTabs);
+    const normalizedHomeCustomModules = normalizeHomeCustomModules(homeCustomModules, existingConfig.homeCustomModules);
+    const normalizedDashboardLayout = pruneDashboardLayoutCustomModules(
+        ('dashboardLayout' in req.body)
+            ? normalizeSectionLayout(req.body.dashboardLayout, { homeCustomModules: normalizedHomeCustomModules })
+            : normalizeSectionLayout(existingConfig.dashboardLayout, { homeCustomModules: normalizedHomeCustomModules }),
+        normalizedHomeCustomModules,
+    );
     const resolvedNavOrder = Array.isArray(navOrder)
         ? navOrder
         : existingConfig.navOrder || ['home', 'discover', 'request', 'analytics', 'users', 'downloads', 'upgrader', 'collexions', 'mediastack', 'requests', 'status', 'maintenance', 'about', 'settings', 'logout'];
@@ -5847,6 +5869,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         announcement: announcement || '',
         hideStreamUsers: hideStreamUsers === true ? 'anonymous' : (hideStreamUsers === false ? 'false' : (hideStreamUsers || 'false')),
         customNavTabs: normalizedCustomNavTabs,
+        homeCustomModules: normalizedHomeCustomModules,
         navOrder: pruneNavOrderCustomKeys(resolvedNavOrder, normalizedCustomNavTabs),
         navHiddenKeys: (() => {
             const ALWAYS = new Set(['home', 'settings', 'logout']);
@@ -6103,9 +6126,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
             : 'sidebar',
         showUsernamesInAnalytics: showUsernamesInAnalytics !== undefined ? !!showUsernamesInAnalytics : !!existingConfig.showUsernamesInAnalytics,
         useTrendingSlideshowOnLogin: useTrendingSlideshowOnLogin !== undefined ? !!useTrendingSlideshowOnLogin : (existingConfig.useTrendingSlideshowOnLogin !== false),
-        dashboardLayout: ('dashboardLayout' in req.body)
-            ? normalizeSectionLayout(req.body.dashboardLayout)
-            : normalizeSectionLayout(existingConfig.dashboardLayout)
+        dashboardLayout: normalizedDashboardLayout
     };
     const config = migrateArrConfig(configDraft);
     const { config: collexionsConfig, changed: collexionsDefaultsChanged } = applyCollexionsBundledDefaults(config, {
@@ -6297,7 +6318,7 @@ app.get('/api/config/public', async (req, res) => {
             dashboardWatchingBadgePollSeconds: Math.min(15, Math.max(1, parseInt(config.dashboardWatchingBadgePollSeconds, 10) || 15)),
             showPublicStatusMonitor: isPublicStatusVisible(config),
             showPublicLibraryStats: arePublicLibraryStatsVisible(config),
-            dashboardLayout: normalizeSectionLayout(config.dashboardLayout),
+            dashboardLayout: normalizeSectionLayout(config.dashboardLayout, { homeCustomModules: config.homeCustomModules }),
             basePath: BASE_PATH,
         });
     } catch (error) {
@@ -6935,8 +6956,21 @@ const handleCustomTabEmbedProxy = createCustomTabEmbedProxyHandler({
     log,
 });
 
+const handleHomeModuleEmbedProxy = createHomeModuleEmbedProxyHandler({
+    loadConfig: () => loadFile(CONFIG_PATH, {}),
+    normalizeHomeCustomModules,
+    resolveCurrentAdmin,
+    getSessionActor,
+    effectiveViewerIsAdmin,
+    withBasePath,
+    fetchWithTimeout,
+    log,
+});
+
 app.all('/api/custom-tab-embed/:tabId', requireAuth, requireMember, handleCustomTabEmbedProxy);
 app.all('/api/custom-tab-embed/:tabId/*', requireAuth, requireMember, handleCustomTabEmbedProxy);
+app.all('/api/home-module-embed/:moduleId', requireAuth, requireMember, handleHomeModuleEmbedProxy);
+app.all('/api/home-module-embed/:moduleId/*', requireAuth, requireMember, handleHomeModuleEmbedProxy);
 
 const requestAppService = createRequestAppService({
     fetchWithTimeout,

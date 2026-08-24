@@ -178,6 +178,22 @@ export interface AppSettings {
     memberNavHiddenKeys?: string[];
     /** Admin-defined external service tabs shown in the sidebar. */
     customNavTabs?: CustomNavTab[];
+    /** Admin-defined custom HTML / iframe modules for the home dashboard. */
+    homeCustomModules?: HomeCustomModule[];
+}
+
+export type HomeCustomModuleMode = 'html' | 'iframe';
+
+export interface HomeCustomModule {
+    id: string;
+    title: string;
+    description?: string;
+    enabled: boolean;
+    adminOnly?: boolean;
+    mode: HomeCustomModuleMode;
+    html?: string;
+    css?: string;
+    url?: string;
 }
 
 export type CustomNavTabOpenMode = 'embed' | 'sameTab' | 'newTab';

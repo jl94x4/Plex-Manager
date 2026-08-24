@@ -38,7 +38,7 @@ import { usePoll } from '../shared/usePoll';
 import { CustomSelect, SettingsSwitch, SettingsToggleRow } from '../shared/ui';
 import { Loader, ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { SettingHint, SettingFieldLabel } from './SettingHint';
-import type { User, AuditEntry, DeletedUser, PlexServer, ArrInstance, DownloadClientConfig, CustomNavTab } from '../shared/types';
+import type { User, AuditEntry, DeletedUser, PlexServer, ArrInstance, DownloadClientConfig, CustomNavTab, HomeCustomModule } from '../shared/types';
 import { formatDateTime, formatEventName, hexToRgb, accentHoverRgb, getDaysUntilExpiry, addMonths, addYears, formatDate } from '../shared/format';
 
 import { StreamKillRulesPanel } from './StreamKillRulesPanel';
@@ -53,9 +53,11 @@ import { AchievementsSettings } from './AchievementsSettings';
 import { AnalyticsSettings } from './AnalyticsSettings';
 import { NavigationOrderSettings } from './NavigationOrderSettings';
 import { CustomNavTabsSettings } from './CustomNavTabsSettings';
+import { HomeCustomModulesSettings } from './HomeCustomModulesSettings';
 import { ArrInstancesPanel, type ArrInstancesPanelCopy } from './ArrInstancesPanel';
 import { DISCOVER_LANGUAGE_OPTIONS, DISCOVER_REGION_OPTIONS } from './discoverySettingsOptions';
 import { DEFAULT_DASHBOARD_LAYOUT, normalizeSectionLayout, type DashboardLayoutConfig } from '../shared/dashboardLayout';
+import { pruneDashboardLayoutCustomModules } from '../shared/homeCustomModules';
 import { DEFAULT_NAV_ORDER, deriveMemberNavOrderFromAdmin, ensureCompleteMemberNavOrder, ensureCompleteNavOrder, normalizeMemberNavHiddenKeys, normalizeNavHiddenKeys, resolveMemberNavOrder } from '../shared/nav';
 import {
     SETTINGS_TAB_GROUPS,
@@ -797,6 +799,7 @@ export const SettingsDashboard: React.FC = () => {
     const [memberNavOrder, setMemberNavOrder] = useState<string[]>(() => deriveMemberNavOrderFromAdmin([...DEFAULT_NAV_ORDER]));
     const [memberNavHiddenKeys, setMemberNavHiddenKeys] = useState<string[]>([]);
     const [customNavTabs, setCustomNavTabs] = useState<CustomNavTab[]>([]);
+    const [homeCustomModules, setHomeCustomModules] = useState<HomeCustomModule[]>([]);
     const [downloadsVisibleToMembers, setDownloadsVisibleToMembers] = useState(true);
     const [logoFile, setLogoFile] = useState<File | null>(null);
     const [backgroundFile, setBackgroundFile] = useState<File | null>(null);
@@ -1508,6 +1511,7 @@ export const SettingsDashboard: React.FC = () => {
             setMemberNavOrder(resolveMemberNavOrder(initialSettings.memberNavOrder, initialSettings.navOrder, initialSettings.customNavTabs));
             setMemberNavHiddenKeys(normalizeMemberNavHiddenKeys(initialSettings.memberNavHiddenKeys, initialSettings.customNavTabs));
             if (Array.isArray(initialSettings.customNavTabs)) setCustomNavTabs(initialSettings.customNavTabs);
+            if (Array.isArray(initialSettings.homeCustomModules)) setHomeCustomModules(initialSettings.homeCustomModules);
             if (initialSettings.downloadsVisibleToMembers !== undefined) {
                 setDownloadsVisibleToMembers(!!initialSettings.downloadsVisibleToMembers);
             }
@@ -1838,7 +1842,9 @@ export const SettingsDashboard: React.FC = () => {
             if (initialSettings.upgraderProfileMap && typeof initialSettings.upgraderProfileMap === 'object') {
                 setUpgraderProfileMap(initialSettings.upgraderProfileMap);
             }
-            const layout = normalizeSectionLayout(initialSettings.dashboardLayout);
+            const layout = normalizeSectionLayout(initialSettings.dashboardLayout, {
+                homeCustomModules: Array.isArray(initialSettings.homeCustomModules) ? initialSettings.homeCustomModules : [],
+            });
             dashboardLayoutRef.current = layout;
             setDashboardLayout(layout);
             setTestRecipient('');
@@ -2072,6 +2078,7 @@ export const SettingsDashboard: React.FC = () => {
             memberNavOrder: ensureCompleteMemberNavOrder(memberNavOrder, customNavTabs),
             memberNavHiddenKeys: normalizeMemberNavHiddenKeys(memberNavHiddenKeys, customNavTabs),
             customNavTabs,
+            homeCustomModules,
             downloadsVisibleToMembers,
             hideStreamUsers,
             showUsernamesInAnalytics,
@@ -2183,7 +2190,10 @@ export const SettingsDashboard: React.FC = () => {
             upgraderDefaultSort,
             upgraderDrawerPosition,
             upgraderProfileMap,
-            dashboardLayout: normalizeSectionLayout(dashboardLayoutRef.current)
+            dashboardLayout: pruneDashboardLayoutCustomModules(
+                normalizeSectionLayout(dashboardLayoutRef.current, { homeCustomModules }),
+                homeCustomModules,
+            ) as DashboardLayoutConfig,
         });
     };
     const applyJellyfinBranding = () => {
@@ -3846,8 +3856,16 @@ export const SettingsDashboard: React.FC = () => {
                                     }}
                                 />
                             </section>
+                            <section id={getSettingsSectionElementId('home-modules')} className="scroll-mt-24">
+                                <HomeCustomModulesSettings
+                                    homeCustomModules={homeCustomModules}
+                                    onChange={setHomeCustomModules}
+                                    dashboardLayout={dashboardLayout}
+                                    onDashboardLayoutChange={updateDashboardLayout}
+                                />
+                            </section>
                             <section id={getSettingsSectionElementId('home-layout')} className="scroll-mt-24">
-                                <HomeLayoutSettings layout={dashboardLayout} onChange={updateDashboardLayout} />
+                                <HomeLayoutSettings layout={dashboardLayout} onChange={updateDashboardLayout} homeCustomModules={homeCustomModules} />
                             </section>
                         </div>
                     )}

@@ -2580,6 +2580,50 @@ Object.assign(en, { settings: { ...en.settings, homeLayout: {
     },
 } } });
 
+Object.assign(en, { settings: { ...en.settings, homeModules: {
+    title: 'Custom Home Modules',
+    description: 'Add your own HTML blocks or embedded pages as separate home dashboard sections. Each module appears as its own draggable section in Home Layout.',
+    add: 'Add module',
+    empty: 'No custom home modules yet. Add one to inject HTML or an iframe into the dashboard.',
+    untitled: 'Untitled module',
+    noUrl: 'No URL configured',
+    htmlModule: 'Custom HTML module',
+    titleLabel: 'Title',
+    titlePlaceholder: 'Server status',
+    descriptionLabel: 'Description',
+    descriptionPlaceholder: 'Optional subtitle shown above the module',
+    sectionDescription: 'Custom HTML or embedded page',
+    url: 'Embed URL',
+    html: 'HTML',
+    htmlHint: 'Full HTML is allowed. Content is admin-trusted and rendered without sanitization.',
+    css: 'CSS',
+    enabled: 'Enabled',
+    enabledHint: 'Disabled modules stay saved but are hidden from the home page.',
+    adminOnly: 'Admins only',
+    adminOnlyHint: 'Hide this module from members and only show it to portal admins.',
+    layoutHint: 'Reorder modules on the Home Layout page below. New modules are inserted before Recently Added.',
+    mode: {
+        label: 'Display mode',
+        html: 'Custom HTML',
+        iframe: 'Embedded page',
+        hint: {
+            html: 'Paste any HTML and optional CSS. Scripts and embeds are allowed.',
+            iframe: 'Loads an external URL in an iframe. Mixed-content and cross-origin pages are proxied automatically when possible.',
+        },
+    },
+    embedWarningBlockedHost: 'This host cannot be embedded even through the portal proxy.',
+    embedWarningMixedContent: 'HTTP on an HTTPS portal will load through the portal embed proxy.',
+    embedWarningCrossOrigin: 'Cross-origin framing headers will be bypassed through the portal embed proxy when possible.',
+    embed: {
+        reload: 'Reload',
+        openInBrowser: 'Open in browser',
+        proxyActive: 'This embed is loading through the portal proxy so it can run inside the dashboard.',
+        blockedHost: 'This site blocks embedding, including through the portal proxy.',
+        genericBlocked: 'The browser blocked this embed.',
+        useOpenInBrowser: 'Use Open in browser if the embedded view does not load.',
+    },
+} } });
+
 Object.assign(en, { settings: { ...en.settings, notifications: {
     common: { never: 'Never', unknownDate: 'Unknown', unknownUser: 'Unknown user', unread: 'unread', all: 'All', loading: 'Loading...', ready: 'Ready', needsSetup: 'Needs setup', email: 'Email', inAppBell: 'In-app bell', browserPush: 'Browser push', webPush: 'Web Push', ntfy: 'ntfy', webhook: 'Webhook' },
     page: { title: 'Notifications', description: 'Hub for request-available alerts, browser push, Discord, in-app bell history, and send-to-myself tests. SMTP and Gotify admin alerts are on this same page (above and below).' },

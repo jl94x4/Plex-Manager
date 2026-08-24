@@ -1,4 +1,14 @@
-export type DashboardSectionId = 'wrapUp' | 'mainGrid' | 'pendingRequests' | 'watchRow' | 'scanner' | 'mediaAutomation' | 'recentlyAdded' | 'bazarrTools';
+import type { HomeCustomModule } from './types';
+import {
+    canAccessHomeCustomModule,
+    isHomeCustomModuleSectionId,
+    normalizeDashboardSectionIds,
+    parseHomeCustomModuleSectionId,
+} from './homeCustomModules';
+
+export type BuiltInDashboardSectionId = 'wrapUp' | 'mainGrid' | 'pendingRequests' | 'watchRow' | 'scanner' | 'mediaAutomation' | 'recentlyAdded' | 'bazarrTools';
+
+export type DashboardSectionId = BuiltInDashboardSectionId | `customModule:${string}`;
 
 export type MainGridWidgetId =
     | 'adminBadge'
@@ -86,7 +96,7 @@ export const DEFAULT_DASHBOARD_LAYOUT: DashboardLayoutConfig = {
     topWatchedRows: 2,
 };
 
-const ALL_SECTIONS: DashboardSectionId[] = ['wrapUp', 'mainGrid', 'pendingRequests', 'watchRow', 'scanner', 'mediaAutomation', 'recentlyAdded', 'bazarrTools'];
+const ALL_SECTIONS: BuiltInDashboardSectionId[] = ['wrapUp', 'mainGrid', 'pendingRequests', 'watchRow', 'scanner', 'mediaAutomation', 'recentlyAdded', 'bazarrTools'];
 const ALL_MAIN_GRID: MainGridWidgetId[] = Object.keys(MAIN_GRID_WIDGET_META) as MainGridWidgetId[];
 const ALL_RECENTLY_ADDED: RecentlyAddedWidgetId[] = ['recentMovies', 'recentShows', 'recentMusic'];
 const ALL_WIDGETS: DashboardWidgetId[] = [...ALL_MAIN_GRID, ...ALL_RECENTLY_ADDED];
@@ -153,7 +163,7 @@ const normalizeWidgetColumns = (values: unknown): Partial<Record<DashboardWidget
 };
 
 const migrateDashboardSections = (sections: DashboardSectionId[]): DashboardSectionId[] => {
-    const next = sections.filter((id, index) => id !== 'pendingRequests' || sections.indexOf('pendingRequests') === index);
+    const next = sections.filter((id, index) => !ALL_SECTIONS.includes(id as BuiltInDashboardSectionId) || id !== 'pendingRequests' || sections.indexOf('pendingRequests') === index);
     const mainGridIndex = next.indexOf('mainGrid');
     if (!next.includes('pendingRequests') && mainGridIndex >= 0) {
         next.splice(mainGridIndex + 1, 0, 'pendingRequests');
@@ -193,16 +203,27 @@ const migrateMainGridOrder = (order: MainGridWidgetId[]): MainGridWidgetId[] => 
     return next;
 };
 
-export const normalizeDashboardLayout = (raw: unknown): DashboardLayoutConfig => {
+export type NormalizeDashboardLayoutOptions = {
+    homeCustomModules?: HomeCustomModule[];
+};
+
+export const normalizeDashboardLayout = (raw: unknown, options: NormalizeDashboardLayoutOptions = {}): DashboardLayoutConfig => {
+    const moduleIds = new Set(
+        (options.homeCustomModules || [])
+            .filter((module) => module.enabled)
+            .map((module) => String(module.id)),
+    );
     const input = raw && typeof raw === 'object' ? (raw as Partial<DashboardLayoutConfig>) : {};
     return {
         version: 1,
-        sections: migrateDashboardSections(uniqueValid(input.sections, ALL_SECTIONS, DEFAULT_DASHBOARD_LAYOUT.sections)),
+        sections: migrateDashboardSections(
+            normalizeDashboardSectionIds(input.sections, ALL_SECTIONS, DEFAULT_DASHBOARD_LAYOUT.sections, moduleIds) as DashboardSectionId[],
+        ),
         mainGridOrder: migrateMainGridOrder(
             uniqueValid(input.mainGridOrder, ALL_MAIN_GRID, DEFAULT_DASHBOARD_LAYOUT.mainGridOrder),
         ),
         recentlyAddedOrder: uniqueValid(input.recentlyAddedOrder, ALL_RECENTLY_ADDED, DEFAULT_DASHBOARD_LAYOUT.recentlyAddedOrder),
-        hiddenSections: uniqueValid(input.hiddenSections, ALL_SECTIONS, [], false),
+        hiddenSections: normalizeDashboardSectionIds(input.hiddenSections, ALL_SECTIONS, [], moduleIds, { fillMissingBuiltIn: false }) as DashboardSectionId[],
         hiddenWidgets: uniqueValid(input.hiddenWidgets, ALL_WIDGETS, [], false),
         widgetSizes: normalizeWidgetSizes(input.widgetSizes),
         widgetColumns: normalizeWidgetColumns(input.widgetColumns),
@@ -222,6 +243,7 @@ export type DashboardLayoutContext = {
     achievementsEnabled?: boolean;
     achievementsHomeWidgetEnabled?: boolean;
     mediaServerType?: string;
+    homeCustomModules?: HomeCustomModule[];
 };
 
 export const isMainGridWidgetAvailable = (id: MainGridWidgetId, ctx: DashboardLayoutContext): boolean => {
@@ -265,6 +287,11 @@ export const resolveRecentlyAddedWidgets = (layout: DashboardLayoutConfig): Rece
     layout.recentlyAddedOrder.filter((id) => !layout.hiddenWidgets.includes(id));
 
 export const isDashboardSectionAvailable = (id: DashboardSectionId, ctx: DashboardLayoutContext): boolean => {
+    if (isHomeCustomModuleSectionId(id)) {
+        const moduleId = parseHomeCustomModuleSectionId(id);
+        const module = ctx.homeCustomModules?.find((entry) => String(entry.id) === moduleId);
+        return canAccessHomeCustomModule(module, !!ctx.isAdmin);
+    }
     if (id === 'pendingRequests') return !!ctx.isAdmin;
     if (id === 'bazarrTools') return !!ctx.isAdmin;
     if (id === 'scanner') return !!ctx.isAdmin && !!ctx.scannerHomeWidgetEnabled;
@@ -277,13 +304,13 @@ export const resolveDashboardSections = (layout: DashboardLayoutConfig, ctx?: Da
         (id) => !layout.hiddenSections.includes(id) && (!ctx || isDashboardSectionAvailable(id, ctx))
     );
 
-export const normalizeSectionLayout = (raw: unknown): DashboardLayoutConfig => {
-    const normalized = normalizeDashboardLayout(raw);
+export const normalizeSectionLayout = (raw: unknown, options: NormalizeDashboardLayoutOptions = {}): DashboardLayoutConfig => {
+    const normalized = normalizeDashboardLayout(raw, options);
     const input = raw && typeof raw === 'object' ? (raw as Partial<DashboardLayoutConfig>) : null;
     if (!input || !Array.isArray(input.hiddenSections)) {
         return { ...normalized, hiddenSections: [] };
     }
-    if (normalized.hiddenSections.length >= ALL_SECTIONS.length) {
+    if (normalized.hiddenSections.length >= normalized.sections.length) {
         return { ...normalized, hiddenSections: [] };
     }
     if (normalized.hiddenWidgets.length >= ALL_WIDGETS.length) {

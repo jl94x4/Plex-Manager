@@ -33,6 +33,7 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
     { id: 'layout', tabId: 'layout', label: 'Layout', group: 'Portal', keywords: ['layout', 'navigation', 'menu', 'order', 'sidebar', 'home', 'dashboard', 'widgets', 'sections', 'reorder', 'hide', 'downloads', 'members'] },
     { id: 'layout/navigation', tabId: 'layout', sectionId: 'navigation', label: 'Navigation', group: 'Portal', keywords: ['menu', 'order', 'sidebar', 'nav', 'downloads', 'members'] },
     { id: 'layout/custom-nav-tabs', tabId: 'layout', sectionId: 'custom-nav-tabs', label: 'Custom External Tabs', group: 'Portal', keywords: ['custom', 'external', 'tabs', 'links', 'iframe', 'embed', 'services', 'navigation', 'sidebar'] },
+    { id: 'layout/home-modules', tabId: 'layout', sectionId: 'home-modules', label: 'Home Custom Modules', group: 'Portal', keywords: ['dashboard', 'home', 'modules', 'html', 'iframe', 'custom', 'widget'] },
     { id: 'layout/home-layout', tabId: 'layout', sectionId: 'home-layout', label: 'Home Layout', group: 'Portal', keywords: ['dashboard', 'widgets', 'sections', 'home', 'layout', 'reorder', 'hide'] },
     { id: 'achievements', tabId: 'achievements', label: 'Achievements', group: 'Portal', keywords: ['xp', 'badges', 'leaderboard', 'gamification', 'achievements', 'level'] },
     { id: 'analytics', tabId: 'analytics', label: 'Analytics', group: 'Portal', keywords: ['analytics', 'tautulli', 'watch history', 'usernames', 'rebuild', 'cache', 'source'] },
@@ -132,6 +133,7 @@ export const parseSettingsHash = (hash: string): { tabId: SettingsTabId | null; 
     // Legacy tab hashes → merged Layout / Notifications sections.
     const legacyTabRedirects: Record<string, { tabId: SettingsTabId; sectionId: string }> = {
         navigation: { tabId: 'layout', sectionId: 'navigation' },
+        'home-modules': { tabId: 'layout', sectionId: 'home-modules' },
         'home-layout': { tabId: 'layout', sectionId: 'home-layout' },
         smtp: { tabId: 'notifications', sectionId: 'smtp' },
         gotify: { tabId: 'notifications', sectionId: 'gotify' },

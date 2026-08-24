@@ -27,7 +27,7 @@ import {
     TrendingSectionsSkeleton,
     WrapUpCardsSkeleton,
 } from './shared/skeletons';
-import type { User, PlexConfig, AppSettings, PlexServer, ToastMessage, DeletedUser, AuditEntry, UserStatus } from './shared/types';
+import type { User, PlexConfig, AppSettings, PlexServer, ToastMessage, DeletedUser, AuditEntry, UserStatus, HomeCustomModule } from './shared/types';
 import { ShareWrapUpModal } from './shared/ShareWrapUp';
 import { WrapUpModal } from './shared/WrapUpModal';
 import { WrapUpRecapModal } from './shared/WrapUpRecapModal';
@@ -77,6 +77,7 @@ import {
 } from './shared/dashboard/DashboardChrome';
 import { ANALYTICS_PERIOD_OPTIONS, persistAnalyticsDays, readPersistedAnalyticsDays } from './shared/analyticsPeriodOptions';
 import { UserDashboardLayout } from './home/UserDashboardLayout';
+import { HomeCustomModuleSection } from './home/HomeCustomModuleSection';
 import { HomeHeroMovieBackdrop } from './home/HomeHeroMovieBackdrop';
 import { createBazarrToolsSectionRenderer, createMainGridWidgetRenderer, createMediaAutomationSectionRenderer, createPendingRequestsSectionRenderer, createRecentlyAddedWidgetRenderer, createScannerSectionRenderer } from './home/userDashboardWidgetRenderers';
 import {
@@ -91,7 +92,9 @@ import {
     type DashboardWidgetSize,
     type MainGridWidgetId,
     type RecentlyAddedWidgetId,
+    type BuiltInDashboardSectionId,
 } from './shared/dashboardLayout';
+import { getHomeCustomModuleLabel, isHomeCustomModuleSectionId } from './shared/homeCustomModules';
 import { NowPlayingCompanionPanel } from './home/NowPlayingCompanionPanel';
 
 const JELLYFIN_ICON_URL = 'https://cdn.jsdelivr.net/gh/selfhst/icons/svg/jellyfin.svg';
@@ -7197,18 +7200,25 @@ const PortalWidgetEditorModal: React.FC<{
     onSave: () => void;
     onClose: () => void;
     saving: boolean;
-}> = ({ layout, onChange, onSave, onClose, saving }) => {
+    homeCustomModules?: HomeCustomModule[];
+}> = ({ layout, onChange, onSave, onClose, saving, homeCustomModules = [] }) => {
     const [movingItem, setMovingItem] = useState<{ list: 'sections' | 'main' | 'recent'; index: number } | null>(null);
+    const normalizeLayout = (next: DashboardLayoutConfig) => normalizeSectionLayout(next, { homeCustomModules });
+    const sectionLabel = (id: DashboardSectionId) => (
+        isHomeCustomModuleSectionId(id)
+            ? getHomeCustomModuleLabel(id, homeCustomModules)
+            : DASHBOARD_SECTION_LABELS[id as BuiltInDashboardSectionId]
+    );
 
     const reorderList = (list: 'sections' | 'main' | 'recent', targetIndex: number, source = movingItem) => {
         if (!source || source.list !== list || source.index === targetIndex) return;
         if (list === 'sections') {
-            onChange(normalizeSectionLayout({ ...layout, sections: moveDashboardItemTo(layout.sections, source.index, targetIndex) }));
+            onChange(normalizeLayout({ ...layout, sections: moveDashboardItemTo(layout.sections, source.index, targetIndex) }));
             return;
         }
         const items = list === 'main' ? layout.mainGridOrder : layout.recentlyAddedOrder;
         const next = moveDashboardItemTo(items, source.index, targetIndex);
-        onChange(normalizeSectionLayout(list === 'main' ? { ...layout, mainGridOrder: next } : { ...layout, recentlyAddedOrder: next }));
+        onChange(normalizeLayout(list === 'main' ? { ...layout, mainGridOrder: next } : { ...layout, recentlyAddedOrder: next }));
     };
 
     const selectOrMove = (list: 'sections' | 'main' | 'recent', index: number) => {
@@ -7232,33 +7242,33 @@ const PortalWidgetEditorModal: React.FC<{
         const hiddenSections = layout.hiddenSections.includes(id)
             ? layout.hiddenSections.filter((sectionId) => sectionId !== id)
             : [...layout.hiddenSections, id];
-        onChange(normalizeSectionLayout({ ...layout, hiddenSections }));
+        onChange(normalizeLayout({ ...layout, hiddenSections }));
     };
 
     const toggleWidget = (id: DashboardWidgetId) => {
         const hiddenWidgets = layout.hiddenWidgets.includes(id)
             ? layout.hiddenWidgets.filter((widgetId) => widgetId !== id)
             : [...layout.hiddenWidgets, id];
-        onChange(normalizeSectionLayout({ ...layout, hiddenWidgets }));
+        onChange(normalizeLayout({ ...layout, hiddenWidgets }));
     };
 
     const moveSection = (index: number, direction: -1 | 1) => {
-        onChange(normalizeSectionLayout({ ...layout, sections: moveDashboardItem(layout.sections, index, direction) }));
+        onChange(normalizeLayout({ ...layout, sections: moveDashboardItem(layout.sections, index, direction) }));
     };
 
     const moveMainWidget = (index: number, direction: -1 | 1) => {
-        onChange(normalizeSectionLayout({ ...layout, mainGridOrder: moveDashboardItem(layout.mainGridOrder, index, direction) }));
+        onChange(normalizeLayout({ ...layout, mainGridOrder: moveDashboardItem(layout.mainGridOrder, index, direction) }));
     };
 
     const moveRecentWidget = (index: number, direction: -1 | 1) => {
-        onChange(normalizeSectionLayout({ ...layout, recentlyAddedOrder: moveDashboardItem(layout.recentlyAddedOrder, index, direction) }));
+        onChange(normalizeLayout({ ...layout, recentlyAddedOrder: moveDashboardItem(layout.recentlyAddedOrder, index, direction) }));
     };
 
     const setWidgetSize = (id: DashboardWidgetId, size: DashboardWidgetSize) => {
         const widgetSizes = { ...(layout.widgetSizes || {}) };
         if (size === 'normal') delete widgetSizes[id];
         else widgetSizes[id] = size;
-        onChange(normalizeSectionLayout({ ...layout, widgetSizes }));
+        onChange(normalizeLayout({ ...layout, widgetSizes }));
     };
 
     return (
@@ -7291,7 +7301,7 @@ const PortalWidgetEditorModal: React.FC<{
                             {layout.sections.map((id, index) => (
                                 <PortalLayoutRow
                                     key={id}
-                                    label={DASHBOARD_SECTION_LABELS[id]}
+                                    label={sectionLabel(id)}
                                     hidden={layout.hiddenSections.includes(id)}
                                     first={index === 0}
                                     last={index === layout.sections.length - 1}
@@ -7437,7 +7447,8 @@ export const UserDashboard: React.FC<{
     const [bazarrWidgets, setBazarrWidgets] = useState<any>(null);
     const [serverDataLoading, setServerDataLoading] = useState(true);
     const [topContentPage, setTopContentPage] = useState(0);
-    const [dashboardLayoutDraft, setDashboardLayoutDraft] = useState<DashboardLayoutConfig>(() => normalizeSectionLayout(publicConfig?.dashboardLayout));
+    const homeCustomModules = Array.isArray(sessionInfo?.homeCustomModules) ? sessionInfo.homeCustomModules : [];
+    const [dashboardLayoutDraft, setDashboardLayoutDraft] = useState<DashboardLayoutConfig>(() => normalizeSectionLayout(publicConfig?.dashboardLayout, { homeCustomModules }));
     const [layoutEditorOpen, setLayoutEditorOpen] = useState(false);
     const [layoutSaving, setLayoutSaving] = useState(false);
     const [inlineWidgetEditing, setInlineWidgetEditing] = useState(false);
@@ -7496,8 +7507,8 @@ export const UserDashboard: React.FC<{
     }, [wrapUpSubjectId]);
 
     useEffect(() => {
-        setDashboardLayoutDraft(normalizeSectionLayout(publicConfig?.dashboardLayout));
-    }, [publicConfig?.dashboardLayout]);
+        setDashboardLayoutDraft(normalizeSectionLayout(publicConfig?.dashboardLayout, { homeCustomModules }));
+    }, [publicConfig?.dashboardLayout, homeCustomModules]);
 
     const resolveHomeImage = (thumbUrl: string | null | undefined, fallback = logoUrl()) => {
         if (!thumbUrl) return fallback;
@@ -7962,7 +7973,7 @@ export const UserDashboard: React.FC<{
                 method: 'POST',
                 body: JSON.stringify({ dashboardLayout: dashboardLayoutDraft }),
             });
-            const nextLayout = normalizeSectionLayout(result?.dashboardLayout || dashboardLayoutDraft);
+            const nextLayout = normalizeSectionLayout(result?.dashboardLayout || dashboardLayoutDraft, { homeCustomModules });
             setDashboardLayoutDraft(nextLayout);
             setToast({ id: Date.now(), message: 'Portal widgets saved.', type: 'success' });
             setLayoutEditorOpen(false);
@@ -7975,7 +7986,7 @@ export const UserDashboard: React.FC<{
     };
 
     const updateDashboardLayoutDraft = (next: DashboardLayoutConfig | ((layout: DashboardLayoutConfig) => DashboardLayoutConfig)) => {
-        setDashboardLayoutDraft((current) => normalizeSectionLayout(typeof next === 'function' ? next(current) : next));
+        setDashboardLayoutDraft((current) => normalizeSectionLayout(typeof next === 'function' ? next(current) : next, { homeCustomModules }));
     };
 
     const toggleDashboardSection = (id: DashboardSectionId) => {
@@ -8073,7 +8084,8 @@ export const UserDashboard: React.FC<{
         achievementsEnabled: !!sessionInfo?.navFeatures?.achievements,
         achievementsHomeWidgetEnabled: publicConfig?.achievementsHomeWidgetEnabled !== false,
         mediaServerType: publicConfig?.mediaServerType || 'plex',
-    }), [sessionInfo.session.isAdmin, user, publicConfig?.referralEnabled, publicConfig?.mediaServerType, publicConfig?.achievementsHomeWidgetEnabled, sessionInfo?.navFeatures?.requestsQueue, sessionInfo?.navFeatures?.collexions, sessionInfo?.navFeatures?.scannerHomeWidget, sessionInfo?.navFeatures?.mediaAutomationHomeWidget, sessionInfo?.navFeatures?.achievements]);
+        homeCustomModules,
+    }), [sessionInfo.session.isAdmin, user, publicConfig?.referralEnabled, publicConfig?.mediaServerType, publicConfig?.achievementsHomeWidgetEnabled, sessionInfo?.navFeatures?.requestsQueue, sessionInfo?.navFeatures?.collexions, sessionInfo?.navFeatures?.scannerHomeWidget, sessionInfo?.navFeatures?.mediaAutomationHomeWidget, sessionInfo?.navFeatures?.achievements, homeCustomModules]);
 
     const widgetDeps = useMemo(() => ({
         t,
@@ -8127,7 +8139,8 @@ export const UserDashboard: React.FC<{
             {layoutEditorOpen && (
                 <PortalWidgetEditorModal
                     layout={dashboardLayoutDraft}
-                    onChange={setDashboardLayoutDraft}
+                    onChange={updateDashboardLayoutDraft}
+                    homeCustomModules={homeCustomModules}
                     onSave={handleSaveDashboardLayout}
                     onClose={() => setLayoutEditorOpen(false)}
                     saving={layoutSaving}
@@ -8346,6 +8359,10 @@ export const UserDashboard: React.FC<{
             <UserDashboardLayout
                 layoutConfig={dashboardLayoutDraft}
                 layoutCtx={layoutCtx}
+                homeCustomModules={homeCustomModules}
+                renderCustomModule={(module) => (
+                    <HomeCustomModuleSection module={module} isAdmin={!!sessionInfo.session.isAdmin} />
+                )}
                 renderMainGridWidget={renderMainGridWidget}
                 renderPendingRequests={renderPendingRequests}
                 renderScanner={renderScanner}

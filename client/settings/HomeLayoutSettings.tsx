@@ -8,9 +8,12 @@ import {
     SECTION_PREVIEW_META,
     type DashboardLayoutConfig,
     type DashboardSectionId,
+    type BuiltInDashboardSectionId,
 } from '../shared/dashboardLayout';
+import { getHomeCustomModuleLabel, isHomeCustomModuleSectionId } from '../shared/homeCustomModules';
+import type { HomeCustomModule } from '../shared/types';
 
-const SECTION_LABEL_KEYS: Partial<Record<DashboardSectionId, string>> = {
+const SECTION_LABEL_KEYS: Partial<Record<BuiltInDashboardSectionId, string>> = {
     wrapUp: 'settings.homeLayout.sections.wrapUp.label',
     mainGrid: 'settings.homeLayout.sections.mainGrid.label',
     pendingRequests: 'settings.homeLayout.sections.pendingRequests.label',
@@ -19,14 +22,24 @@ const SECTION_LABEL_KEYS: Partial<Record<DashboardSectionId, string>> = {
     bazarrTools: 'settings.homeLayout.sections.bazarrTools.label',
 };
 
-const sectionLabel = (id: DashboardSectionId, t: (key: string) => string) => {
-    const key = SECTION_LABEL_KEYS[id];
-    return key ? t(key) : DASHBOARD_SECTION_LABELS[id];
+const sectionLabel = (id: DashboardSectionId, modules: HomeCustomModule[], t: (key: string) => string) => {
+    if (isHomeCustomModuleSectionId(id)) return getHomeCustomModuleLabel(id, modules);
+    const key = SECTION_LABEL_KEYS[id as BuiltInDashboardSectionId];
+    return key ? t(key) : DASHBOARD_SECTION_LABELS[id as BuiltInDashboardSectionId] || id;
+};
+
+const sectionDescription = (id: DashboardSectionId, modules: HomeCustomModule[], t: (key: string) => string) => {
+    if (isHomeCustomModuleSectionId(id)) {
+        const module = modules.find((entry) => `customModule:${entry.id}` === id);
+        return module?.description || t('settings.homeModules.sectionDescription');
+    }
+    return t(`settings.homeLayout.sections.${id}.description`);
 };
 
 type Props = {
     layout: DashboardLayoutConfig;
     onChange: (layout: DashboardLayoutConfig) => void;
+    homeCustomModules?: HomeCustomModule[];
 };
 
 const reorderSections = (sections: DashboardSectionId[], from: number, to: number): DashboardSectionId[] => {
@@ -59,14 +72,14 @@ const SectionVisibilityToggle: React.FC<{ visible: boolean; onToggle: () => void
     </button>
 };
 
-const SectionPreview: React.FC<{ layout: DashboardLayoutConfig }> = ({ layout }) => {
+const SectionPreview: React.FC<{ layout: DashboardLayoutConfig; homeCustomModules: HomeCustomModule[] }> = ({ layout, homeCustomModules }) => {
     const { t } = useDiscoverI18n();
 
     return <div className="rounded-xl border border-border/50 bg-background/40 p-4 space-y-2">
         <p className="text-xs font-bold uppercase tracking-wider text-muted mb-3">{t('settings.homeLayout.livePreview')}</p>
         <div className="flex flex-col gap-2">
             {layout.sections.map((id) => {
-                const meta = SECTION_PREVIEW_META[id];
+                const meta = isHomeCustomModuleSectionId(id) ? null : SECTION_PREVIEW_META[id as BuiltInDashboardSectionId];
                 const hidden = layout.hiddenSections.includes(id);
                 return (
                     <div
@@ -74,7 +87,7 @@ const SectionPreview: React.FC<{ layout: DashboardLayoutConfig }> = ({ layout })
                         className={`rounded-lg border transition-all ${hidden ? 'opacity-35 border-border/30 bg-white/[0.02]' : 'border-plex/40 bg-plex/[0.08] shadow-[0_0_16px_rgba(229,160,13,0.08)]'}`}
                     >
                         {id === 'mainGrid' && !hidden ? (
-                            <div className={`${meta.previewClass} p-2 flex gap-2`}>
+                            <div className={`${meta?.previewClass || 'h-20'} p-2 flex gap-2`}>
                                 <div className="w-1/3 flex flex-col gap-1">
                                     <div className="flex-1 rounded bg-plex/20 border border-plex/30" title={t('settings.homeLayout.leftColumn')} />
                                     <div className="h-4 rounded bg-plex/15 border border-plex/25" />
@@ -85,25 +98,25 @@ const SectionPreview: React.FC<{ layout: DashboardLayoutConfig }> = ({ layout })
                                 </div>
                             </div>
                         ) : id === 'pendingRequests' && !hidden ? (
-                            <div className={`${meta.previewClass} p-2 mx-2 mt-2`}>
+                            <div className={`${meta?.previewClass || 'h-12'} p-2 mx-2 mt-2`}>
                                 <div className="h-full rounded bg-plex/20 border border-plex/30 flex items-center justify-center px-3">
                                     <div className="h-6 w-full max-w-md rounded bg-plex/15 border border-plex/25" />
                                 </div>
                             </div>
                         ) : id === 'watchRow' && !hidden ? (
-                            <div className={`${meta.previewClass} p-2 flex gap-2`}>
+                            <div className={`${meta?.previewClass || 'h-20'} p-2 flex gap-2`}>
                                 <div className="w-1/3 rounded bg-plex/20 border border-plex/30" />
                                 <div className="w-2/3 rounded bg-plex/15 border border-plex/25" />
                             </div>
                         ) : (
-                            <div className={`${meta.previewClass} rounded bg-plex/15 border border-plex/25 mx-2 my-2`} />
+                            <div className={`${meta?.previewClass || 'h-12'} rounded bg-plex/15 border border-plex/25 mx-2 my-2`} />
                         )}
                         <div className="px-3 pb-2 flex items-center justify-between gap-2">
                             <div className="min-w-0">
                                 <p className={`text-sm font-semibold truncate ${hidden ? 'text-muted line-through' : 'text-text'}`}>
-                                    {sectionLabel(id, t)}
+                                    {sectionLabel(id, homeCustomModules, t)}
                                 </p>
-                                <p className="text-[10px] text-muted truncate">{t(`settings.homeLayout.sections.${id}.description`)}</p>
+                                <p className="text-[10px] text-muted truncate">{sectionDescription(id, homeCustomModules, t)}</p>
                             </div>
                             {hidden && <span className="text-[10px] font-bold uppercase tracking-wider text-muted shrink-0">{t('settings.homeLayout.hidden')}</span>}
                         </div>
@@ -115,7 +128,7 @@ const SectionPreview: React.FC<{ layout: DashboardLayoutConfig }> = ({ layout })
     </div>
 };
 
-export const HomeLayoutSettings: React.FC<Props> = ({ layout, onChange }) => {
+export const HomeLayoutSettings: React.FC<Props> = ({ layout, onChange, homeCustomModules = [] }) => {
     const { t } = useDiscoverI18n();
     const [dragIndex, setDragIndex] = useState<number | null>(null);
     const [dropIndex, setDropIndex] = useState<number | null>(null);
@@ -194,9 +207,9 @@ export const HomeLayoutSettings: React.FC<Props> = ({ layout, onChange }) => {
                                     <GripVertical className="w-5 h-5 text-muted shrink-0" aria-hidden />
                                     <div className="min-w-0 flex-1">
                                         <div className={`text-text font-medium ${hidden ? 'opacity-50 line-through' : ''}`}>
-                                            {sectionLabel(id, t)}
+                                            {sectionLabel(id, homeCustomModules, t)}
                                         </div>
-                                        <div className="text-xs text-muted mt-0.5">{t(`settings.homeLayout.sections.${id}.description`)}</div>
+                                        <div className="text-xs text-muted mt-0.5">{sectionDescription(id, homeCustomModules, t)}</div>
                                     </div>
                                     <SectionVisibilityToggle visible={!hidden} onToggle={() => toggleSectionHidden(id)} />
                                 </div>
@@ -205,7 +218,7 @@ export const HomeLayoutSettings: React.FC<Props> = ({ layout, onChange }) => {
                     </div>
                 </div>
 
-                <SectionPreview layout={layout} />
+                <SectionPreview layout={layout} homeCustomModules={homeCustomModules} />
             </div>
 
             <div className="max-w-5xl rounded-xl border border-plex/30 bg-plex/5 px-4 py-3">

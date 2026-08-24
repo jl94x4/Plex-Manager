@@ -9,6 +9,8 @@ import {
     type MainGridWidgetId,
     type RecentlyAddedWidgetId,
 } from '../shared/dashboardLayout';
+import { parseHomeCustomModuleSectionId } from '../shared/homeCustomModules';
+import type { HomeCustomModule } from '../shared/types';
 
 const findWatchRowIndexAfterMainGrid = (sections: ReturnType<typeof resolveDashboardSections>, mainGridIndex: number) => {
     for (let j = mainGridIndex + 1; j < sections.length; j += 1) {
@@ -46,6 +48,8 @@ type Props = {
     renderRecentlyAddedSkeleton: () => React.ReactNode;
     recentlyAddedLoading: boolean;
     hasDashboardData: boolean;
+    homeCustomModules?: HomeCustomModule[];
+    renderCustomModule?: (module: HomeCustomModule) => React.ReactNode;
 };
 
 export const UserDashboardLayout: React.FC<Props> = ({
@@ -63,10 +67,13 @@ export const UserDashboardLayout: React.FC<Props> = ({
     renderRecentlyAddedSkeleton,
     recentlyAddedLoading,
     hasDashboardData,
+    homeCustomModules = [],
+    renderCustomModule,
 }) => {
-    const layout = normalizeSectionLayout(layoutConfig);
-    const sections = resolveDashboardSections(layout, layoutCtx);
-    const mainGridWidgets = resolveMainGridWidgets(layout, layoutCtx);
+    const layout = normalizeSectionLayout(layoutConfig, { homeCustomModules });
+    const layoutCtxWithModules = { ...layoutCtx, homeCustomModules };
+    const sections = resolveDashboardSections(layout, layoutCtxWithModules);
+    const mainGridWidgets = resolveMainGridWidgets(layout, layoutCtxWithModules);
     const { left, right } = splitMainGridForDesktop(mainGridWidgets);
     const recentlyAdded = resolveRecentlyAddedWidgets(layout);
 
@@ -257,8 +264,20 @@ export const UserDashboardLayout: React.FC<Props> = ({
                 );
                 break;
             }
-            default:
+            default: {
+                const moduleId = parseHomeCustomModuleSectionId(sectionId);
+                if (!moduleId || !renderCustomModule) break;
+                const module = homeCustomModules.find((entry) => String(entry.id) === moduleId);
+                if (!module) break;
+                const content = renderCustomModule(module);
+                if (!content) break;
+                sectionNodes.push(
+                    <div key={sectionId} className="relative w-full min-w-0">
+                        {content}
+                    </div>
+                );
                 break;
+            }
         }
     }
 
