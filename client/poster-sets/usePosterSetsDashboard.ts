@@ -922,9 +922,12 @@ export function usePosterSetsDashboardState() {
                     ? 'This title-card pack previewed with 0 title cards. The set may only contain covers/backgrounds, or MediUX changed the listing.'
                     : 'This set previewed with 0 assets. Check MediUX filters in Poster Sets settings (title cards may be off).', 'error');
             } else {
+                const caching = /theposterdb\.com/i.test(target) && configDraft.tpdbLocalCacheEnabled === true
+                    ? ' Caching this set for next time.'
+                    : '';
                 toast(restrictTitleCards
-                    ? `Ready: ${matched} matched title cards · ${total} in pack.`
-                    : `Ready: ${matched} matched in Plex · ${total} in set.`);
+                    ? `Ready: ${matched} matched title cards · ${total} in pack.${caching}`
+                    : `Ready: ${matched} matched in Plex · ${total} in set.${caching}`);
             }
             if (options?.scroll !== false) {
                 window.setTimeout(() => {
