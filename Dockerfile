@@ -35,6 +35,12 @@ ENV NODE_ENV=production
 ENV BIND_HOST=0.0.0.0
 ENV PORT=2121
 ENV FORCE_SECURE_COOKIES=false
+# glibc's malloc keeps a per-thread arena pool and is notoriously slow to hand freed
+# memory back to the OS, especially after bursts of many medium/large allocations
+# (e.g. parsing full Sonarr/Radarr catalog JSON). That shows up as RSS that only ever
+# climbs and drops back to baseline solely on process restart — see issue #181. This
+# does not change app behavior, only how many malloc arenas glibc is allowed to use.
+ENV MALLOC_ARENA_MAX=2
 ENV COLLEXIONS_APP_DIR=/app/collexions
 ENV COLLEXIONS_EMBEDDED_PORT=15755
 ENV POSTER_SETS_APP_DIR=/app/poster-sets
