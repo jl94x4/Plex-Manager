@@ -4,6 +4,7 @@ import { apiFetch } from '../shared/api';
 import { logoUrl, portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
 import { ModalPortal } from '../shared/ModalPortal';
 import { tAchievements, useAchievementsI18n } from './i18n';
+import { badgeBarPercent } from './badgeFamilies';
 
 const rarityClass = (rarity: string) => {
     // Border + text only — never set translucent bg on the panel itself.
@@ -151,7 +152,14 @@ export const BadgeDetailDrawer: React.FC<Props> = ({
                             <div className="h-2.5 rounded-full bg-black/45 overflow-hidden border border-white/5">
                                 <div
                                     className={`h-full rounded-full ${earned ? 'bg-plex' : 'bg-white/30'}`}
-                                    style={{ width: `${Math.min(100, earned ? 100 : Number(progressPct) || 0)}%` }}
+                                    style={{
+                                        width: `${badgeBarPercent({
+                                            earned,
+                                            progress,
+                                            progressPct,
+                                            threshold,
+                                        })}%`,
+                                    }}
                                 />
                             </div>
                             {earned && earnedAt && (

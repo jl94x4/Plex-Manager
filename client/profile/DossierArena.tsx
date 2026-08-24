@@ -4,6 +4,7 @@ import {
 } from 'lucide-react';
 import { DashboardPanel } from '../shared/dashboard/DashboardChrome';
 import { useAchievementsI18n, tAchievements as tAchievementsStatic } from '../achievements/i18n';
+import { badgeBarPercent } from '../achievements/badgeFamilies';
 import { useDiscoverI18n } from '../discovery/i18n';
 import { goToProfile } from './helpers';
 
@@ -258,7 +259,7 @@ export const DossierArena: React.FC<Props> = ({ achievements, onNavigate, onOpen
                                     <div className="min-w-0 flex-1">
                                         <p className="text-sm font-bold text-text truncate">{badge.name}</p>
                                         <p className="text-[11px] text-muted mt-0.5">
-                                            {Math.round(Number(badge.progressPct) || 0)}%
+                                            {Math.round(badgeBarPercent(badge))}%
                                         </p>
                                     </div>
                                 </div>

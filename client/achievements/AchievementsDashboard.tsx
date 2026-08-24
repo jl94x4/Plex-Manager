@@ -12,7 +12,7 @@ import { ModalPortal } from '../shared/ModalPortal';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { ShareAchievementsModal } from '../shared/ShareAchievements';
 import { tAchievements, useAchievementsI18n } from './i18n';
-import { groupBadgesIntoFamilies, type BadgeFamily } from './badgeFamilies';
+import { groupBadgesIntoFamilies, badgeBarPercent, familyBarPercent, type BadgeFamily } from './badgeFamilies';
 import { BadgeDetailDrawer } from './BadgeDetailDrawer';
 import { UnlockCelebration } from './UnlockCelebration';
 import { LeaderboardDossierModal } from './LeaderboardDossierModal';
@@ -106,7 +106,7 @@ export const BadgeTile: React.FC<{
                     <div className="mt-2 h-1.5 rounded-full bg-black/40 overflow-hidden">
                         <div
                             className={`h-full rounded-full ${earned ? 'bg-plex' : 'bg-white/25'}`}
-                            style={{ width: `${Math.min(100, Number(badge?.progressPct) || 0)}%` }}
+                            style={{ width: `${badgeBarPercent(badge)}%` }}
                         />
                     </div>
                     <p className="mt-1 text-[10px] text-muted font-mono">
@@ -129,7 +129,7 @@ export const LadderFamilyCard: React.FC<{
     const focus = family.focus;
     const next = family.next;
     const complete = family.earnedCount >= family.totalCount && family.totalCount > 0;
-    const progressPct = next ? Math.min(100, Number(next.progressPct) || 0) : 100;
+    const progressPct = familyBarPercent(family);
     return (
         <div className={`rounded-xl border transition-colors ${complete ? 'border-plex/30 bg-plex/5' : rarityClass(focus?.rarity)}`}>
             <button type="button" onClick={onToggle} className="w-full text-left p-3.5">
@@ -544,7 +544,7 @@ export const XpBreakdownModal: React.FC<{
                                                     <div className="mt-2 h-1.5 rounded-full bg-black/40 overflow-hidden">
                                                         <div
                                                             className="h-full rounded-full bg-plex/80"
-                                                            style={{ width: `${Math.min(100, Number(badge.progressPct) || 0)}%` }}
+                                                            style={{ width: `${badgeBarPercent(badge)}%` }}
                                                         />
                                                     </div>
                                                     <p className="mt-1 text-[10px] text-muted font-mono tabular-nums">
@@ -1012,7 +1012,7 @@ export const AchievementsDashboard: React.FC<{
                                     <div className="min-w-0 flex-1">
                                         <p className="text-sm font-bold truncate">{badge.name}</p>
                                         <div className="mt-2 h-1.5 rounded-full bg-black/40 overflow-hidden">
-                                            <div className="h-full rounded-full bg-plex" style={{ width: `${Math.min(100, Number(badge.progressPct) || (badge.earned ? 100 : 0))}%` }} />
+                                            <div className="h-full rounded-full bg-plex" style={{ width: `${badgeBarPercent(badge)}%` }} />
                                         </div>
                                         <p className="mt-1 text-[10px] text-muted font-mono">
                                             {badge.earned
@@ -1050,7 +1050,7 @@ export const AchievementsDashboard: React.FC<{
                                         </p>
                                         <p className="text-[11px] text-muted line-clamp-2 mt-0.5">{badge.description}</p>
                                         <div className="mt-2 h-1.5 rounded-full bg-black/40 overflow-hidden">
-                                            <div className="h-full rounded-full bg-plex" style={{ width: `${Math.min(100, Number(badge.progressPct) || 0)}%` }} />
+                                            <div className="h-full rounded-full bg-plex" style={{ width: `${badgeBarPercent(badge)}%` }} />
                                         </div>
                                         <p className="mt-1 text-[10px] text-muted font-mono">
                                             {badge.progress ?? 0} / {badge.threshold ?? 0}
@@ -1458,7 +1458,7 @@ export const AchievementsHomeWidget: React.FC<{
                             <div className="min-w-0 flex-1">
                                 <p className="text-[11px] font-semibold truncate">{badge.name}</p>
                                 <div className="mt-0.5 h-1 rounded-full bg-black/40 overflow-hidden">
-                                    <div className="h-full bg-plex/80 rounded-full" style={{ width: `${Math.min(100, Number(badge.progressPct) || (badge.earned ? 100 : 0))}%` }} />
+                                    <div className="h-full bg-plex/80 rounded-full" style={{ width: `${badgeBarPercent(badge)}%` }} />
                                 </div>
                             </div>
                             <span className="text-[10px] text-muted font-mono shrink-0">

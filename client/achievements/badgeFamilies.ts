@@ -66,7 +66,12 @@ export const groupBadgesIntoFamilies = (badges: BadgeLike[] = []): BadgeFamily[]
         const earnedTiers = tiers.filter((t) => t.earned);
         const next = tiers.find((t) => !t.earned) || null;
         const focus = earnedTiers.length ? earnedTiers[earnedTiers.length - 1] : (next || tiers[0]);
-        const currentValue = Number(focus?.progress) || Number(next?.progress) || Number(tiers[0]?.progress) || 0;
+        const liveProgress = Math.max(0, ...tiers.map((t) => {
+            const n = Number(t.progress);
+            return Number.isFinite(n) ? n : 0;
+        }));
+        const earnedFloor = earnedTiers.reduce((max, t) => Math.max(max, Number(t.threshold) || 0), 0);
+        const currentValue = Math.max(liveProgress, earnedFloor);
         families.push({
             key: metric,
             metric,
@@ -94,7 +99,10 @@ export const groupBadgesIntoFamilies = (badges: BadgeLike[] = []): BadgeFamily[]
             totalCount: 1,
             focus: badge,
             next: badge.earned ? null : badge,
-            currentValue: Number(badge.progress) || 0,
+            currentValue: Math.max(
+                Number(badge.progress) || 0,
+                badge.earned ? Number(badge.threshold) || 0 : 0,
+            ),
         });
     }
 
@@ -103,9 +111,28 @@ export const groupBadgesIntoFamilies = (badges: BadgeLike[] = []): BadgeFamily[]
         const aDone = a.earnedCount >= a.totalCount ? 1 : 0;
         const bDone = b.earnedCount >= b.totalCount ? 1 : 0;
         if (aDone !== bDone) return aDone - bDone;
-        const aPct = a.next ? (Number(a.next.progressPct) || 0) : 100;
-        const bPct = b.next ? (Number(b.next.progressPct) || 0) : 100;
+        const aPct = familyBarPercent(a);
+        const bPct = familyBarPercent(b);
         if (aPct !== bPct) return bPct - aPct;
         return a.label.localeCompare(b.label);
     });
+};
+
+export const badgeBarPercent = (badge?: BadgeLike | null) => {
+    if (!badge) return 0;
+    if (badge.earned) return 100;
+    const threshold = Number(badge.threshold) || 0;
+    const progress = Number(badge.progress);
+    const live = Number.isFinite(progress) ? Math.max(0, progress) : 0;
+    if (threshold > 0) return Math.min(100, Math.max(0, (live / threshold) * 100));
+    const pct = Number(badge.progressPct);
+    return Number.isFinite(pct) ? Math.min(100, Math.max(0, pct)) : 0;
+};
+
+export const familyBarPercent = (family?: BadgeFamily | null) => {
+    if (!family) return 0;
+    if (!family.next || family.earnedCount >= family.totalCount) return 100;
+    const threshold = Number(family.next.threshold) || 0;
+    if (threshold <= 0) return 100;
+    return Math.min(100, Math.max(0, (Number(family.currentValue) / threshold) * 100));
 };

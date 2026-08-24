@@ -7,6 +7,7 @@ import { apiFetch } from '../shared/api';
 import { logoUrl, portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
 import { ModalPortal } from '../shared/ModalPortal';
 import { tAchievements, useAchievementsI18n } from './i18n';
+import { badgeBarPercent } from './badgeFamilies';
 
 const PANEL_FALLBACK = '#12141a';
 const PANEL_BG = 'rgb(var(--color-card))';
@@ -391,7 +392,7 @@ export const LeaderboardDossierModal: React.FC<Props> = ({ query, onClose, onOpe
                                                             <div className="mt-2 h-1.5 rounded-full bg-black/45 overflow-hidden">
                                                                 <div
                                                                     className="h-full rounded-full bg-plex/85"
-                                                                    style={{ width: `${Math.min(100, Number(badge.progressPct) || 0)}%` }}
+                                                                    style={{ width: `${badgeBarPercent(badge)}%` }}
                                                                 />
                                                             </div>
                                                             <p className="mt-1 text-[10px] font-mono text-muted tabular-nums">
