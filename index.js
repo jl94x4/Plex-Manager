@@ -15,6 +15,8 @@ import { execSync } from 'child_process';
 import fsSync from 'fs';
 import net from 'net';
 import dns from 'dns/promises';
+import v8 from 'v8';
+import os from 'os';
 import { makeCircularPwaIconPng, makeMaskablePwaIconPng } from './lib/circular-icon.js';
 import {
     getPortalBrandingIconCacheKey,
@@ -12853,19 +12855,59 @@ app.get('/api/admin/diagnostics', requireAdmin, async (req, res) => {
             listBackupFiles().catch(() => [])
         ]);
 
+        const mem = process.memoryUsage();
+        const toMB = (bytes) => Math.round((Number(bytes) || 0) / (1024 * 1024));
         res.json({
             app: {
                 version: appVersion,
                 uptimeSeconds: Math.floor(process.uptime()),
                 nodeVersion: process.version,
-                memoryRssMB: Math.round(process.memoryUsage().rss / (1024 * 1024)),
-                memoryHeapUsedMB: Math.round(process.memoryUsage().heapUsed / (1024 * 1024)),
+                memoryRssMB: toMB(mem.rss),
+                memoryHeapUsedMB: toMB(mem.heapUsed),
                 configDataDir: CONFIG_DIR,
+                // Full RSS breakdown — helps tell V8-heap growth apart from off-heap
+                // (Buffers/ArrayBuffers/native) growth. See issue #181.
+                memoryUsageMB: {
+                    rss: toMB(mem.rss),
+                    heapTotal: toMB(mem.heapTotal),
+                    heapUsed: toMB(mem.heapUsed),
+                    external: toMB(mem.external),
+                    arrayBuffers: toMB(mem.arrayBuffers),
+                    // Anything here is RSS not accounted for by the V8 heap + external/arrayBuffers
+                    // figures above — native allocations, thread stacks, mmap'd regions, fragmentation.
+                    unaccounted: toMB(mem.rss - mem.heapTotal - mem.external),
+                },
+                v8HeapStats: v8.getHeapStatistics(),
+                v8HeapSpaces: v8.getHeapSpaceStatistics().map((space) => ({
+                    name: space.space_name,
+                    sizeMB: toMB(space.space_size),
+                    usedMB: toMB(space.space_used_size),
+                    availableMB: toMB(space.space_available_size),
+                })),
+                os: {
+                    totalMemMB: toMB(os.totalmem()),
+                    freeMemMB: toMB(os.freemem()),
+                    loadavg: os.loadavg(),
+                },
                 memoryCaches: {
                     api: apiCache.stats(),
                     plexMetadata: plexMetadataCache.stats(),
                     personalAnalytics: personalAnalyticsCache.stats(),
+                    personalHistory: personalHistoryCache.stats(),
                     pageSwr: pageSwrStats(),
+                    // Below: in-memory Maps that aren't wrapped by the shared TTL/LRU cache
+                    // helper. Reported as raw sizes so an unbounded one is visible at a glance.
+                    mediaSessionsSwr: mediaSessionsSwr.stats(),
+                    musicBrowse: { size: musicBrowseCache.size, maxEntries: 40 },
+                    musicResolve: { size: musicResolveCache.size, maxEntries: 500 },
+                    musicArtistPayload: { size: musicArtistPayloadCache.size, maxEntries: 200 },
+                    arrRescanList: { size: arrRescanListCache.size, maxEntries: null },
+                    memberActiveRequestsOverlay: { size: memberActiveRequestsOverlayCache.size, maxEntries: null },
+                    fileLocks: { size: fileLocks.size, maxEntries: null },
+                    plexOauthStates: { size: plexOauthStates.size, maxEntries: null },
+                    jellyfinQuickConnectSessions: { size: jellyfinQuickConnectSessions.size, maxEntries: null },
+                    personalAnalyticsRefreshJobs: { size: personalAnalyticsRefreshJobs.size, maxEntries: null },
+                    personalHistoryExpandJobs: { size: personalHistoryExpandJobs.size, maxEntries: null },
                 },
             },
             integrations: {
@@ -12915,6 +12957,97 @@ app.get('/api/admin/diagnostics', requireAdmin, async (req, res) => {
         });
     } catch (e) {
         res.status(500).json({ error: `Failed to load diagnostics: ${e.message}` });
+    }
+});
+
+// --- Heap snapshots: on-demand V8 diagnostics for tracking down memory growth (issue #181) ---
+// v8.writeHeapSnapshot() blocks the event loop while it serializes the heap (can take
+// several seconds on a large heap) — this is an explicit admin action, never automatic.
+const HEAP_SNAPSHOT_DIR = path.join(CONFIG_DIR, 'diagnostics');
+const HEAP_SNAPSHOT_NAME_RE = /^heap-\d{10,20}\.heapsnapshot$/;
+const HEAP_SNAPSHOT_RETENTION = 5;
+
+const listHeapSnapshotFiles = async () => {
+    let entries = [];
+    try {
+        entries = await fs.readdir(HEAP_SNAPSHOT_DIR);
+    } catch {
+        return [];
+    }
+    const files = [];
+    for (const name of entries) {
+        if (!HEAP_SNAPSHOT_NAME_RE.test(name)) continue;
+        try {
+            const stat = await fs.stat(path.join(HEAP_SNAPSHOT_DIR, name));
+            files.push({ filename: name, sizeBytes: stat.size, createdAt: stat.mtime.toISOString() });
+        } catch {
+            // skip files that vanished between readdir and stat
+        }
+    }
+    files.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return files;
+};
+
+app.get('/api/admin/diagnostics/heap-snapshots', requireAdmin, async (req, res) => {
+    try {
+        res.json({ snapshots: await listHeapSnapshotFiles() });
+    } catch (e) {
+        res.status(500).json({ error: `Failed to list heap snapshots: ${e.message}` });
+    }
+});
+
+app.post('/api/admin/diagnostics/heap-snapshots', requireAdmin, async (req, res) => {
+    try {
+        await fs.mkdir(HEAP_SNAPSHOT_DIR, { recursive: true });
+        const filename = `heap-${Date.now()}.heapsnapshot`;
+        const filePath = path.join(HEAP_SNAPSHOT_DIR, filename);
+        log(`[Diagnostics] Writing heap snapshot to ${filePath} (requested by ${req.user?.username || 'admin'})…`);
+        const startedAt = Date.now();
+        v8.writeHeapSnapshot(filePath);
+        const durationMs = Date.now() - startedAt;
+        const stat = await fs.stat(filePath);
+        log(`[Diagnostics] Heap snapshot written: ${filename} (${Math.round(stat.size / (1024 * 1024))} MB, ${durationMs}ms)`);
+
+        // Keep only the most recent HEAP_SNAPSHOT_RETENTION snapshots — these can be large.
+        const existing = await listHeapSnapshotFiles();
+        const stale = existing.slice(HEAP_SNAPSHOT_RETENTION);
+        for (const entry of stale) {
+            await fs.unlink(path.join(HEAP_SNAPSHOT_DIR, entry.filename)).catch(() => {});
+        }
+
+        res.json({ success: true, filename, sizeBytes: stat.size, durationMs });
+    } catch (e) {
+        log(`[Diagnostics] Heap snapshot failed: ${e.message}`);
+        res.status(500).json({ error: `Failed to write heap snapshot: ${e.message}` });
+    }
+});
+
+app.get('/api/admin/diagnostics/heap-snapshots/:filename', requireAdmin, async (req, res) => {
+    const { filename } = req.params;
+    if (!HEAP_SNAPSHOT_NAME_RE.test(filename)) {
+        return res.status(400).json({ error: 'Invalid snapshot filename' });
+    }
+    const filePath = path.join(HEAP_SNAPSHOT_DIR, filename);
+    try {
+        await fs.access(filePath);
+    } catch {
+        return res.status(404).json({ error: 'Snapshot not found' });
+    }
+    res.download(filePath, filename, (err) => {
+        if (err) log(`[Diagnostics] Heap snapshot download failed for ${filename}: ${err.message}`);
+    });
+});
+
+app.delete('/api/admin/diagnostics/heap-snapshots/:filename', requireAdmin, async (req, res) => {
+    const { filename } = req.params;
+    if (!HEAP_SNAPSHOT_NAME_RE.test(filename)) {
+        return res.status(400).json({ error: 'Invalid snapshot filename' });
+    }
+    try {
+        await fs.unlink(path.join(HEAP_SNAPSHOT_DIR, filename));
+        res.json({ success: true });
+    } catch (e) {
+        res.status(e.code === 'ENOENT' ? 404 : 500).json({ error: e.code === 'ENOENT' ? 'Snapshot not found' : `Failed to delete snapshot: ${e.message}` });
     }
 });
 
