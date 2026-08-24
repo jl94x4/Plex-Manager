@@ -5,6 +5,8 @@ import { apiFetch } from '../shared/api';
 import { pushToast } from '../shared/toast';
 import { DashboardHero, DashboardPageShell } from '../shared/dashboard/DashboardChrome';
 import { usePoll } from '../shared/usePoll';
+import { BetaBadge, SpotifySyncBetaBanner } from '../shared/BetaBadge';
+import { useDiscoverI18n } from '../discovery/i18n';
 
 const EMBED_PATH = '/api/spotify-to-plex-embed/app/';
 const LOGS_EMBED_PATH = '/api/spotify-to-plex-embed/app/advanced/logs';
@@ -16,6 +18,8 @@ type SyncStatus = {
 };
 
 export const SpotifySyncPage: React.FC = () => {
+    const { t } = useDiscoverI18n();
+    const betaNotice = t('spotifySyncPage.betaNotice');
     const iframeSrc = useMemo(() => portalUrl(EMBED_PATH), []);
     const logsSrc = useMemo(() => portalUrl(LOGS_EMBED_PATH), []);
     const [iframeKey, setIframeKey] = useState(0);
@@ -58,9 +62,15 @@ export const SpotifySyncPage: React.FC = () => {
 
     return (
         <DashboardPageShell className="flex min-h-0 flex-1 flex-col">
+            <SpotifySyncBetaBanner className="mb-4" />
             <DashboardHero
                 accent="plex"
-                eyebrow="Spotify Sync"
+                eyebrow={
+                    <span className="inline-flex items-center gap-2">
+                        <span>Spotify Sync</span>
+                        <BetaBadge title={betaNotice} />
+                    </span>
+                }
                 title="Playlist sync for Plex"
                 description="Manage Spotify-to-Plex playlists, matching, and sync schedules from the embedded spotify-to-plex container UI."
                 icon={<Music className="h-3.5 w-3.5" />}

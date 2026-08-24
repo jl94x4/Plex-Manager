@@ -9,6 +9,7 @@ MEDIA_AUTOMATION_WORK_DIR=${MEDIA_AUTOMATION_WORK_DIR:-$MEDIA_AUTOMATION_CONFIG_
 POSTER_SETS_CONFIG_DIR=${POSTER_SETS_CONFIG_DIR:-$CONFIG_DIR/poster-sets}
 OVERLAYS_CONFIG_DIR=${OVERLAYS_CONFIG_DIR:-$CONFIG_DIR/overlays}
 EDITIONS_CONFIG_DIR=${EDITIONS_CONFIG_DIR:-$CONFIG_DIR/editions}
+SPOTIFY_TO_PLEX_CONFIG_DIR=${SPOTIFY_TO_PLEX_CONFIG_DIR:-$CONFIG_DIR/spotify-to-plex}
 
 # Unraid appdata mounts are often root-owned; fix permissions before dropping privileges.
 mkdir -p \
@@ -16,6 +17,8 @@ mkdir -p \
   /app/backup \
   "$CONFIG_DIR/collexions/config" \
   "$CONFIG_DIR/collexions/logs" \
+  "$SPOTIFY_TO_PLEX_CONFIG_DIR" \
+  "$SPOTIFY_TO_PLEX_CONFIG_DIR/logs" \
   "$MEDIA_AUTOMATION_CONFIG_DIR" \
   "$MEDIA_AUTOMATION_WORK_DIR" \
   "$POSTER_SETS_CONFIG_DIR" \

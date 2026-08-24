@@ -79,6 +79,7 @@ import {
     type MediaAutomationSettingsConfig,
 } from '../media-automation/types';
 import { useDiscoverI18n } from '../discovery/i18n';
+import { BetaBadge, SpotifySyncBetaBanner } from '../shared/BetaBadge';
 
 const normalizeArrInstancesFromSettings = (settings: Record<string, any> = {}): ArrInstance[] => {
     if (Array.isArray(settings.arrInstances) && settings.arrInstances.length > 0) {
@@ -288,13 +289,16 @@ const ProgramIcon: React.FC<{ app: string; label: string }> = ({ app, label }) =
     </span>
 );
 
-const IntegrationHeading: React.FC<{ app: string; title: string; subtitle?: string; className?: string }> = ({ app, title, subtitle, className = '' }) => (
+const IntegrationHeading: React.FC<{ app: string; title: string; subtitle?: string; className?: string; badge?: React.ReactNode }> = ({ app, title, subtitle, className = '', badge }) => (
     <div className={`integration-heading border-b border-border pb-3 mb-4 ${className}`}>
         <div className="grid grid-cols-[2rem_1fr] gap-x-3 gap-y-0.5">
             <div className="row-start-1 self-center">
                 <ProgramIcon app={app} label={title} />
             </div>
-            <h3 className="integration-heading-title text-xl font-bold text-text leading-tight min-w-0 col-start-2 row-start-1">{title}</h3>
+            <h3 className="integration-heading-title text-xl font-bold text-text leading-tight min-w-0 col-start-2 row-start-1 flex items-center gap-2 flex-wrap">
+                <span>{title}</span>
+                {badge}
+            </h3>
             {subtitle && <p className="text-xs text-muted col-start-2 row-start-2">{subtitle}</p>}
         </div>
     </div>
@@ -2540,7 +2544,12 @@ export const SettingsDashboard: React.FC = () => {
                                                         }`}
                                                 >
                                                     <SettingsTabIcon id={tab.id} />
-                                                    {t(SETTINGS_TAB_TRANSLATION_KEYS[tab.id] || tab.label)}
+                                                    <span className="flex items-center gap-1.5 min-w-0 flex-1">
+                                                        <span className="truncate">{t(SETTINGS_TAB_TRANSLATION_KEYS[tab.id] || tab.label)}</span>
+                                                        {tab.id === 'spotify-sync' ? (
+                                                            <BetaBadge title={t('spotifySyncPage.betaNotice')} className="shrink-0 scale-90" />
+                                                        ) : null}
+                                                    </span>
                                                 </button>
                                             ))}
                                         </div>
@@ -4938,12 +4947,20 @@ export const SettingsDashboard: React.FC = () => {
                             <IntegrationHeading
                                 app="lidarr"
                                 title="Spotify Sync"
-                                subtitle="Sync Spotify playlists to Plex via the spotify-to-plex Compose service — credentials are written to config/spotify-to-plex.env, not the host .env"
+                                badge={<BetaBadge title={t('spotifySyncPage.betaNotice')} />}
+                                subtitle={initialSettings.spotifyToPlexBundled
+                                    ? 'Sync Spotify playlists to Plex — spotify-to-plex is bundled in the portal image (no separate Compose service required).'
+                                    : 'Sync Spotify playlists to Plex via the spotify-to-plex Compose service — credentials are written to config/spotify-to-plex.env, not the host .env'}
                             />
                             <section id={getSettingsSectionElementId('spotify-sync')} className="space-y-3 scroll-mt-24">
+                                <SpotifySyncBetaBanner />
                                 <SettingsToggleRow
                                     title="Enable Spotify Sync"
-                                    hint={<SettingHint>Shows the Spotify Sync admin nav item and embeds the spotify-to-plex UI. OFF by default.</SettingHint>}
+                                    hint={<SettingHint>
+                                        {initialSettings.spotifyToPlexBundled
+                                            ? 'Embeds the spotify-to-plex UI and starts the bundled container processes when enabled. OFF by default.'
+                                            : 'Shows the Spotify Sync admin nav and embeds spotify-to-plex from your configured internal URL. OFF by default.'}
+                                    </SettingHint>}
                                     checked={spotifyToPlexEnabled}
                                     onChange={(next) => {
                                         setSpotifyToPlexEnabled(next);
@@ -4956,6 +4973,7 @@ export const SettingsDashboard: React.FC = () => {
                                         ? (spotifyToPlexInternalUrl.trim() ? 'ON' : 'Enabled — set internal URL')
                                         : 'OFF'}
                                     {spotifySyncHealth?.ok ? ' · container reachable' : ''}
+                                    {initialSettings.spotifyToPlexBundled ? ' · bundled in portal image' : ''}
                                     {spotifyToPlexEnabled && initialSettings.spotifyToPlexCredentialsReady ? ' · credentials saved' : ''}
                                 </p>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
@@ -4994,18 +5012,20 @@ export const SettingsDashboard: React.FC = () => {
                                             autoComplete="new-password"
                                         />
                                     </div>
-                                    <div>
-                                        <label className="font-semibold text-sm block mb-2">Internal URL</label>
-                                        <input
-                                            type="text"
-                                            className="w-full p-2 rounded border border-border bg-background text-text"
-                                            placeholder="http://spotify-to-plex:9030"
-                                            value={spotifyToPlexInternalUrl}
-                                            onChange={(e) => setSpotifyToPlexInternalUrl(e.target.value)}
-                                            disabled={!spotifyToPlexEnabled}
-                                        />
-                                        <p className="text-[11px] text-muted mt-1">Docker Compose service name on your private network.</p>
-                                    </div>
+                                    {!initialSettings.spotifyToPlexBundled && (
+                                        <div>
+                                            <label className="font-semibold text-sm block mb-2">Internal URL</label>
+                                            <input
+                                                type="text"
+                                                className="w-full p-2 rounded border border-border bg-background text-text"
+                                                placeholder="http://spotify-to-plex:9030"
+                                                value={spotifyToPlexInternalUrl}
+                                                onChange={(e) => setSpotifyToPlexInternalUrl(e.target.value)}
+                                                disabled={!spotifyToPlexEnabled}
+                                            />
+                                            <p className="text-[11px] text-muted mt-1">Docker Compose service name on your private network.</p>
+                                        </div>
+                                    )}
                                     <div className="md:col-span-2">
                                         <label className="font-semibold text-sm block mb-2">Spotify redirect URI (register in Spotify Developer)</label>
                                         <input
@@ -5020,10 +5040,18 @@ export const SettingsDashboard: React.FC = () => {
                                 {spotifyToPlexEnabled && spotifySyncHealth?.issues?.length ? (
                                     <p className="text-xs text-yellow-300 mt-2">{spotifySyncHealth.issues.join(' · ')}</p>
                                 ) : null}
-                                <p className="text-[11px] text-muted mt-2">
-                                    After credential or schedule changes, restart the <code className="text-xs">spotify-to-plex</code> container so it reloads the generated <code className="text-xs">env_file</code> and supervisor config.
-                                    Choose one schedule mode below — portal mode stops the container&apos;s built-in <code className="text-xs">sync-scheduler</code> process.
-                                </p>
+                                {initialSettings.spotifyToPlexBundled ? (
+                                    <p className="text-[11px] text-muted mt-2">
+                                        Spotify-to-plex runs inside the portal container at <code className="text-xs">127.0.0.1:9030</code>.
+                                        Data lives under <code className="text-xs">config/spotify-to-plex/</code> on the portal config volume.
+                                        Credential and schedule changes apply when you save (bundled processes restart automatically).
+                                    </p>
+                                ) : (
+                                    <p className="text-[11px] text-muted mt-2">
+                                        After credential or schedule changes, restart the <code className="text-xs">spotify-to-plex</code> container so it reloads the generated <code className="text-xs">env_file</code> and supervisor config.
+                                        Choose one schedule mode below — portal mode stops the container&apos;s built-in <code className="text-xs">sync-scheduler</code> process.
+                                    </p>
+                                )}
                                 <div className="mt-2">
                                     <label className="font-semibold text-sm block mb-2">Sync schedule</label>
                                     <select
@@ -5034,8 +5062,8 @@ export const SettingsDashboard: React.FC = () => {
                                         )}
                                         disabled={!spotifyToPlexEnabled}
                                     >
-                                        <option value="sidecar">Container cron (daily ~02:00 UTC)</option>
-                                        <option value="portal">Portal Background Tasks interval (disables container sync-scheduler)</option>
+                                        <option value="sidecar">{initialSettings.spotifyToPlexBundled ? 'Built-in cron (daily ~02:00 UTC)' : 'Container cron (daily ~02:00 UTC)'}</option>
+                                        <option value="portal">{initialSettings.spotifyToPlexBundled ? 'Portal Background Tasks interval (disables built-in sync-scheduler)' : 'Portal Background Tasks interval (disables container sync-scheduler)'}</option>
                                     </select>
                                     <p className="text-[11px] text-muted mt-1">
                                         Portal interval appears under Background Tasks → Spotify Sync.

@@ -104,7 +104,7 @@ export const DashboardPageShell: React.FC<{ children: React.ReactNode; className
 
 export const DashboardHero: React.FC<{
     accent?: DashboardAccent;
-    eyebrow: string;
+    eyebrow: React.ReactNode;
     title: string;
     description?: React.ReactNode;
     icon?: React.ReactNode;

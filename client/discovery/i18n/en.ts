@@ -77,6 +77,10 @@ export const en = {
         more: 'More',
         moreMenu: 'More Menu',
     },
+    spotifySyncPage: {
+        betaTitle: 'Beta feature',
+        betaNotice: 'Spotify Sync is in BETA and still heavily in development. Expect rough edges, missing features, and breaking changes.',
+    },
     profilePage: {
         eyebrow: 'Member profile',
         member: 'Member',

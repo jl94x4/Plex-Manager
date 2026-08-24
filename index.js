@@ -123,6 +123,14 @@ import {
     sanitizeSpotifyToPlexProxyBase,
 } from './lib/spotify-to-plex-proxy.js';
 import {
+    applySpotifyToPlexBundledDefaults,
+    getSpotifyToPlexEmbeddedStatus,
+    isSpotifyToPlexBundledAvailable,
+    isUsingBundledSpotifyToPlexUrl,
+    setSpotifyToPlexUnexpectedExitHandler,
+    syncSpotifyToPlexEmbeddedWorker,
+} from './lib/spotify-to-plex-embedded.js';
+import {
     isSpotifyToPlexCredentialsReady,
     syncSpotifyToPlexSidecarEnv,
     getSpotifyToPlexEnvFilePath,
@@ -5430,6 +5438,8 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 spotifyToPlexEncryptionKey: config.spotifyToPlexEncryptionKey ? '********' : '',
                 spotifyToPlexCredentialsReady: isSpotifyToPlexCredentialsReady(config),
                 spotifyToPlexCallbackUrl: resolveSpotifyToPlexCallbackUrl(config, withBasePath, resolvePublicBaseUrlFromConfig),
+                spotifyToPlexBundled: isSpotifyToPlexBundledAvailable(),
+                spotifyToPlexEmbedded: getSpotifyToPlexEmbeddedStatus(),
                 spotifyToPlexHomeWidgetEnabled: !!config.spotifyToPlexHomeWidgetEnabled,
                 spotifyToPlexScheduleMode: resolveSpotifyToPlexScheduleMode(config),
                 spotifyToPlexScheduledSyncEnabled: resolveSpotifyToPlexScheduleMode(config) === 'portal',
@@ -5621,6 +5631,8 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 spotifyToPlexEncryptionKey: '',
                 spotifyToPlexCredentialsReady: false,
                 spotifyToPlexCallbackUrl: '',
+                spotifyToPlexBundled: isSpotifyToPlexBundledAvailable(),
+                spotifyToPlexEmbedded: getSpotifyToPlexEmbeddedStatus(),
                 spotifyToPlexHomeWidgetEnabled: false,
                 spotifyToPlexScheduleMode: 'sidecar',
                 spotifyToPlexScheduledSyncEnabled: false,
@@ -6394,7 +6406,11 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         configDir: CONFIG_DIR,
         log,
     });
-    const { config: spotifySyncConfig, changed: spotifySyncDefaultsChanged } = applySpotifyToPlexDefaults(collexionsConfig, { log });
+    const { config: spotifyBundledConfig, changed: spotifyBundledDefaultsChanged } = applySpotifyToPlexBundledDefaults(collexionsConfig, {
+        configDir: CONFIG_DIR,
+        log,
+    });
+    const { config: spotifySyncConfig, changed: spotifySyncDefaultsChanged } = applySpotifyToPlexDefaults(spotifyBundledConfig, { log });
     await saveFile(CONFIG_PATH, spotifySyncConfig);
     refreshRuntimePublicBaseUrl(spotifySyncConfig);
     syncIntegrationServicesInStatusConfig(spotifySyncConfig);
@@ -6474,7 +6490,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
     if (collexionsDefaultsChanged) {
         log('[collexions] Applied bundled worker defaults (internal URL / service key).');
     }
-    if (spotifySyncDefaultsChanged) {
+    if (spotifySyncDefaultsChanged || spotifyBundledDefaultsChanged) {
         log('[spotify-sync] Applied default internal URL.');
     }
     try {
@@ -6485,15 +6501,24 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
             resolveSpotifyToPlexCallbackUrl,
             log,
         });
-        const supervisorSync = await syncSpotifyToPlexSupervisorConfig(spotifySyncConfig, {
-            configDir: CONFIG_DIR,
-            log,
-        });
+        const usingBundled = isSpotifyToPlexBundledAvailable() && isUsingBundledSpotifyToPlexUrl(spotifySyncConfig);
+        let supervisorSync = { written: false };
+        if (!usingBundled) {
+            supervisorSync = await syncSpotifyToPlexSupervisorConfig(spotifySyncConfig, {
+                configDir: CONFIG_DIR,
+                log,
+            });
+        }
         if (envSync.written || supervisorSync.written) {
-            log('[spotify-sync] spotify-to-plex env_file/supervisor updated — restart the spotify-to-plex container to apply credential or schedule changes.');
+            log('[spotify-sync] spotify-to-plex env_file updated — restart the spotify-to-plex container if using an external Compose service.');
         }
     } catch (e) {
         log(`[spotify-sync] Failed to write spotify-to-plex env_file: ${e.message}`);
+    }
+    try {
+        await syncSpotifyToPlexEmbeddedWorker(spotifySyncConfig, { configDir: CONFIG_DIR, log });
+    } catch (e) {
+        log(`[spotify-sync] Bundled spotify-to-plex sync failed: ${e.message}`);
     }
     try {
         await syncCollexionsEmbeddedWorker(spotifySyncConfig, { configDir: CONFIG_DIR, log });
@@ -29813,6 +29838,15 @@ app.listen(PORT, BIND_HOST, async () => {
                 await saveFile(CONFIG_PATH, withCollexions);
             }
             await syncCollexionsEmbeddedWorker(withCollexions, { configDir: CONFIG_DIR, log });
+            const { config: withSpotifyBundled, changed: spotifyBundledChanged } = applySpotifyToPlexBundledDefaults(withCollexions, {
+                configDir: CONFIG_DIR,
+                log,
+            });
+            let bootSpotifyConfig = withSpotifyBundled;
+            if (spotifyBundledChanged) {
+                await saveFile(CONFIG_PATH, withSpotifyBundled);
+            }
+            await syncSpotifyToPlexEmbeddedWorker(bootSpotifyConfig, { configDir: CONFIG_DIR, log });
         } catch (e) {
             log(`[collexions] Startup embedded worker sync failed: ${e.message}`);
         }
@@ -29863,14 +29897,21 @@ app.listen(PORT, BIND_HOST, async () => {
         title: payload?.failures?.map((f) => `${f.type}: ${f.message}`).join(' · ') || 'Spotify Sync failed',
         dedupeKey: `spotify-sync:${payload?.signature || 'failed'}`,
     }));
+    setSpotifyToPlexUnexpectedExitHandler(({ code, signal }) => notifyOps('spotify_sync_failed', {
+        title: `Bundled spotify-to-plex exited (code=${code}, signal=${signal || 'none'})`,
+        dedupeKey: `spotify-sync:exit:${code}:${signal || 'none'}`,
+    }));
     void (async () => {
         try {
             const cfg = await loadFile(CONFIG_PATH, {});
-            if (cfg.spotifyToPlexEnabled) {
+            if (!cfg.spotifyToPlexEnabled) return;
+            if (!isSpotifyToPlexBundledAvailable()) {
                 await syncSpotifyToPlexSupervisorConfig(cfg, { configDir: CONFIG_DIR, log });
+                return;
             }
+            await syncSpotifyToPlexEmbeddedWorker(cfg, { configDir: CONFIG_DIR, log });
         } catch (error) {
-            log(`[spotify-sync] supervisor boot sync failed: ${error.message}`);
+            log(`[spotify-sync] bundled boot sync failed: ${error.message}`);
         }
     })();
     startSpotifyToPlexStatusWatcher({

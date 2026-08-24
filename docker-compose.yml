@@ -51,6 +51,8 @@ services:
       retries: 3
       start_period: 20s
 
+  # Optional external spotify-to-plex Compose service — omit when using the portal image
+  # that bundles spotify-to-plex (Settings shows "bundled in portal image").
   spotify-to-plex:
     image: jjdenhertog/spotify-to-plex:latest
     container_name: spotify-to-plex

@@ -41,6 +41,7 @@ import { activityStreamColumnCount, activityStreamGridClass, upgraderPosterGridC
 import { DiscoverGridSizeSelect } from './discovery/DiscoverGridSizeSelect';
 import { useDiscoverGridSize } from './discovery/useDiscoverGridSize';
 import { useDiscoverI18n } from './discovery/i18n';
+import { BetaBadge } from './shared/BetaBadge';
 import { DiscoverNowPlayingStrip } from './discovery/DiscoverNowPlayingStrip';
 import { useNowPlaying } from './shared/useNowPlaying';
 import { filterNavOrder, ensureCompleteNavOrder, resolveMemberNavOrder, MOBILE_NAV_PRIMARY_SLOTS, type NavFeatureFlags } from './shared/nav';
@@ -11995,8 +11996,8 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
     const customNavTabs: CustomNavTab[] = Array.isArray(sessionInfo?.customNavTabs) ? sessionInfo.customNavTabs : [];
 
-    const navItemsConfig: Record<string, { label: string; icon: React.FC<any>; route: string; adminOnly: boolean; href?: string; onClick?: (e: any) => void; customTabId?: string }> = useMemo(() => {
-        const config: Record<string, { label: string; icon: React.FC<any>; route: string; adminOnly: boolean; href?: string; onClick?: (e: any) => void; customTabId?: string }> = {
+    const navItemsConfig: Record<string, { label: string; icon: React.FC<any>; route: string; adminOnly: boolean; beta?: boolean; href?: string; onClick?: (e: any) => void; customTabId?: string }> = useMemo(() => {
+        const config: Record<string, { label: string; icon: React.FC<any>; route: string; adminOnly: boolean; beta?: boolean; href?: string; onClick?: (e: any) => void; customTabId?: string }> = {
         'home': { label: t('navigation.home'), icon: Home, route: 'user', adminOnly: false },
         'users': { label: t('navigation.users'), icon: Users, route: 'users', adminOnly: true },
         'discover': { label: t('navigation.dashboard'), icon: Film, route: 'dashboard', adminOnly: false },
@@ -12011,7 +12012,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         'maintenance': { label: t('navigation.cleaner'), icon: Shield, route: 'maintenance', adminOnly: true },
         'upgrader': { label: t('navigation.upgrader'), icon: ArrowUpCircle, route: 'upgrader', adminOnly: true },
         'collexions': { label: t('navigation.collexions'), icon: Layers, route: 'collexions', adminOnly: true },
-        'spotify-sync': { label: t('navigation.spotifySync'), icon: Music, route: 'spotify-sync', adminOnly: true },
+        'spotify-sync': { label: t('navigation.spotifySync'), icon: Music, route: 'spotify-sync', adminOnly: true, beta: true },
         'scanner': { label: t('navigation.scanner'), icon: Radar, route: 'scanner', adminOnly: true },
         'media-automation': { label: t('navigation.mediaAutomation'), icon: Cpu, route: 'media-automation', adminOnly: true },
         'poster-sets': { label: t('navigation.posterSets'), icon: ImageIcon, route: 'poster-sets', adminOnly: true },
@@ -12211,12 +12212,13 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
     const renderNavAction = (
         key: string,
-        item: { label: string; icon: React.FC<any>; route: string; href?: string; onClick?: (e: any) => void; customTabId?: string },
+        item: { label: string; icon: React.FC<any>; route: string; href?: string; onClick?: (e: any) => void; customTabId?: string; beta?: boolean },
         options: { compactLabel?: string; mobile?: boolean; isCurrent: boolean; badgeCount?: number },
     ) => {
         const Icon = item.icon;
         const label = options.compactLabel || item.label;
         const badgeCount = options.badgeCount || 0;
+        const betaTitle = t('spotifySyncPage.betaNotice');
         const desktopDensity = options.mobile ? null : desktopNavDensity;
         const baseClass = options.mobile
             ? `relative flex flex-col items-center justify-center gap-0.5 h-full flex-1 min-w-0 px-0.5 text-center text-[0.6rem] sm:text-[0.65rem] transition-colors ${options.isCurrent ? 'text-plex font-bold' : 'text-muted hover:text-text'}`
@@ -12255,9 +12257,15 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                         </span>
                     )}
                 </span>
-                {options.mobile ? label : (
+                {options.mobile ? (
+                    <span className="flex items-center gap-1 max-w-full">
+                        <span className="truncate">{label}</span>
+                        {item.beta ? <BetaBadge title={betaTitle} className="scale-90" /> : null}
+                    </span>
+                ) : (
                     <span className="flex items-center gap-2 flex-1 min-w-0">
                         <span className="truncate">{label}</span>
+                        {item.beta ? <BetaBadge title={betaTitle} /> : null}
                         {badgeCount > 0 && (
                             <span className="ml-auto min-w-[1.15rem] h-[18px] px-1.5 rounded-full bg-plex text-background text-[10px] font-bold flex items-center justify-center shrink-0">
                                 {badgeCount > 99 ? '99+' : badgeCount}

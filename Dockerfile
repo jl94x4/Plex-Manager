@@ -1,3 +1,6 @@
+# --- spotify-to-plex runtime (copied into portal image below) ---
+FROM jjdenhertog/spotify-to-plex:latest AS spotify-to-plex-bundle
+
 # --- Build frontend assets and version stamp ---
 FROM node:22-bookworm-slim AS builder
 
@@ -51,6 +54,10 @@ ENV EDITIONS_PYTHON=/opt/poster-sets-venv/bin/python
 ENV EDITIONS_CONFIG_DIR=/app/config/editions
 ENV EDITIONS_CONFIG_INI=/app/config/editions/config.ini
 ENV EDITIONS_BACKUP_DIR=/app/config/editions/metadata_backup
+ENV SPOTIFY_TO_PLEX_APP_DIR=/app/spotify-to-plex
+ENV SPOTIFY_TO_PLEX_EMBEDDED_PORT=9030
+ENV CHROME_BIN=/usr/bin/chromium
+ENV CHROMIUM_PATH=/usr/bin/chromium
 
 # ffmpeg supplies both ffmpeg and ffprobe. Mesa provides AMD VAAPI; Intel media /
 # QSV runtime libs are installed when Bookworm publishes them for the arch.
@@ -174,6 +181,18 @@ COPY editions/README.md /app/editions/README.md
 COPY editions/THIRD_PARTY_LICENSE.txt /app/editions/THIRD_PARTY_LICENSE.txt
 RUN /opt/poster-sets-venv/bin/pip install --no-cache-dir -r /app/editions/requirements.txt \
     && chown -R node:node /app/editions
+
+# Bundled spotify-to-plex (Next.js UI + scraper + sync-worker) — no separate Compose service required.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        chromium \
+        chromium-driver \
+        supervisor \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=spotify-to-plex-bundle /app /app/spotify-to-plex
+RUN pip3 install --no-cache-dir --break-system-packages \
+        -r /app/spotify-to-plex/apps/spotify-scraper/requirements.txt \
+    && chown -R node:node /app/spotify-to-plex
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
