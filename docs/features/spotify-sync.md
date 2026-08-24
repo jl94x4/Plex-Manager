@@ -1,29 +1,32 @@
 # Spotify Sync
 
-**Spotify Sync** embeds [spotify-to-plex](https://github.com/jjdenhertog/spotify-to-plex) in the portal so admins can sync Spotify playlists to Plex without exposing the sidecar UI on a public port.
+**Spotify Sync** embeds [spotify-to-plex](https://github.com/jjdenhertog/spotify-to-plex) in the portal so admins can sync Spotify playlists to Plex.
 
 ## Enable
 
-1. Run the `spotify-to-plex` service (`docker compose up -d` includes it) or point Settings at an external sidecar URL.
-2. Set **Public Base URL** in Settings → Portal UI.
-3. Open **Settings → Spotify Sync**, enable the feature, confirm internal URL (`http://spotify-to-plex:9030` in compose), and save.
-4. Copy the **Spotify redirect URI** from Settings into your Spotify Developer app.
-5. Set the same redirect URI on the sidecar as `SPOTIFY_API_REDIRECT_URI` (see `.env.example`).
-6. Open **Spotify Sync** in the admin nav.
+1. Open **Settings → Spotify Sync** (Automation group in the settings sidebar).
+2. Turn **Enable Spotify Sync** on.
+3. Enter your **Spotify API Client ID**, **Client Secret**, and **Encryption Key** (`openssl rand -hex 32`).
+4. Set **Internal URL** to your sidecar (default with Docker Compose: `http://spotify-to-plex:9030`).
+5. Set **Public Base URL** under Settings → Portal UI if the redirect URI is empty.
+6. Click **Save Settings** — credentials are written to `config/spotify-to-plex.env`.
+7. Register the shown **Spotify redirect URI** in your Spotify Developer app.
+8. Restart the `spotify-to-plex` container once after saving credentials.
+9. Open **Spotify Sync** in the admin nav to use the UI.
+
+You do **not** need Spotify variables in the host `.env` when using Settings — the portal generates the sidecar env file.
 
 ## Requirements
 
-- Plex media server mode (hidden for Jellyfin/Emby)
+- Plex media server mode
 - Portal admin access
-- Spotify Developer app (Premium account for the app owner — see upstream docs)
 - `ALLOW_PRIVATE_INTEGRATION_URLS=true` when using Docker service hostnames on a private network
 
 ## Scheduling
 
-Automatic sync runs inside the spotify-to-plex container (daily by default). The portal does not duplicate that schedule.
+Automatic sync runs inside the spotify-to-plex container (daily by default).
 
 ## Related
 
 - [ColleXions](/features/collexions)
 - [Docker Deployment](/guide/docker)
-- [Configuration](/guide/configuration)

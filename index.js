@@ -122,6 +122,11 @@ import {
     resolveSpotifyToPlexCallbackUrl,
     sanitizeSpotifyToPlexProxyBase,
 } from './lib/spotify-to-plex-proxy.js';
+import {
+    isSpotifyToPlexCredentialsReady,
+    syncSpotifyToPlexSidecarEnv,
+    getSpotifyToPlexEnvFilePath,
+} from './lib/spotify-to-plex-env.js';
 import { createSupportTicketFromMediaIssue, attachTicketIdsToIssues } from './lib/support-tickets/fromIssue.js';
 import { mapTautulliHistoryRowToPlexItem } from './lib/achievements/tautulliHistory.js';
 import { isTautulliWatchHistorySource, buildAchievementsHomeRankContext, summarizeAchievementsBackfill, levelProgress } from './lib/achievements/index.js';
@@ -5387,6 +5392,10 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 collexionsEmbedded: getCollexionsEmbeddedStatus(),
                 spotifyToPlexEnabled: !!config.spotifyToPlexEnabled,
                 spotifyToPlexInternalUrl: config.spotifyToPlexInternalUrl || '',
+                spotifyToPlexClientId: config.spotifyToPlexClientId || '',
+                spotifyToPlexClientSecret: config.spotifyToPlexClientSecret ? '********' : '',
+                spotifyToPlexEncryptionKey: config.spotifyToPlexEncryptionKey ? '********' : '',
+                spotifyToPlexCredentialsReady: isSpotifyToPlexCredentialsReady(config),
                 spotifyToPlexCallbackUrl: resolveSpotifyToPlexCallbackUrl(config, withBasePath, resolvePublicBaseUrlFromConfig),
                 upgraderDefaultPreset: config.upgraderDefaultPreset || 'non_hevc',
                 upgraderMinSizeGB: Number(config.upgraderMinSizeGB) > 0 ? Number(config.upgraderMinSizeGB) : 5,
@@ -5566,6 +5575,10 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 collexionsEmbedded: getCollexionsEmbeddedStatus(),
                 spotifyToPlexEnabled: false,
                 spotifyToPlexInternalUrl: '',
+                spotifyToPlexClientId: '',
+                spotifyToPlexClientSecret: '',
+                spotifyToPlexEncryptionKey: '',
+                spotifyToPlexCredentialsReady: false,
                 spotifyToPlexCallbackUrl: '',
                 upgraderDefaultPreset: 'non_hevc',
                 upgraderMinSizeGB: 5,
@@ -5601,7 +5614,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         inactiveCleanupEnabled, inactiveCleanupDays,
         primaryColor, customLogoUrl, customLoginLogoUrl, loginLogoCircleFrame, customFaviconUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, customNavTabs, homeCustomModules, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
-        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, spotifyToPlexEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, supportTicketsEnabled, chatEnabled, chatMentionNotifyInApp, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, scannerNotifyDeleted, scannerNotifyUpgrade, scannerNotifyImport, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, spotifyToPlexInternalUrl, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
+        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, spotifyToPlexEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, supportTicketsEnabled, chatEnabled, chatMentionNotifyInApp, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, scannerNotifyDeleted, scannerNotifyUpgrade, scannerNotifyImport, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, spotifyToPlexInternalUrl, spotifyToPlexClientId, spotifyToPlexClientSecret, spotifyToPlexEncryptionKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
     } = req.body;
 
@@ -6247,6 +6260,22 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
             return spotifyToPlexEnabled !== undefined ? !!spotifyToPlexEnabled : !!existingConfig.spotifyToPlexEnabled;
         })(),
         spotifyToPlexInternalUrl: nextSpotifyToPlexInternalUrl,
+        spotifyToPlexClientId: (() => {
+            if (spotifyToPlexClientId === undefined) return existingConfig.spotifyToPlexClientId || '';
+            return String(spotifyToPlexClientId || '').trim();
+        })(),
+        spotifyToPlexClientSecret: (() => {
+            if (spotifyToPlexClientSecret === undefined) return existingConfig.spotifyToPlexClientSecret || '';
+            const incoming = String(spotifyToPlexClientSecret || '').trim();
+            if (!incoming || incoming === '********') return existingConfig.spotifyToPlexClientSecret || '';
+            return incoming;
+        })(),
+        spotifyToPlexEncryptionKey: (() => {
+            if (spotifyToPlexEncryptionKey === undefined) return existingConfig.spotifyToPlexEncryptionKey || '';
+            const incoming = String(spotifyToPlexEncryptionKey || '').trim();
+            if (!incoming || incoming === '********') return existingConfig.spotifyToPlexEncryptionKey || '';
+            return incoming;
+        })(),
         upgraderDefaultPreset: upgraderDefaultPreset || existingConfig.upgraderDefaultPreset || 'non_hevc',
         upgraderMinSizeGB: Math.max(0, Number(upgraderMinSizeGB ?? existingConfig.upgraderMinSizeGB ?? 5) || 5),
         upgraderAutomationEnabled: upgraderAutomationEnabled !== undefined ? !!upgraderAutomationEnabled : !!existingConfig.upgraderAutomationEnabled,
@@ -6348,6 +6377,20 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
     }
     if (spotifySyncDefaultsChanged) {
         log('[spotify-sync] Applied default internal URL.');
+    }
+    try {
+        const envSync = await syncSpotifyToPlexSidecarEnv(spotifySyncConfig, {
+            configDir: CONFIG_DIR,
+            withBasePath,
+            resolvePublicBaseUrlFromConfig,
+            resolveSpotifyToPlexCallbackUrl,
+            log,
+        });
+        if (envSync.written) {
+            log('[spotify-sync] Sidecar env file updated — restart spotify-to-plex to apply credential changes.');
+        }
+    } catch (e) {
+        log(`[spotify-sync] Failed to write sidecar env file: ${e.message}`);
     }
     try {
         await syncCollexionsEmbeddedWorker(spotifySyncConfig, { configDir: CONFIG_DIR, log });
@@ -25564,6 +25607,9 @@ app.get('/api/spotify-to-plex/health', requireAdmin, async (req, res) => {
             issues.push('Spotify Sync requires Media Server Type = Plex.');
         }
         if (!enabled) issues.push('Spotify Sync is disabled in Settings.');
+        if (enabled && !isSpotifyToPlexCredentialsReady(config)) {
+            issues.push('Spotify API Client ID, Client Secret, and Encryption Key are required in Settings → Spotify Sync.');
+        }
         if (enabled && !base) issues.push('Internal URL is not configured.');
         if (enabled && !callbackUrl) issues.push('Public Base URL is required for Spotify OAuth (Settings → Portal UI).');
         if (enabled && config.spotifyToPlexInternalUrl && !base) {
@@ -25607,7 +25653,7 @@ app.get('/api/spotify-to-plex/health', requireAdmin, async (req, res) => {
 
         const uniqueIssues = [...new Set(issues.filter(Boolean))];
         return res.json({
-            ok: enabled && worker.reachable && worker.ok && !!callbackUrl,
+            ok: enabled && worker.reachable && worker.ok && !!callbackUrl && isSpotifyToPlexCredentialsReady(config),
             enabled,
             callbackUrl,
             worker,
@@ -29378,6 +29424,16 @@ app.listen(PORT, BIND_HOST, async () => {
     }
 
     await migrateConfigFiles((message) => log(`[config] ${message}`));
+    try {
+        const spotifyEnvPath = getSpotifyToPlexEnvFilePath(CONFIG_DIR);
+        await fs.access(spotifyEnvPath);
+    } catch {
+        await fs.writeFile(
+            getSpotifyToPlexEnvFilePath(CONFIG_DIR),
+            '# Configure in Settings → Spotify Sync, then Save Settings. Restart spotify-to-plex after credential changes.\n',
+            { mode: 0o600 },
+        );
+    }
     try {
         const migratedBranding = await migrateLegacyBrandingAssets(BRANDING_DIR, staticDir, (message) => log(message));
         if (migratedBranding > 0) {

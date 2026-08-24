@@ -774,6 +774,9 @@ export const SettingsDashboard: React.FC = () => {
     const [collexionsInternalUrl, setCollexionsInternalUrl] = useState('');
     const [collexionsServiceKey, setCollexionsServiceKey] = useState('');
     const [spotifyToPlexInternalUrl, setSpotifyToPlexInternalUrl] = useState('');
+    const [spotifyToPlexClientId, setSpotifyToPlexClientId] = useState('');
+    const [spotifyToPlexClientSecret, setSpotifyToPlexClientSecret] = useState('');
+    const [spotifyToPlexEncryptionKey, setSpotifyToPlexEncryptionKey] = useState('');
     const [spotifySyncHealth, setSpotifySyncHealth] = useState<{ ok?: boolean; issues?: string[] } | null>(null);
     const [upgraderDefaultPreset, setUpgraderDefaultPreset] = useState('non_hevc');
     const [upgraderMinSizeGB, setUpgraderMinSizeGB] = useState(5);
@@ -1893,6 +1896,9 @@ export const SettingsDashboard: React.FC = () => {
             if (initialSettings.collexionsInternalUrl !== undefined) setCollexionsInternalUrl(String(initialSettings.collexionsInternalUrl || ''));
             if (initialSettings.collexionsServiceKey !== undefined) setCollexionsServiceKey(String(initialSettings.collexionsServiceKey || ''));
             if (initialSettings.spotifyToPlexInternalUrl !== undefined) setSpotifyToPlexInternalUrl(String(initialSettings.spotifyToPlexInternalUrl || ''));
+            if (initialSettings.spotifyToPlexClientId !== undefined) setSpotifyToPlexClientId(String(initialSettings.spotifyToPlexClientId || ''));
+            if (initialSettings.spotifyToPlexClientSecret !== undefined) setSpotifyToPlexClientSecret(String(initialSettings.spotifyToPlexClientSecret || ''));
+            if (initialSettings.spotifyToPlexEncryptionKey !== undefined) setSpotifyToPlexEncryptionKey(String(initialSettings.spotifyToPlexEncryptionKey || ''));
             if (initialSettings.upgraderDefaultPreset) setUpgraderDefaultPreset(initialSettings.upgraderDefaultPreset);
             if (initialSettings.upgraderMinSizeGB !== undefined) setUpgraderMinSizeGB(Math.max(0, Number(initialSettings.upgraderMinSizeGB) || 5));
             if (initialSettings.upgraderAutomationEnabled !== undefined) setUpgraderAutomationEnabled(!!initialSettings.upgraderAutomationEnabled);
@@ -2301,6 +2307,9 @@ export const SettingsDashboard: React.FC = () => {
             collexionsInternalUrl,
             collexionsServiceKey,
             spotifyToPlexInternalUrl,
+            spotifyToPlexClientId,
+            spotifyToPlexClientSecret,
+            spotifyToPlexEncryptionKey,
             upgraderDefaultPreset,
             upgraderMinSizeGB,
             upgraderAutomationEnabled,
@@ -4905,26 +4914,62 @@ export const SettingsDashboard: React.FC = () => {
                     )}
                     {activeTab === 'spotify-sync' && mediaServerType === 'plex' && (
                         <div className="mb-8 animate-fade-in space-y-6">
-                            <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">Spotify Sync</h3>
+                            <IntegrationHeading
+                                app="lidarr"
+                                title="Spotify Sync"
+                                subtitle="Sync Spotify playlists to Plex via the spotify-to-plex sidecar — credentials are saved here, not in a host .env"
+                            />
                             <section id={getSettingsSectionElementId('spotify-sync')} className="space-y-3 scroll-mt-24">
-                                <p className="text-xs text-muted -mt-2 mb-1">
-                                    Plex-only integration — syncs Spotify playlists to Plex via the{' '}
-                                    <a href="https://github.com/jjdenhertog/spotify-to-plex" target="_blank" rel="noreferrer" className="text-plex hover:underline">spotify-to-plex</a> sidecar.
-                                </p>
                                 <SettingsToggleRow
                                     title="Enable Spotify Sync"
-                                    hint={<SettingHint>Admin-only. Runs the spotify-to-plex container (or external sidecar) and embeds its UI in the portal nav. OFF by default.</SettingHint>}
+                                    hint={<SettingHint>Shows the Spotify Sync admin nav item and embeds the spotify-to-plex UI. OFF by default.</SettingHint>}
                                     checked={spotifyToPlexEnabled}
                                     onChange={setSpotifyToPlexEnabled}
                                     border={false}
                                 />
                                 <p className={`text-xs mt-2 font-semibold ${spotifyToPlexEnabled ? 'text-green-300' : 'text-yellow-300'}`}>
                                     Current status: {spotifyToPlexEnabled
-                                        ? (spotifyToPlexInternalUrl.trim() ? 'ON (internal URL set)' : 'Enabled (set internal URL)')
+                                        ? (spotifyToPlexInternalUrl.trim() ? 'ON' : 'Enabled — set internal URL')
                                         : 'OFF'}
-                                    {spotifySyncHealth?.ok ? ' · worker reachable' : ''}
+                                    {spotifySyncHealth?.ok ? ' · sidecar reachable' : ''}
+                                    {spotifyToPlexEnabled && initialSettings.spotifyToPlexCredentialsReady ? ' · credentials saved' : ''}
                                 </p>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                                    <div>
+                                        <label className="font-semibold text-sm block mb-2">Spotify API Client ID</label>
+                                        <input
+                                            type="text"
+                                            className="w-full p-2 rounded border border-border bg-background text-text"
+                                            placeholder="From Spotify Developer Dashboard"
+                                            value={spotifyToPlexClientId}
+                                            onChange={(e) => setSpotifyToPlexClientId(e.target.value)}
+                                            disabled={!spotifyToPlexEnabled}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="font-semibold text-sm block mb-2">Spotify API Client Secret</label>
+                                        <input
+                                            type="password"
+                                            className="w-full p-2 rounded border border-border bg-background text-text"
+                                            placeholder={spotifyToPlexClientSecret === '********' ? '•••••••• (unchanged)' : 'Client secret'}
+                                            value={spotifyToPlexClientSecret === '********' ? '' : spotifyToPlexClientSecret}
+                                            onChange={(e) => setSpotifyToPlexClientSecret(e.target.value)}
+                                            disabled={!spotifyToPlexEnabled}
+                                            autoComplete="new-password"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="font-semibold text-sm block mb-2">Encryption key</label>
+                                        <input
+                                            type="password"
+                                            className="w-full p-2 rounded border border-border bg-background text-text"
+                                            placeholder={spotifyToPlexEncryptionKey === '********' ? '•••••••• (unchanged)' : '64-char hex (openssl rand -hex 32)'}
+                                            value={spotifyToPlexEncryptionKey === '********' ? '' : spotifyToPlexEncryptionKey}
+                                            onChange={(e) => setSpotifyToPlexEncryptionKey(e.target.value)}
+                                            disabled={!spotifyToPlexEnabled}
+                                            autoComplete="new-password"
+                                        />
+                                    </div>
                                     <div>
                                         <label className="font-semibold text-sm block mb-2">Internal URL</label>
                                         <input
@@ -4935,25 +4980,25 @@ export const SettingsDashboard: React.FC = () => {
                                             onChange={(e) => setSpotifyToPlexInternalUrl(e.target.value)}
                                             disabled={!spotifyToPlexEnabled}
                                         />
-                                        <p className="text-[11px] text-muted mt-1">Docker service hostname (e.g. http://spotify-to-plex:9030). Requires ALLOW_PRIVATE_INTEGRATION_URLS=true on LAN hosts.</p>
+                                        <p className="text-[11px] text-muted mt-1">Docker Compose service name on your private network.</p>
                                     </div>
-                                    <div>
-                                        <label className="font-semibold text-sm block mb-2">Spotify redirect URI</label>
+                                    <div className="md:col-span-2">
+                                        <label className="font-semibold text-sm block mb-2">Spotify redirect URI (register in Spotify Developer)</label>
                                         <input
                                             type="text"
                                             readOnly
                                             className="w-full p-2 rounded border border-border bg-background/60 text-text text-sm"
                                             value={String(initialSettings.spotifyToPlexCallbackUrl || '')}
                                         />
-                                        <p className="text-[11px] text-muted mt-1">Register this exact URL in your Spotify Developer app. Set Public Base URL in Portal UI first.</p>
+                                        <p className="text-[11px] text-muted mt-1">Requires Public Base URL in Settings → Portal UI. Saved to <code className="text-xs">config/spotify-to-plex.env</code> when you click Save Settings.</p>
                                     </div>
                                 </div>
                                 {spotifyToPlexEnabled && spotifySyncHealth?.issues?.length ? (
                                     <p className="text-xs text-yellow-300 mt-2">{spotifySyncHealth.issues.join(' · ')}</p>
                                 ) : null}
                                 <p className="text-[11px] text-muted mt-2">
-                                    Sidecar config volume: <code className="text-xs">config/spotify-to-plex/</code>. Scheduled sync runs inside the sidecar (daily by default).
-                                    Set <code className="text-xs">SPOTIFY_API_REDIRECT_URI</code> on the container to the redirect URI above.
+                                    After saving credential changes, restart the <code className="text-xs">spotify-to-plex</code> container once so it picks up the generated env file.
+                                    Scheduled sync runs inside the sidecar (daily by default).
                                 </p>
                                 {spotifyToPlexEnabled && (
                                     <button
@@ -4964,7 +5009,7 @@ export const SettingsDashboard: React.FC = () => {
                                         Open Spotify Sync
                                     </button>
                                 )}
-                                <p className="text-[11px] text-muted mt-2">After changing these options, click Save Settings.</p>
+                                <p className="text-[11px] text-muted mt-2">Click Save Settings at the top after editing this tab.</p>
                             </section>
                         </div>
                     )}

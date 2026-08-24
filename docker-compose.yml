@@ -55,12 +55,9 @@ services:
     image: jjdenhertog/spotify-to-plex:latest
     container_name: spotify-to-plex
     restart: unless-stopped
+    env_file:
+      - ./config/spotify-to-plex.env
     environment:
-      SPOTIFY_API_CLIENT_ID: ${SPOTIFY_API_CLIENT_ID:-}
-      SPOTIFY_API_CLIENT_SECRET: ${SPOTIFY_API_CLIENT_SECRET:-}
-      SPOTIFY_API_REDIRECT_URI: ${SPOTIFY_TO_PLEX_REDIRECT_URI:-}
-      ENCRYPTION_KEY: ${SPOTIFY_TO_PLEX_ENCRYPTION_KEY:-}
-      PLEX_APP_ID: eXf+f9ktw3CZ8i45OY468WxriOCtoFxuNPzVeDcAwfw=
       TZ: ${TZ:-UTC}
       SYNC_ON_STARTUP: ${SPOTIFY_TO_PLEX_SYNC_ON_STARTUP:-false}
     volumes:
