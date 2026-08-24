@@ -51,6 +51,7 @@ import { IntegrationTestButton } from '../shared/IntegrationTestButton';
 import { HomeLayoutSettings } from './HomeLayoutSettings';
 import { AchievementsSettings } from './AchievementsSettings';
 import { AnalyticsSettings } from './AnalyticsSettings';
+import { MemoryDiagnosticsSection } from './MemoryDiagnosticsSection';
 import { NavigationOrderSettings } from './NavigationOrderSettings';
 import { CustomNavTabsSettings } from './CustomNavTabsSettings';
 import { HomeCustomModulesSettings } from './HomeCustomModulesSettings';
@@ -5109,6 +5110,12 @@ export const SettingsDashboard: React.FC = () => {
                                 </div>
                             </section>
 
+                            <MemoryDiagnosticsSection
+                                diagnostics={diagnostics}
+                                isLoading={isLoadingDiagnostics}
+                                onRefresh={fetchDiagnostics}
+                            />
+
                             <section id={getSettingsSectionElementId('diagnostics')} className="space-y-4 mb-8 scroll-mt-24">
                                 <div className="flex items-center justify-between">
                                     <h4 className="font-bold text-text">System Diagnostics</h4>
@@ -5121,7 +5128,6 @@ export const SettingsDashboard: React.FC = () => {
                                         <div><strong>App Version:</strong> {diagnostics?.app?.version || 'unknown'}</div>
                                         <div><strong>Uptime:</strong> {diagnostics?.app?.uptimeSeconds || 0}s</div>
                                         <div><strong>Node:</strong> {diagnostics?.app?.nodeVersion || 'n/a'}</div>
-                                        <div><strong>Memory:</strong> {diagnostics?.app?.memoryRssMB || 0} MB</div>
                                         <div className="flex items-center justify-between gap-2">
                                             <strong>Media Player ({mediaServerLabel})</strong>
                                             {renderConfigPill(mediaServerType !== 'plex' ? !!diagnostics?.integrations?.jellyfinConfigured : !!diagnostics?.integrations?.plexConfigured)}

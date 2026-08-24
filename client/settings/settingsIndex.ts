@@ -104,6 +104,7 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
     { id: 'system/health', tabId: 'system', sectionId: 'health', label: 'Health Dashboard', group: 'Automation', keywords: ['health', 'score', 'alerts', 'integrations'] },
     { id: 'system/maintenance', tabId: 'system', sectionId: 'maintenance', label: 'Cleaner Experimental Mode', group: 'Automation', keywords: ['cleaner', 'maintenance', 'experimental'] },
     { id: 'system/backup', tabId: 'system', sectionId: 'backup', label: 'Backup & Restore', group: 'Automation', keywords: ['backup', 'restore', 'export', 'import'] },
+    { id: 'system/memory', tabId: 'system', sectionId: 'memory', label: 'Memory', group: 'Automation', keywords: ['memory', 'ram', 'rss', 'heap', 'cache', 'leak', 'docker'] },
     { id: 'system/diagnostics', tabId: 'system', sectionId: 'diagnostics', label: 'Diagnostics', group: 'Automation', keywords: ['diagnostics', 'version', 'node', 'debug'] },
     { id: 'logs', tabId: 'logs', label: 'Logs & Audit', group: 'Automation', keywords: ['audit', 'emails', 'deleted users', 'history', 'logs'] },
 ];

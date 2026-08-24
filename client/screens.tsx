@@ -8452,7 +8452,7 @@ export const UserDashboard: React.FC<{
                                     <div className={analyticsLoading && analytics.period != null && String(analytics.period) !== String(analyticsDays) ? 'opacity-40 pointer-events-none' : undefined}>
                                         <WrapUpCardGrid analytics={analytics} interactive onCardClick={setSelectedMetric} minCardHeight={112} />
                                         {analytics.heatmapData && (
-                                            <div className="mt-6 pt-6 border-t border-white/10 min-w-0 overflow-hidden">
+                                            <div className="mt-6 pt-6 border-t border-white/10 min-w-0">
                                                 <h4 className="text-xs uppercase tracking-widest text-muted font-bold mb-4 flex items-center gap-2">
                                                     <Calendar className="w-4 h-4 text-plex" />{' '}
                                                     {analyticsDays === 'all'
