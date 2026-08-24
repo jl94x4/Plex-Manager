@@ -150,7 +150,8 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = 
                         key={iframeKey}
                         title={tab.name}
                         src={iframeSrc}
-                        className="h-full min-h-[60vh] w-full border-0 bg-background"
+                        className="h-full min-h-[60vh] w-full border-0 bg-white"
+                        style={{ colorScheme: 'normal' }}
                         sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-downloads"
                         referrerPolicy="no-referrer"
                         onLoad={(event) => {
