@@ -778,6 +778,8 @@ export const SettingsDashboard: React.FC = () => {
     const [spotifyToPlexClientSecret, setSpotifyToPlexClientSecret] = useState('');
     const [spotifyToPlexEncryptionKey, setSpotifyToPlexEncryptionKey] = useState('');
     const [spotifyToPlexHomeWidgetEnabled, setSpotifyToPlexHomeWidgetEnabled] = useState(false);
+    const [spotifyToPlexScheduledSyncEnabled, setSpotifyToPlexScheduledSyncEnabled] = useState(false);
+    const [spotifyToPlexScheduledSyncIntervalHours, setSpotifyToPlexScheduledSyncIntervalHours] = useState(24);
     const [spotifySyncHealth, setSpotifySyncHealth] = useState<{ ok?: boolean; issues?: string[] } | null>(null);
     const [spotifyPortalImportMessage, setSpotifyPortalImportMessage] = useState('');
     const [spotifyPortalImporting, setSpotifyPortalImporting] = useState(false);
@@ -1904,6 +1906,12 @@ export const SettingsDashboard: React.FC = () => {
             if (initialSettings.spotifyToPlexClientSecret !== undefined) setSpotifyToPlexClientSecret(String(initialSettings.spotifyToPlexClientSecret || ''));
             if (initialSettings.spotifyToPlexEncryptionKey !== undefined) setSpotifyToPlexEncryptionKey(String(initialSettings.spotifyToPlexEncryptionKey || ''));
             if (initialSettings.spotifyToPlexHomeWidgetEnabled !== undefined) setSpotifyToPlexHomeWidgetEnabled(!!initialSettings.spotifyToPlexHomeWidgetEnabled);
+            if (initialSettings.spotifyToPlexScheduledSyncEnabled !== undefined) setSpotifyToPlexScheduledSyncEnabled(!!initialSettings.spotifyToPlexScheduledSyncEnabled);
+            if (initialSettings.spotifyToPlexScheduledSyncIntervalHours !== undefined) {
+                setSpotifyToPlexScheduledSyncIntervalHours(
+                    Math.min(168, Math.max(1, Number(initialSettings.spotifyToPlexScheduledSyncIntervalHours) || 24)),
+                );
+            }
             if (initialSettings.upgraderDefaultPreset) setUpgraderDefaultPreset(initialSettings.upgraderDefaultPreset);
             if (initialSettings.upgraderMinSizeGB !== undefined) setUpgraderMinSizeGB(Math.max(0, Number(initialSettings.upgraderMinSizeGB) || 5));
             if (initialSettings.upgraderAutomationEnabled !== undefined) setUpgraderAutomationEnabled(!!initialSettings.upgraderAutomationEnabled);
@@ -2316,6 +2324,8 @@ export const SettingsDashboard: React.FC = () => {
             spotifyToPlexClientSecret,
             spotifyToPlexEncryptionKey,
             spotifyToPlexHomeWidgetEnabled,
+            spotifyToPlexScheduledSyncEnabled,
+            spotifyToPlexScheduledSyncIntervalHours,
             upgraderDefaultPreset,
             upgraderMinSizeGB,
             upgraderAutomationEnabled,
@@ -5007,8 +5017,39 @@ export const SettingsDashboard: React.FC = () => {
                                 ) : null}
                                 <p className="text-[11px] text-muted mt-2">
                                     After saving credential changes, restart the <code className="text-xs">spotify-to-plex</code> container once so it picks up the generated env file.
-                                    Scheduled sync runs inside the sidecar (daily by default).
+                                    The sidecar also runs its own daily cron (~02:00 UTC). Portal scheduling below is optional and off by default.
                                 </p>
+                                <SettingsToggleRow
+                                    title="Portal scheduled sync"
+                                    hint={<SettingHint>Runs sync from the portal on an interval (Background Tasks → Spotify Sync). Off by default to avoid doubling the sidecar&apos;s built-in daily cron.</SettingHint>}
+                                    checked={spotifyToPlexScheduledSyncEnabled}
+                                    onChange={setSpotifyToPlexScheduledSyncEnabled}
+                                    disabled={!spotifyToPlexEnabled}
+                                    border={false}
+                                />
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+                                    <div>
+                                        <label className="font-semibold text-sm block mb-2">Portal sync interval (hours)</label>
+                                        <input
+                                            type="number"
+                                            min={1}
+                                            max={168}
+                                            className="w-full p-2 rounded border border-border bg-background text-text disabled:opacity-50"
+                                            value={spotifyToPlexScheduledSyncIntervalHours}
+                                            onChange={(e) => setSpotifyToPlexScheduledSyncIntervalHours(
+                                                Math.min(168, Math.max(1, Number(e.target.value) || 24)),
+                                            )}
+                                            disabled={!spotifyToPlexEnabled || !spotifyToPlexScheduledSyncEnabled}
+                                        />
+                                        <p className="text-[11px] text-muted mt-1">1–168 hours. Checked every 30 minutes.</p>
+                                    </div>
+                                    {initialSettings.spotifyToPlexScheduledSyncLastRunAt ? (
+                                        <div>
+                                            <label className="font-semibold text-sm block mb-2">Last portal scheduled sync</label>
+                                            <p className="text-sm text-muted">{String(initialSettings.spotifyToPlexScheduledSyncLastRunAt)}</p>
+                                        </div>
+                                    ) : null}
+                                </div>
                                 <SettingsToggleRow
                                     title="Home dashboard widget"
                                     hint={<SettingHint>Shows last sync status on Home for admins. Reorder under Home → Edit layout.</SettingHint>}

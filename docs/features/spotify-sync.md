@@ -39,7 +39,15 @@ Enable **Home dashboard widget** on the Spotify Sync settings tab. Reorder the *
 
 ## Scheduling
 
-Automatic sync runs inside the spotify-to-plex container (daily by default). Use **Sync now** for manual runs without waiting for cron.
+The spotify-to-plex sidecar runs its own daily cron (~02:00 UTC). That is independent of the portal.
+
+**Portal scheduled sync** (optional, off by default):
+
+1. On **Settings → Spotify Sync**, enable **Portal scheduled sync** and set **Portal sync interval (hours)** (1–168).
+2. Save settings. The job appears under **Background Tasks** as **Spotify Sync** when the feature is enabled.
+3. The portal checks every 30 minutes and calls the sidecar `POST /api/sync/all` when the interval has elapsed.
+
+Use **Sync now** (settings or Spotify Sync page) or **Background Tasks → Run** for immediate runs without waiting for either schedule.
 
 ## Related
 

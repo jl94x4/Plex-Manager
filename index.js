@@ -137,6 +137,13 @@ import {
     setSpotifyToPlexFailureNotify,
     startSpotifyToPlexStatusWatcher,
 } from './lib/spotify-to-plex-status-watch.js';
+import {
+    computeNextSpotifySyncRun,
+    isSpotifySyncScheduleActive,
+    normalizeSpotifySyncIntervalHours,
+    runSpotifySyncScheduledJob,
+    SPOTIFY_SYNC_SCHEDULE_CHECK_MS,
+} from './lib/spotify-to-plex-scheduler.js';
 import { createSupportTicketFromMediaIssue, attachTicketIdsToIssues } from './lib/support-tickets/fromIssue.js';
 import { mapTautulliHistoryRowToPlexItem } from './lib/achievements/tautulliHistory.js';
 import { isTautulliWatchHistorySource, buildAchievementsHomeRankContext, summarizeAchievementsBackfill, levelProgress } from './lib/achievements/index.js';
@@ -5417,6 +5424,12 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 spotifyToPlexCredentialsReady: isSpotifyToPlexCredentialsReady(config),
                 spotifyToPlexCallbackUrl: resolveSpotifyToPlexCallbackUrl(config, withBasePath, resolvePublicBaseUrlFromConfig),
                 spotifyToPlexHomeWidgetEnabled: !!config.spotifyToPlexHomeWidgetEnabled,
+                spotifyToPlexScheduledSyncEnabled: !!config.spotifyToPlexScheduledSyncEnabled,
+                spotifyToPlexScheduledSyncIntervalHours: normalizeSpotifySyncIntervalHours(
+                    config.spotifyToPlexScheduledSyncIntervalHours,
+                    24,
+                ),
+                spotifyToPlexScheduledSyncLastRunAt: config.spotifyToPlexScheduledSyncLastRunAt || '',
                 upgraderDefaultPreset: config.upgraderDefaultPreset || 'non_hevc',
                 upgraderMinSizeGB: Number(config.upgraderMinSizeGB) > 0 ? Number(config.upgraderMinSizeGB) : 5,
                 upgraderAutomationEnabled: !!config.upgraderAutomationEnabled,
@@ -5601,6 +5614,9 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 spotifyToPlexCredentialsReady: false,
                 spotifyToPlexCallbackUrl: '',
                 spotifyToPlexHomeWidgetEnabled: false,
+                spotifyToPlexScheduledSyncEnabled: false,
+                spotifyToPlexScheduledSyncIntervalHours: 24,
+                spotifyToPlexScheduledSyncLastRunAt: '',
                 upgraderDefaultPreset: 'non_hevc',
                 upgraderMinSizeGB: 5,
                 upgraderAutomationEnabled: false,
@@ -5635,7 +5651,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         inactiveCleanupEnabled, inactiveCleanupDays,
         primaryColor, customLogoUrl, customLoginLogoUrl, loginLogoCircleFrame, customFaviconUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, customNavTabs, homeCustomModules, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
-        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, spotifyToPlexEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, supportTicketsEnabled, chatEnabled, chatMentionNotifyInApp, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, scannerNotifyDeleted, scannerNotifyUpgrade, scannerNotifyImport, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, spotifyToPlexInternalUrl, spotifyToPlexClientId, spotifyToPlexClientSecret, spotifyToPlexEncryptionKey, spotifyToPlexHomeWidgetEnabled, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
+        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, spotifyToPlexEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, supportTicketsEnabled, chatEnabled, chatMentionNotifyInApp, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, scannerNotifyDeleted, scannerNotifyUpgrade, scannerNotifyImport, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, spotifyToPlexInternalUrl, spotifyToPlexClientId, spotifyToPlexClientSecret, spotifyToPlexEncryptionKey, spotifyToPlexHomeWidgetEnabled, spotifyToPlexScheduledSyncEnabled, spotifyToPlexScheduledSyncIntervalHours, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
     } = req.body;
 
@@ -6306,6 +6322,28 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
                 ? !!spotifyToPlexHomeWidgetEnabled
                 : !!existingConfig.spotifyToPlexHomeWidgetEnabled;
         })(),
+        spotifyToPlexScheduledSyncEnabled: (() => {
+            const spotifyOn = spotifyToPlexEnabled !== undefined
+                ? !!spotifyToPlexEnabled
+                : !!existingConfig.spotifyToPlexEnabled;
+            if (!spotifyOn || normalizedMediaServerType !== 'plex') return false;
+            return spotifyToPlexScheduledSyncEnabled !== undefined
+                ? !!spotifyToPlexScheduledSyncEnabled
+                : !!existingConfig.spotifyToPlexScheduledSyncEnabled;
+        })(),
+        spotifyToPlexScheduledSyncIntervalHours: (() => {
+            const spotifyOn = spotifyToPlexEnabled !== undefined
+                ? !!spotifyToPlexEnabled
+                : !!existingConfig.spotifyToPlexEnabled;
+            if (!spotifyOn || normalizedMediaServerType !== 'plex') {
+                return normalizeSpotifySyncIntervalHours(existingConfig.spotifyToPlexScheduledSyncIntervalHours, 24);
+            }
+            if (spotifyToPlexScheduledSyncIntervalHours === undefined) {
+                return normalizeSpotifySyncIntervalHours(existingConfig.spotifyToPlexScheduledSyncIntervalHours, 24);
+            }
+            return normalizeSpotifySyncIntervalHours(spotifyToPlexScheduledSyncIntervalHours, 24);
+        })(),
+        spotifyToPlexScheduledSyncLastRunAt: existingConfig.spotifyToPlexScheduledSyncLastRunAt || '',
         upgraderDefaultPreset: upgraderDefaultPreset || existingConfig.upgraderDefaultPreset || 'non_hevc',
         upgraderMinSizeGB: Math.max(0, Number(upgraderMinSizeGB ?? existingConfig.upgraderMinSizeGB ?? 5) || 5),
         upgraderAutomationEnabled: upgraderAutomationEnabled !== undefined ? !!upgraderAutomationEnabled : !!existingConfig.upgraderAutomationEnabled,
@@ -6386,6 +6424,9 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         log(`[media-automation] Failed to reload after settings save: ${error.message}`);
     }
     systemJobs.autoBackup.nextRun = spotifySyncConfig.autoBackupEnabled ? computeNextBackupRun(spotifySyncConfig) : null;
+    systemJobs.spotifySync.nextRun = isSpotifySyncScheduleActive(spotifySyncConfig)
+        ? computeNextSpotifySyncRun(spotifySyncConfig)
+        : null;
     log('Configuration saved successfully.');
     const previousWatchHistorySource = String(existingConfig.watchHistorySource || '').toLowerCase() === 'tautulli' ? 'tautulli' : 'plex';
     const nextWatchHistorySource = String(spotifySyncConfig.watchHistorySource || '').toLowerCase() === 'tautulli' ? 'tautulli' : 'plex';
@@ -12850,7 +12891,8 @@ const getTasksSnapshot = (config = {}) => {
     const systemJobList = Object.values(systemJobs)
         .filter(job => !(mediaServerType !== 'plex' && job.id === 'plexStats'))
         // Hide Upgrader Index entirely while the feature is off — idle, not failing.
-        .filter(job => !(job.id === 'upgraderIndex' && !config.upgraderEnabled));
+        .filter(job => !(job.id === 'upgraderIndex' && !config.upgraderEnabled))
+        .filter(job => !(job.id === 'spotifySync' && !isSpotifyToPlexEnabled(config)));
     return [
         ...tasksInfo.map(task => decorateTaskForConfig(task, config)),
         ...systemJobList.map(job => ({ ...job }))
@@ -12992,6 +13034,13 @@ app.post('/api/tasks/run/:taskId', requireAdmin, async (req, res) => {
                         break;
                     case 'personalAnalyticsWarm':
                         await runPersonalAnalyticsWarmJob('manual');
+                        break;
+                    case 'spotifySync':
+                        await runSpotifySyncScheduledJob({
+                            reason: 'manual',
+                            force: true,
+                            ...spotifySyncJobDeps(),
+                        });
                         break;
                     case 'editionsProcess': {
                         const cfg = await loadFile(CONFIG_PATH, {});
@@ -19759,6 +19808,16 @@ const systemJobs = {
         lastDurationMs: null,
         lastError: null,
     },
+    spotifySync: {
+        id: 'spotifySync',
+        name: 'Spotify Sync',
+        description: 'Triggers spotify-to-plex sync/all on a portal schedule (optional; sidecar also runs daily cron by default).',
+        lastRun: null,
+        nextRun: null,
+        running: false,
+        lastDurationMs: null,
+        lastError: null,
+    },
 };
 
 const markTaskStart = (task) => {
@@ -19780,6 +19839,17 @@ const markTaskEnd = (task, error = null, extras = {}) => {
     // Incomplete-but-kept work is a warning, not a failed job (health score / Failed badge).
     task.lastWarning = warning ? (warning.message || String(warning)) : null;
 };
+
+const spotifySyncJobDeps = () => ({
+    systemJob: systemJobs.spotifySync,
+    markTaskStart,
+    markTaskEnd,
+    loadConfig: () => loadFile(CONFIG_PATH, {}),
+    saveConfig: (cfg) => saveFile(CONFIG_PATH, cfg),
+    fetchWithTimeout,
+    allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS,
+    log,
+});
 
 const REQUEST_STATUS_SYNC_INTERVAL_MS = 60 * 1000;
 const SEERR_AVAILABLE_NOTIFY_INTERVAL_MS = 10 * 1000;
@@ -19994,6 +20064,51 @@ const startSeerrAvailableNotifyBackgroundTask = () => {
     setInterval(() => {
         runSeerrAvailableNotify('scheduled').catch(() => {});
     }, SEERR_AVAILABLE_NOTIFY_INTERVAL_MS);
+};
+
+const startSpotifySyncBackgroundTask = () => {
+    void (async () => {
+        try {
+            const cfg = await loadFile(CONFIG_PATH, {});
+            systemJobs.spotifySync.nextRun = isSpotifySyncScheduleActive(cfg)
+                ? computeNextSpotifySyncRun(cfg)
+                : null;
+            if (isSpotifySyncScheduleActive(cfg)) {
+                const nextTs = Date.parse(computeNextSpotifySyncRun(cfg));
+                if (Number.isFinite(nextTs) && Date.now() >= nextTs && !systemJobs.spotifySync.running) {
+                    setImmediate(() => {
+                        runSpotifySyncScheduledJob({
+                            reason: 'startup',
+                            ...spotifySyncJobDeps(),
+                        }).catch(() => {});
+                    });
+                }
+            }
+        } catch (error) {
+            log(`[spotify-sync] schedule boot failed: ${error.message}`);
+        }
+    })();
+
+    setInterval(async () => {
+        try {
+            const cfg = await loadFile(CONFIG_PATH, {});
+            if (!isSpotifySyncScheduleActive(cfg)) {
+                systemJobs.spotifySync.nextRun = null;
+                return;
+            }
+            const nextRunTs = Date.parse(computeNextSpotifySyncRun(cfg));
+            if (!Number.isFinite(nextRunTs)) return;
+            systemJobs.spotifySync.nextRun = new Date(nextRunTs).toISOString();
+            if (Date.now() >= nextRunTs && !systemJobs.spotifySync.running) {
+                await runSpotifySyncScheduledJob({
+                    reason: 'scheduled',
+                    ...spotifySyncJobDeps(),
+                });
+            }
+        } catch (error) {
+            log(`[spotify-sync] schedule tick failed: ${error.message}`);
+        }
+    }, SPOTIFY_SYNC_SCHEDULE_CHECK_MS);
 };
 
 const startDiscoveryAvailabilityCacheBackgroundTask = () => {
@@ -29682,6 +29797,7 @@ app.listen(PORT, BIND_HOST, async () => {
     startPortalRequestStatusSyncBackgroundTask();
     startSeerrAvailableNotifyBackgroundTask();
     startSeerrPendingNotifyBackgroundTask();
+    startSpotifySyncBackgroundTask();
     startDiscoveryAvailabilityCacheBackgroundTask();
     startScannerWorker(async () => scannerPortalConfig(await loadFile(CONFIG_PATH, {})));
     setScannerFailureNotify((payload) => {
