@@ -12015,7 +12015,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         'spotify-sync': { label: t('navigation.spotifySync'), icon: Music, route: 'spotify-sync', adminOnly: true, beta: true },
         'scanner': { label: t('navigation.scanner'), icon: Radar, route: 'scanner', adminOnly: true },
         'media-automation': { label: t('navigation.mediaAutomation'), icon: Cpu, route: 'media-automation', adminOnly: true },
-        'poster-sets': { label: t('navigation.posterSets'), icon: ImageIcon, route: 'poster-sets', adminOnly: true },
+        'poster-sets': { label: t('navigation.posterSets'), icon: ImageIcon, route: 'poster-sets', adminOnly: true, beta: true },
         'overlays': { label: t('navigation.overlays'), icon: Layers, route: 'overlays', adminOnly: true },
         'editions': { label: t('navigation.editions'), icon: Film, route: 'editions', adminOnly: true },
         'requests': { label: t('navigation.requests'), icon: ClipboardList, route: 'requests', adminOnly: true },
@@ -12210,6 +12210,11 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     const desktopNavDensity = DESKTOP_NAV_STYLES[NAV_STYLE_BY_STEP[compressStep]];
     const identityDensity = IDENTITY_STYLES[IDENTITY_STYLE_BY_STEP[compressStep]];
 
+    const NAV_BETA_NOTICE_KEYS: Record<string, string> = {
+        'spotify-sync': 'spotifySyncPage.betaNotice',
+        'poster-sets': 'posterSetsPage.betaNotice',
+    };
+
     const renderNavAction = (
         key: string,
         item: { label: string; icon: React.FC<any>; route: string; href?: string; onClick?: (e: any) => void; customTabId?: string; beta?: boolean },
@@ -12218,7 +12223,9 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         const Icon = item.icon;
         const label = options.compactLabel || item.label;
         const badgeCount = options.badgeCount || 0;
-        const betaTitle = t('spotifySyncPage.betaNotice');
+        const betaTitle = item.beta
+            ? t(NAV_BETA_NOTICE_KEYS[item.route] || 'spotifySyncPage.betaNotice')
+            : '';
         const desktopDensity = options.mobile ? null : desktopNavDensity;
         const baseClass = options.mobile
             ? `relative flex flex-col items-center justify-center gap-0.5 h-full flex-1 min-w-0 px-0.5 text-center text-[0.6rem] sm:text-[0.65rem] transition-colors ${options.isCurrent ? 'text-plex font-bold' : 'text-muted hover:text-text'}`

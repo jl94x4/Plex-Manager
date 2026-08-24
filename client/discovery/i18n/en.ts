@@ -81,6 +81,10 @@ export const en = {
         betaTitle: 'Beta feature',
         betaNotice: 'Spotify Sync is in BETA and still heavily in development. Expect rough edges, missing features, and breaking changes.',
     },
+    posterSetsPage: {
+        betaTitle: 'Beta feature',
+        betaNotice: 'Poster Sets is in BETA and still heavily in development. Expect rough edges, missing features, and breaking changes.',
+    },
     profilePage: {
         eyebrow: 'Member profile',
         member: 'Member',

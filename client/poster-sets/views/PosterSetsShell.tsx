@@ -14,6 +14,8 @@ import {
     XCircle,
 } from 'lucide-react';
 import { ToastContainer } from '../../shared/toast';
+import { BetaBadge } from '../../shared/BetaBadge';
+import { useDiscoverI18n } from '../../discovery/i18n';
 import {
     DashboardHero,
     DashboardPageShell,
@@ -47,6 +49,8 @@ const formatJobState = (state?: string | null) => {
 };
 
 export const PosterSetsShell: React.FC = () => {
+    const { t } = useDiscoverI18n();
+    const betaNotice = t('posterSetsPage.betaNotice');
     const ctx = usePosterSetsDashboard();
     const {
         toasts,
@@ -121,7 +125,12 @@ export const PosterSetsShell: React.FC = () => {
 
                 <DashboardHero
                     accent="plex"
-                    eyebrow="Poster Sets"
+                    eyebrow={
+                        <span className="inline-flex items-center gap-2">
+                            <span>Poster Sets</span>
+                            <BetaBadge title={betaNotice} />
+                        </span>
+                    }
                     title="Artwork from MediUX & ThePosterDB"
                     description="Start from your library, pick a title, preview poster sets, and apply. Search creators and browse rails in Discover — queue, watching, logs, and settings stay one click away."
                     icon={<ImageIcon className="h-3.5 w-3.5" />}
