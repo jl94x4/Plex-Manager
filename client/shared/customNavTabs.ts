@@ -163,7 +163,7 @@ import { registrableDomainFromHost } from '../../lib/registrable-domain.js';
 
 const registrableDomain = (hostname: string) => registrableDomainFromHost(hostname);
 
-/** HTTPS sibling subdomains (e.g. photos.strymx.co.uk inside portal.strymx.co.uk) can iframe directly. */
+/** HTTPS sibling subdomains (e.g. photos.example.com inside portal.example.com) can iframe directly. */
 export const isSameRegistrableDomainHost = (targetHost: string, portalHost: string) => {
     const target = String(targetHost || '').toLowerCase();
     const portal = String(portalHost || '').toLowerCase();
@@ -179,21 +179,27 @@ export const isDirectEmbedOnlyAppUrl = (url: string) => {
         const host = parsed.hostname.toLowerCase();
         const port = parsed.port;
         if (port === '8888' || port === '2283') return true;
-        if (host === 'photos.strymx.co.uk' || /^photos\./i.test(host)) return true;
+        if (/^photos\./i.test(host)) return true;
         return false;
     } catch {
         return false;
     }
 };
 
-/** Use HTTPS for tunnel subdomains that only publish over TLS (e.g. photos.strymx.co.uk). */
+/** Upgrade HTTP sibling subdomains to HTTPS when the portal is served over TLS. */
 export const normalizeCustomTabEmbedUrl = (url: string) => {
     const trimmed = String(url || '').trim();
     if (!trimmed) return trimmed;
     try {
         const parsed = new URL(trimmed, typeof window !== 'undefined' ? window.location.origin : 'https://localhost');
-        const host = parsed.hostname.toLowerCase();
-        if ((host === 'photos.strymx.co.uk' || /^photos\./i.test(host)) && parsed.protocol === 'http:') {
+        const portalHost = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : '';
+        const targetHost = parsed.hostname.toLowerCase();
+        if (
+            portalHost
+            && parsed.protocol === 'http:'
+            && isSameRegistrableDomainHost(targetHost, portalHost)
+            && !isPrivateOrLocalHost(trimmed)
+        ) {
             parsed.protocol = 'https:';
             return parsed.href;
         }

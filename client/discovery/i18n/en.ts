@@ -1788,7 +1788,7 @@ export const en = {
                 embedWarningMixedContent: 'HTTP URLs are routed through the portal proxy automatically when embedded.',
                 embedWarningBlockedHost: 'This site blocks iframe embedding. Google and many other major sites cannot be shown inside the portal.',
                 embedWarningCrossOrigin: 'Different-host URLs are routed through the portal proxy automatically when embedded.',
-                embedWarningProxyIncompatible: 'Immich cannot use the embed proxy. Set the URL to https://photos.strymx.co.uk (HTTPS, not HTTP).',
+                embedWarningProxyIncompatible: 'Immich cannot use the embed proxy. Set the URL to an HTTPS subdomain on your domain (for example https://photos.example.com), not HTTP or a local IP.',
                 embed: {
                     unavailable: 'This external tab is unavailable or you do not have access.',
                     openNamed: 'Open {name}',
@@ -1797,7 +1797,7 @@ export const en = {
                     proxyActive: 'Loading through the portal proxy so HTTP and cross-site apps can embed without extra reverse-proxy setup.',
                     mixedContent: 'Browsers block HTTP pages inside an HTTPS portal (mixed content). Local http:// URLs cannot load inside https://portal pages.',
                     blockedHost: 'This site blocks embedding inside other pages.',
-                    proxyIncompatible: 'Immich and similar apps cannot load through the portal embed proxy. Use an HTTPS subdomain (for example https://photos.strymx.co.uk), not http:// or a local IP.',
+                    proxyIncompatible: 'Immich and similar apps cannot load through the portal embed proxy. Use an HTTPS subdomain on your domain (for example https://photos.example.com), not http:// or a local IP.',
                     genericBlocked: 'This page could not be embedded inside the portal.',
                     useOpenInBrowser: 'Use Open in browser, or change the tab to Open in new tab in Settings → Layout → Custom External Tabs.',
                 },
