@@ -95,7 +95,7 @@ import {
     pruneDashboardLayoutCustomModules,
     sanitizeHomeCustomModulesForSession,
 } from './lib/home-custom-modules.js';
-import { createCustomTabEmbedProxyHandler, createHomeModuleEmbedProxyHandler, isPortalEmbedProxyPath } from './lib/custom-tab-embed-proxy.js';
+import { createCustomTabEmbedProxyHandler, createHomeModuleEmbedProxyHandler, isPortalEmbedProxyPath, isLeakedArrEmbedAssetPath, parseEmbedProxyFromReferer } from './lib/custom-tab-embed-proxy.js';
 import { createSupportTicketFromMediaIssue, attachTicketIdsToIssues } from './lib/support-tickets/fromIssue.js';
 import { mapTautulliHistoryRowToPlexItem } from './lib/achievements/tautulliHistory.js';
 import { isTautulliWatchHistorySource, buildAchievementsHomeRankContext, summarizeAchievementsBackfill, levelProgress } from './lib/achievements/index.js';
@@ -18867,6 +18867,28 @@ const lockViewportForAppleClients = (html, userAgent = '') => {
         '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />',
     );
 };
+
+// *arr SPAs request /Content/*.css from the portal origin. Catch those
+// leaked assets (using the embed Referer) before the HTML catch-all.
+app.use((req, res, next) => {
+    if (!isLeakedArrEmbedAssetPath(req.path)) return next();
+    const parsed = parseEmbedProxyFromReferer(req.get('referer') || req.get('referrer'));
+    if (!parsed?.entityId) return next();
+    req.params = {
+        ...(req.params || {}),
+        tabId: parsed.entityId,
+        moduleId: parsed.entityId,
+        0: String(req.path || '').replace(/^\/+/, ''),
+    };
+    const run = () => (
+        parsed.routeName === 'home-module-embed'
+            ? handleHomeModuleEmbedProxy(req, res)
+            : handleCustomTabEmbedProxy(req, res)
+    );
+    return requireAuth(req, res, () => {
+        Promise.resolve(requireMember(req, res, run)).catch(next);
+    });
+});
 
 // Serve the main index.html for SPA routes (after base-path strip, paths are root-relative)
 app.get(/^\/(?!api\/|static\/|manifest\.(?:webmanifest|json)|site\.webmanifest|service-worker\.js).*$/, async (req, res) => {

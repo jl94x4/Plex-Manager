@@ -124,7 +124,7 @@ export const HomeCustomModuleSection: React.FC<Props> = ({ module, isAdmin = fal
                         className="h-full min-h-[24rem] w-full border-0 bg-white"
                         style={{ colorScheme: 'normal' }}
                         sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-downloads"
-                        referrerPolicy="no-referrer"
+                        referrerPolicy="same-origin"
                         onLoad={(event) => {
                             try {
                                 const doc = (event.currentTarget as HTMLIFrameElement).contentDocument;
