@@ -112,6 +112,16 @@ import {
     isPortalEmbedProxyPath,
     parseEmbedProxyFromReferer,
 } from './lib/custom-tab-embed-proxy.js';
+import {
+    applySpotifyToPlexDefaults,
+    createSpotifyToPlexCallbackHandler,
+    createSpotifyToPlexEmbedProxyHandler,
+    isLeakedSpotifyToPlexEmbedAssetPath,
+    isSpotifyToPlexEnabled,
+    parseSpotifyToPlexEmbedFromReferer,
+    resolveSpotifyToPlexCallbackUrl,
+    sanitizeSpotifyToPlexProxyBase,
+} from './lib/spotify-to-plex-proxy.js';
 import { createSupportTicketFromMediaIssue, attachTicketIdsToIssues } from './lib/support-tickets/fromIssue.js';
 import { mapTautulliHistoryRowToPlexItem } from './lib/achievements/tautulliHistory.js';
 import { isTautulliWatchHistorySource, buildAchievementsHomeRankContext, summarizeAchievementsBackfill, levelProgress } from './lib/achievements/index.js';
@@ -201,6 +211,7 @@ app.use(compression({
         if (isPortalEmbedProxyPath(url)) return false;
         const pathOnly = url.split('?')[0];
         if (isLeakedArrEmbedAssetPath(pathOnly)) return false;
+        if (isLeakedSpotifyToPlexEmbedAssetPath(pathOnly)) return false;
         return compression.filter(req, res);
     },
 }));
@@ -4800,6 +4811,15 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
             else navOrder.splice(Math.max(0, navOrder.length - 2), 0, 'collexions');
         }
     }
+    if (!navOrder.includes('spotify-sync')) {
+        const collexionsIdx = navOrder.indexOf('collexions');
+        if (collexionsIdx >= 0) navOrder.splice(collexionsIdx + 1, 0, 'spotify-sync');
+        else {
+            const upgraderIdx = navOrder.indexOf('upgrader');
+            if (upgraderIdx >= 0) navOrder.splice(upgraderIdx + 1, 0, 'spotify-sync');
+            else navOrder.splice(Math.max(0, navOrder.length - 2), 0, 'spotify-sync');
+        }
+    }
     try {
         if (isJellyfinPortal && config?.jellyfinUrl && config?.jellyfinApiKey) {
             const profile = await getAdminProfile(config);
@@ -4847,6 +4867,7 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
         upgrader: !!config.upgraderEnabled,
         // Collexions is Plex-only — hide for Jellyfin/Emby even if the flag is on.
         collexions: !!config.collexionsEnabled && isPlexMediaServer,
+        spotifySync: !!config.spotifyToPlexEnabled && isPlexMediaServer,
         scanner: !!config.scannerEnabled,
         scannerHomeWidget: !!config.scannerEnabled && !!config.scannerHomeWidgetEnabled,
         mediaAutomation: !!config.mediaAutomationEnabled,
@@ -5364,6 +5385,9 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 collexionsServiceKey: config.collexionsServiceKey ? '********' : '',
                 collexionsBundled: isCollexionsBundledAvailable(),
                 collexionsEmbedded: getCollexionsEmbeddedStatus(),
+                spotifyToPlexEnabled: !!config.spotifyToPlexEnabled,
+                spotifyToPlexInternalUrl: config.spotifyToPlexInternalUrl || '',
+                spotifyToPlexCallbackUrl: resolveSpotifyToPlexCallbackUrl(config, withBasePath, resolvePublicBaseUrlFromConfig),
                 upgraderDefaultPreset: config.upgraderDefaultPreset || 'non_hevc',
                 upgraderMinSizeGB: Number(config.upgraderMinSizeGB) > 0 ? Number(config.upgraderMinSizeGB) : 5,
                 upgraderAutomationEnabled: !!config.upgraderAutomationEnabled,
@@ -5540,6 +5564,9 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 collexionsServiceKey: '',
                 collexionsBundled: isCollexionsBundledAvailable(),
                 collexionsEmbedded: getCollexionsEmbeddedStatus(),
+                spotifyToPlexEnabled: false,
+                spotifyToPlexInternalUrl: '',
+                spotifyToPlexCallbackUrl: '',
                 upgraderDefaultPreset: 'non_hevc',
                 upgraderMinSizeGB: 5,
                 upgraderAutomationEnabled: false,
@@ -5574,7 +5601,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         inactiveCleanupEnabled, inactiveCleanupDays,
         primaryColor, customLogoUrl, customLoginLogoUrl, loginLogoCircleFrame, customFaviconUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, customNavTabs, homeCustomModules, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
-        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, supportTicketsEnabled, chatEnabled, chatMentionNotifyInApp, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, scannerNotifyDeleted, scannerNotifyUpgrade, scannerNotifyImport, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
+        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, spotifyToPlexEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, supportTicketsEnabled, chatEnabled, chatMentionNotifyInApp, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, scannerNotifyDeleted, scannerNotifyUpgrade, scannerNotifyImport, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, spotifyToPlexInternalUrl, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
     } = req.body;
 
@@ -5778,6 +5805,29 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         }
     }
 
+    let nextSpotifyToPlexInternalUrl = existingConfig.spotifyToPlexInternalUrl || '';
+    if (spotifyToPlexInternalUrl !== undefined) {
+        const incoming = String(spotifyToPlexInternalUrl || '').trim();
+        if (!incoming) {
+            nextSpotifyToPlexInternalUrl = '';
+        } else {
+            try {
+                const normalized = normalizeExternalBaseUrl(incoming, { allowPrivate: true, allowHttp: true });
+                const host = new URL(normalized).hostname;
+                if (!isLoopbackHostName(host) && !ALLOW_PRIVATE_INTEGRATION_URLS) {
+                    nextSpotifyToPlexInternalUrl = existingConfig.spotifyToPlexInternalUrl || '';
+                } else {
+                    nextSpotifyToPlexInternalUrl = normalized.replace(/\/+$/, '');
+                    if (!isLoopbackHostName(host) && incoming !== String(existingConfig.spotifyToPlexInternalUrl || '').trim()) {
+                        newlySubmittedIntegrationUrls.push(nextSpotifyToPlexInternalUrl);
+                    }
+                }
+            } catch {
+                nextSpotifyToPlexInternalUrl = existingConfig.spotifyToPlexInternalUrl || '';
+            }
+        }
+    }
+
     try {
         for (const url of newlySubmittedIntegrationUrls) {
             await assertResolvedAddressesAllowed(new URL(url).hostname, {
@@ -5800,7 +5850,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         ? navOrder
         : existingConfig.navOrder || ['home', 'discover', 'request', 'analytics', 'users', 'downloads', 'upgrader', 'collexions', 'mediastack', 'requests', 'status', 'maintenance', 'about', 'settings', 'logout'];
     const resolvedMemberNavOrder = (() => {
-        const ADMIN_ONLY = new Set(['users', 'upgrader', 'collexions', 'scanner', 'media-automation', 'poster-sets', 'requests', 'maintenance', 'settings', 'logs']);
+        const ADMIN_ONLY = new Set(['users', 'upgrader', 'collexions', 'spotify-sync', 'scanner', 'media-automation', 'poster-sets', 'requests', 'maintenance', 'settings', 'logs']);
         const adminOnlyCustom = new Set(
             normalizedCustomNavTabs.filter((tab) => tab.adminOnly).map((tab) => `custom:${tab.id}`),
         );
@@ -5969,7 +6019,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         memberNavOrder: pruneNavOrderCustomKeys(resolvedMemberNavOrder, normalizedCustomNavTabs),
         memberNavHiddenKeys: (() => {
             const ALWAYS = new Set(['home', 'logout']);
-            const ADMIN_ONLY = new Set(['users', 'upgrader', 'collexions', 'scanner', 'media-automation', 'poster-sets', 'requests', 'maintenance', 'settings', 'logs']);
+            const ADMIN_ONLY = new Set(['users', 'upgrader', 'collexions', 'spotify-sync', 'scanner', 'media-automation', 'poster-sets', 'requests', 'maintenance', 'settings', 'logs']);
             const incoming = Array.isArray(memberNavHiddenKeys) ? memberNavHiddenKeys : existingConfig.memberNavHiddenKeys;
             if (!Array.isArray(incoming)) return [];
             const seen = new Set();
@@ -6192,6 +6242,11 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
             if (!incoming || incoming === '********') return existingConfig.collexionsServiceKey || '';
             return incoming;
         })(),
+        spotifyToPlexEnabled: (() => {
+            if (normalizedMediaServerType !== 'plex') return false;
+            return spotifyToPlexEnabled !== undefined ? !!spotifyToPlexEnabled : !!existingConfig.spotifyToPlexEnabled;
+        })(),
+        spotifyToPlexInternalUrl: nextSpotifyToPlexInternalUrl,
         upgraderDefaultPreset: upgraderDefaultPreset || existingConfig.upgraderDefaultPreset || 'non_hevc',
         upgraderMinSizeGB: Math.max(0, Number(upgraderMinSizeGB ?? existingConfig.upgraderMinSizeGB ?? 5) || 5),
         upgraderAutomationEnabled: upgraderAutomationEnabled !== undefined ? !!upgraderAutomationEnabled : !!existingConfig.upgraderAutomationEnabled,
@@ -6214,11 +6269,12 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         configDir: CONFIG_DIR,
         log,
     });
-    await saveFile(CONFIG_PATH, collexionsConfig);
-    refreshRuntimePublicBaseUrl(collexionsConfig);
-    syncIntegrationServicesInStatusConfig(collexionsConfig);
-    const brandingProfile = await getAdminProfile(collexionsConfig);
-    void refreshPortalBrandingAssets(collexionsConfig, brandingProfile).catch((error) => {
+    const { config: spotifySyncConfig, changed: spotifySyncDefaultsChanged } = applySpotifyToPlexDefaults(collexionsConfig, { log });
+    await saveFile(CONFIG_PATH, spotifySyncConfig);
+    refreshRuntimePublicBaseUrl(spotifySyncConfig);
+    syncIntegrationServicesInStatusConfig(spotifySyncConfig);
+    const brandingProfile = await getAdminProfile(spotifySyncConfig);
+    void refreshPortalBrandingAssets(spotifySyncConfig, brandingProfile).catch((error) => {
         log(`[Branding] settings-save icon sync failed: ${error.message}`);
     });
     try {
@@ -6226,7 +6282,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
     } catch (e) {
         log(`Failed to sync integration services into status config: ${e.message}`);
     }
-    await syncAdminPlexIdFromConfigToken(collexionsConfig, { persist: true });
+    await syncAdminPlexIdFromConfigToken(spotifySyncConfig, { persist: true });
     // Invalidate caches tied to the Plex token/server so changes take effect immediately.
     cachedPlexConnectionUri = null;
     lastPlexConnectionUriFetch = 0;
@@ -6243,7 +6299,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
     clearPortalArrServiceOptionsCache();
     arrRescanListCache.clear();
     const libraryStackChanged = discoveryLibraryStackFingerprint(existingConfig)
-        !== discoveryLibraryStackFingerprint(collexionsConfig);
+        !== discoveryLibraryStackFingerprint(spotifySyncConfig);
     if (libraryStackChanged) {
         void runDiscoveryAvailabilityCacheRebuild('settings-save').catch((error) => {
             log(`[DiscoveryAvailabilityCache] settings-save rebuild failed: ${error.message}`);
@@ -6252,7 +6308,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
     try {
         // Keep the service running whenever the feature is enabled so scans/enqueue work.
         // Encode claiming is gated by persisted workerPaused (Start/Pause), not settings save.
-        if (collexionsConfig.mediaAutomationEnabled) {
+        if (spotifySyncConfig.mediaAutomationEnabled) {
             void mediaAutomationService.start()
                 .then(() => {
                     // Re-evaluate quiet hours immediately so shortening the window
@@ -6270,11 +6326,11 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
     } catch (error) {
         log(`[media-automation] Failed to reload after settings save: ${error.message}`);
     }
-    systemJobs.autoBackup.nextRun = collexionsConfig.autoBackupEnabled ? computeNextBackupRun(collexionsConfig) : null;
+    systemJobs.autoBackup.nextRun = spotifySyncConfig.autoBackupEnabled ? computeNextBackupRun(spotifySyncConfig) : null;
     log('Configuration saved successfully.');
     const previousWatchHistorySource = String(existingConfig.watchHistorySource || '').toLowerCase() === 'tautulli' ? 'tautulli' : 'plex';
-    const nextWatchHistorySource = String(collexionsConfig.watchHistorySource || '').toLowerCase() === 'tautulli' ? 'tautulli' : 'plex';
-    const tautulliUrlChanged = String(collexionsConfig.tautulliUrl || '') !== String(existingConfig.tautulliUrl || '');
+    const nextWatchHistorySource = String(spotifySyncConfig.watchHistorySource || '').toLowerCase() === 'tautulli' ? 'tautulli' : 'plex';
+    const tautulliUrlChanged = String(spotifySyncConfig.tautulliUrl || '') !== String(existingConfig.tautulliUrl || '');
     const tautulliKeyChanged = tautulliApiKey !== undefined
         && tautulliApiKey !== SECRET_MASK
         && String(tautulliApiKey || '') !== String(existingConfig.tautulliApiKey || '');
@@ -6290,25 +6346,28 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
     if (collexionsDefaultsChanged) {
         log('[collexions] Applied bundled worker defaults (internal URL / service key).');
     }
+    if (spotifySyncDefaultsChanged) {
+        log('[spotify-sync] Applied default internal URL.');
+    }
     try {
-        await syncCollexionsEmbeddedWorker(collexionsConfig, { configDir: CONFIG_DIR, log });
+        await syncCollexionsEmbeddedWorker(spotifySyncConfig, { configDir: CONFIG_DIR, log });
     } catch (e) {
         log(`[collexions] Embedded worker sync failed: ${e.message}`);
     }
     let seerrDiscoverySync = { ok: true, skipped: true, reason: 'portal_owned' };
     // Phase 4: Discover Language/Region are portal-owned — do not sync to Seerr.
     startBackgroundService(); // (Re)start service with new config
-    const becameConfigured = !isConfigured && isPortalConfigured(collexionsConfig);
-    const maintenanceJustEnabled = !wasMaintenanceEnabled && !!collexionsConfig.maintenanceExperimentalEnabled;
-    const upgraderJustEnabled = !wasUpgraderEnabled && !!collexionsConfig.upgraderEnabled;
-    const upgraderJustDisabled = wasUpgraderEnabled && !collexionsConfig.upgraderEnabled;
+    const becameConfigured = !isConfigured && isPortalConfigured(spotifySyncConfig);
+    const maintenanceJustEnabled = !wasMaintenanceEnabled && !!spotifySyncConfig.maintenanceExperimentalEnabled;
+    const upgraderJustEnabled = !wasUpgraderEnabled && !!spotifySyncConfig.upgraderEnabled;
+    const upgraderJustDisabled = wasUpgraderEnabled && !spotifySyncConfig.upgraderEnabled;
     if (upgraderJustDisabled) {
         idleUpgraderIndexJob('Library Upgrader disabled in settings');
     } else if (upgraderJustEnabled) {
         clearUpgraderIndexDisabledError();
         scheduleUpgraderIndexRebuild(0);
     }
-    if ((becameConfigured || maintenanceJustEnabled || upgraderJustEnabled) && isMediaQualityIndexEnabled(collexionsConfig)) {
+    if ((becameConfigured || maintenanceJustEnabled || upgraderJustEnabled) && isMediaQualityIndexEnabled(spotifySyncConfig)) {
         // Kick an immediate index build after setup/enablement so rules/upgrader are usable right away.
         setTimeout(async () => {
             try {
@@ -7052,8 +7111,29 @@ const handleHomeModuleEmbedProxy = createHomeModuleEmbedProxyHandler({
     log,
 });
 
-app.all('/api/custom-tab-embed/:tabId', requireAuth, requireMember, handleCustomTabEmbedProxy);
-app.all('/api/custom-tab-embed/:tabId/*', requireAuth, requireMember, handleCustomTabEmbedProxy);
+const handleSpotifyToPlexEmbedProxy = createSpotifyToPlexEmbedProxyHandler({
+    loadConfig: () => loadFile(CONFIG_PATH, {}),
+    resolveCurrentAdmin,
+    getSessionActor,
+    effectiveViewerIsAdmin,
+    withBasePath,
+    fetchWithTimeout: embedProxyFetch,
+    allowPrivateIntegrationUrls: ALLOW_PRIVATE_INTEGRATION_URLS,
+    log,
+});
+
+const handleSpotifyToPlexCallback = createSpotifyToPlexCallbackHandler({
+    loadConfig: () => loadFile(CONFIG_PATH, {}),
+    withBasePath,
+    resolvePublicBaseUrlFromConfig,
+    fetchWithTimeout: embedProxyFetch,
+    allowPrivateIntegrationUrls: ALLOW_PRIVATE_INTEGRATION_URLS,
+    log,
+});
+
+app.get('/api/spotify-to-plex/callback', requireAuth, requireAdmin, handleSpotifyToPlexCallback);
+app.all('/api/spotify-to-plex-embed/:tabId', requireAuth, requireAdmin, handleSpotifyToPlexEmbedProxy);
+app.all('/api/spotify-to-plex-embed/:tabId/*', requireAuth, requireAdmin, handleSpotifyToPlexEmbedProxy);
 app.all('/api/home-module-embed/:moduleId', requireAuth, requireMember, handleHomeModuleEmbedProxy);
 app.all('/api/home-module-embed/:moduleId/*', requireAuth, requireMember, handleHomeModuleEmbedProxy);
 
@@ -19156,6 +19236,19 @@ const lockViewportForAppleClients = (html, userAgent = '') => {
 // *arr SPAs request /Content/*.css and /api/v3/* from the portal origin. Catch those
 // leaked assets (using the embed Referer) before the HTML catch-all.
 app.use((req, res, next) => {
+    if (isLeakedSpotifyToPlexEmbedAssetPath(req.path)) {
+        const parsed = parseSpotifyToPlexEmbedFromReferer(req.get('referer') || req.get('referrer'));
+        if (parsed?.entityId) {
+            req.params = {
+                ...(req.params || {}),
+                tabId: parsed.entityId,
+                0: String(req.path || '').replace(/^\/+/, ''),
+            };
+            return requireAuth(req, res, () => {
+                requireAdmin(req, res, () => handleSpotifyToPlexEmbedProxy(req, res));
+            });
+        }
+    }
     if (!isLeakedArrEmbedAssetPath(req.path)) return next();
     const parsed = parseEmbedProxyFromReferer(req.get('referer') || req.get('referrer'));
     if (!parsed?.entityId) return next();
@@ -25450,6 +25543,106 @@ const sanitizeCollexionsProxyBase = (rawUrl) => {
     }
     return normalized.replace(/\/+$/, '');
 };
+
+/** Portal-side Spotify Sync health (works even when sidecar is down). */
+app.get('/api/spotify-to-plex/health', requireAdmin, async (req, res) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        const enabled = !!config.spotifyToPlexEnabled;
+        let base = '';
+        try {
+            base = config.spotifyToPlexInternalUrl
+                ? sanitizeSpotifyToPlexProxyBase(config.spotifyToPlexInternalUrl, { allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS })
+                : '';
+        } catch {
+            base = '';
+        }
+        const callbackUrl = resolveSpotifyToPlexCallbackUrl(config, withBasePath, resolvePublicBaseUrlFromConfig);
+        const issues = [];
+
+        if (String(config.mediaServerType || 'plex').toLowerCase() !== 'plex') {
+            issues.push('Spotify Sync requires Media Server Type = Plex.');
+        }
+        if (!enabled) issues.push('Spotify Sync is disabled in Settings.');
+        if (enabled && !base) issues.push('Internal URL is not configured.');
+        if (enabled && !callbackUrl) issues.push('Public Base URL is required for Spotify OAuth (Settings → Portal UI).');
+        if (enabled && config.spotifyToPlexInternalUrl && !base) {
+            issues.push('Internal URL is blocked (non-loopback requires ALLOW_PRIVATE_INTEGRATION_URLS=true).');
+        }
+
+        let worker = { ok: false, reachable: false, error: null };
+        if (enabled && base) {
+            try {
+                const probe = () => fetchWithTimeout(`${base}/`, { headers: { Accept: 'text/html' } }, 8000);
+                let upstream;
+                try {
+                    upstream = await probe();
+                } catch (first) {
+                    const msg = String(first?.message || first || '');
+                    if (/econnreset|econnrefused|econnaborted|socket hang up|epipe/i.test(msg)) {
+                        await new Promise((r) => setTimeout(r, 400));
+                        upstream = await probe();
+                    } else {
+                        throw first;
+                    }
+                }
+                worker = {
+                    ok: upstream.ok,
+                    reachable: true,
+                    error: upstream.ok ? null : `Worker HTTP ${upstream.status}`,
+                };
+                if (!upstream.ok) issues.push(`Spotify Sync worker returned HTTP ${upstream.status}.`);
+            } catch (e) {
+                const timedOut = e?.name === 'AbortError' || /aborted/i.test(String(e?.message || ''));
+                worker = {
+                    ok: false,
+                    reachable: false,
+                    error: timedOut ? 'Worker timed out' : (e.message || 'Unreachable'),
+                };
+                issues.push(timedOut
+                    ? 'Spotify Sync worker did not respond in time.'
+                    : `Cannot reach Spotify Sync worker: ${e.message}`);
+            }
+        }
+
+        const uniqueIssues = [...new Set(issues.filter(Boolean))];
+        return res.json({
+            ok: enabled && worker.reachable && worker.ok && !!callbackUrl,
+            enabled,
+            callbackUrl,
+            worker,
+            issues: uniqueIssues,
+        });
+    } catch (e) {
+        return res.status(500).json({ error: e.message || 'Failed to check Spotify Sync health.' });
+    }
+});
+
+app.get('/api/spotify-to-plex/portal-defaults', requireAdmin, async (req, res) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        if (!isSpotifyToPlexEnabled(config)) {
+            return res.status(403).json({ error: 'Spotify Sync is disabled. Enable it in Settings first.' });
+        }
+        const plexUrl = resolveConfiguredPlexServerUrl(config);
+        const plexToken = String(config.plexToken || '').trim();
+        const lidarr = getArrInstances(config, { type: 'lidarr', enabledOnly: true }).find(isArrInstanceReady);
+        return res.json({
+            plex_url: plexUrl || '',
+            plex_token: plexToken || '',
+            lidarr_url: lidarr?.url ? String(lidarr.url).replace(/\/+$/, '') : '',
+            lidarr_api_key: lidarr?.apiKey ? SECRET_MASK : '',
+            mediaServerType: String(config.mediaServerType || 'plex').toLowerCase(),
+            callback_url: resolveSpotifyToPlexCallbackUrl(config, withBasePath, resolvePublicBaseUrlFromConfig),
+            sources: {
+                plex: !!(plexUrl && plexToken),
+                lidarr: !!(lidarr?.url && lidarr?.apiKey),
+            },
+        });
+    } catch (e) {
+        return res.status(500).json({ error: e.message || 'Failed to load portal defaults.' });
+    }
+});
 
 /** Portal-side Collexions health (works even when worker is down). Before catch-all proxy. */
 app.get('/api/collexions/health', requireAdmin, async (req, res) => {

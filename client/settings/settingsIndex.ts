@@ -1,6 +1,6 @@
 export const SETTINGS_TABS = [
     'plex', 'notifications', 'newsletter', 'cleanup', 'mediastack', 'request', 'branding', 'layout',
-    'achievements', 'analytics', 'status', 'invites', 'tasks', 'upgrader', 'collexions', 'media-automation', 'poster-sets', 'overlays', 'editions', 'system', 'contact', 'broadcast', 'stream-rules', 'logs',
+    'achievements', 'analytics', 'status', 'invites', 'tasks', 'upgrader', 'collexions', 'spotify-sync', 'media-automation', 'poster-sets', 'overlays', 'editions', 'system', 'contact', 'broadcast', 'stream-rules', 'logs',
 ] as const;
 
 export type SettingsTabId = typeof SETTINGS_TABS[number];
@@ -94,6 +94,7 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
     { id: 'tasks', tabId: 'tasks', label: 'Background Tasks', group: 'Automation', keywords: ['jobs', 'scheduler', 'run now', 'tasks'] },
     { id: 'upgrader', tabId: 'upgrader', label: 'Library Upgrader', group: 'Automation', keywords: ['upgrader', 'hevc', 'h264', 'codec', 'upgrade', 'sonarr', 'radarr'] },
     { id: 'collexions', tabId: 'collexions', label: 'Collexions', group: 'Automation', keywords: ['collexions', 'collections', 'plex', 'trakt', 'sidecar', 'pinning', 'autostart', 'auto start'] },
+    { id: 'spotify-sync', tabId: 'spotify-sync', label: 'Spotify Sync', group: 'Automation', keywords: ['spotify', 'sync', 'playlist', 'music', 'lidarr', 'plex', 'sidecar'] },
     { id: 'scanner', tabId: 'scanner', label: 'Scanner', group: 'Automation', keywords: ['scanner', 'autoscan', 'plex scan', 'webhook', 'sonarr', 'radarr', 'lidarr', 'triggers', 'library refresh'] },
     { id: 'media-automation', tabId: 'media-automation', label: 'Media Automation', group: 'Automation', keywords: ['media', 'automation', 'ffmpeg', 'worker', 'transcode', 'remux', 'pipeline', 'hardware', 'nvenc', 'qsv', 'vaapi', 'quiet hours', 'schedule', 'overnight', 'gotify'] },
     { id: 'poster-sets', tabId: 'poster-sets', label: 'Poster Sets', group: 'Automation', keywords: ['poster', 'sets', 'mediux', 'theposterdb', 'artwork', 'plex posters', 'title cards'] },

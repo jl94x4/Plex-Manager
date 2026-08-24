@@ -30,6 +30,7 @@ import {
     Bookmark,
     ExternalLink,
     BarChart3,
+    Music,
 } from 'lucide-react';
 import { apiFetch, PORTAL_CSRF_HEADER, PORTAL_CSRF_VALUE } from '../shared/api';
 import { portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
@@ -251,6 +252,7 @@ const SETTINGS_TAB_ICONS: Record<string, React.ComponentType<{ className?: strin
     tasks: ListTodo,
     upgrader: Wand2,
     collexions: Layers,
+    'spotify-sync': Music,
     scanner: Activity,
     'media-automation': Cpu,
     'poster-sets': ImageIcon,
@@ -339,6 +341,7 @@ const SETTINGS_TAB_TRANSLATION_KEYS: Record<string, string> = {
     tasks: 'settings.navigation.tabs.tasks',
     upgrader: 'settings.navigation.tabs.upgrader',
     collexions: 'settings.navigation.tabs.collexions',
+    'spotify-sync': 'settings.navigation.tabs.spotifySync',
     scanner: 'settings.navigation.tabs.scanner',
     'media-automation': 'settings.navigation.tabs.mediaAutomation',
     'poster-sets': 'settings.navigation.tabs.posterSets',
@@ -528,7 +531,7 @@ export const SettingsDashboard: React.FC = () => {
         if (mediaServerType === 'plex') return SETTINGS_TAB_GROUPS;
         return SETTINGS_TAB_GROUPS.map((group) => ({
             ...group,
-            tabs: group.tabs.filter((tab) => tab.id !== 'collexions' && tab.id !== 'overlays' && tab.id !== 'editions'),
+            tabs: group.tabs.filter((tab) => tab.id !== 'collexions' && tab.id !== 'spotify-sync' && tab.id !== 'overlays' && tab.id !== 'editions'),
         })).filter((group) => group.tabs.length > 0);
     }, [mediaServerType]);
     const settingsTabsFlat = settingsTabGroups.flatMap((group) => group.tabs);
@@ -564,6 +567,22 @@ export const SettingsDashboard: React.FC = () => {
         window.addEventListener('hashchange', syncTabFromHash);
         return () => window.removeEventListener('hashchange', syncTabFromHash);
     }, []);
+
+    useEffect(() => {
+        if (activeTab !== 'spotify-sync' || !spotifyToPlexEnabled) {
+            setSpotifySyncHealth(null);
+            return;
+        }
+        let cancelled = false;
+        void apiFetch('/api/spotify-to-plex/health')
+            .then((data) => {
+                if (!cancelled) setSpotifySyncHealth(data || null);
+            })
+            .catch(() => {
+                if (!cancelled) setSpotifySyncHealth({ ok: false, issues: ['Health check failed'] });
+            });
+        return () => { cancelled = true; };
+    }, [activeTab, spotifyToPlexEnabled, spotifyToPlexInternalUrl]);
 
     useEffect(() => {
         if (!scrollToSection) return;
@@ -672,6 +691,7 @@ export const SettingsDashboard: React.FC = () => {
     const [maintenanceExperimentalEnabled, setMaintenanceExperimentalEnabled] = useState(false);
     const [upgraderEnabled, setUpgraderEnabled] = useState(false);
     const [collexionsEnabled, setCollexionsEnabled] = useState(false);
+    const [spotifyToPlexEnabled, setSpotifyToPlexEnabled] = useState(false);
     const [scannerEnabled, setScannerEnabled] = useState(false);
     const [scannerHomeWidgetEnabled, setScannerHomeWidgetEnabled] = useState(false);
     const [mediaAutomationEnabled, setMediaAutomationEnabled] = useState(false);
@@ -753,6 +773,8 @@ export const SettingsDashboard: React.FC = () => {
     const [collexionsAutostart, setCollexionsAutostart] = useState(false);
     const [collexionsInternalUrl, setCollexionsInternalUrl] = useState('');
     const [collexionsServiceKey, setCollexionsServiceKey] = useState('');
+    const [spotifyToPlexInternalUrl, setSpotifyToPlexInternalUrl] = useState('');
+    const [spotifySyncHealth, setSpotifySyncHealth] = useState<{ ok?: boolean; issues?: string[] } | null>(null);
     const [upgraderDefaultPreset, setUpgraderDefaultPreset] = useState('non_hevc');
     const [upgraderMinSizeGB, setUpgraderMinSizeGB] = useState(5);
     const [upgraderAutomationEnabled, setUpgraderAutomationEnabled] = useState(false);
@@ -1576,6 +1598,7 @@ export const SettingsDashboard: React.FC = () => {
             if (initialSettings.maintenanceExperimentalEnabled !== undefined) setMaintenanceExperimentalEnabled(!!initialSettings.maintenanceExperimentalEnabled);
             if (initialSettings.upgraderEnabled !== undefined) setUpgraderEnabled(!!initialSettings.upgraderEnabled);
             if (initialSettings.collexionsEnabled !== undefined) setCollexionsEnabled(!!initialSettings.collexionsEnabled);
+            if (initialSettings.spotifyToPlexEnabled !== undefined) setSpotifyToPlexEnabled(!!initialSettings.spotifyToPlexEnabled);
             if (initialSettings.scannerEnabled !== undefined) setScannerEnabled(!!initialSettings.scannerEnabled);
             if (initialSettings.scannerHomeWidgetEnabled !== undefined) {
                 setScannerHomeWidgetEnabled(!!initialSettings.scannerHomeWidgetEnabled);
@@ -1869,6 +1892,7 @@ export const SettingsDashboard: React.FC = () => {
             if (initialSettings.collexionsAutostart !== undefined) setCollexionsAutostart(!!initialSettings.collexionsAutostart);
             if (initialSettings.collexionsInternalUrl !== undefined) setCollexionsInternalUrl(String(initialSettings.collexionsInternalUrl || ''));
             if (initialSettings.collexionsServiceKey !== undefined) setCollexionsServiceKey(String(initialSettings.collexionsServiceKey || ''));
+            if (initialSettings.spotifyToPlexInternalUrl !== undefined) setSpotifyToPlexInternalUrl(String(initialSettings.spotifyToPlexInternalUrl || ''));
             if (initialSettings.upgraderDefaultPreset) setUpgraderDefaultPreset(initialSettings.upgraderDefaultPreset);
             if (initialSettings.upgraderMinSizeGB !== undefined) setUpgraderMinSizeGB(Math.max(0, Number(initialSettings.upgraderMinSizeGB) || 5));
             if (initialSettings.upgraderAutomationEnabled !== undefined) setUpgraderAutomationEnabled(!!initialSettings.upgraderAutomationEnabled);
@@ -2199,6 +2223,7 @@ export const SettingsDashboard: React.FC = () => {
             maintenanceExperimentalEnabled,
             upgraderEnabled,
             collexionsEnabled,
+            spotifyToPlexEnabled,
             scannerEnabled,
             scannerHomeWidgetEnabled,
             scannerWebhooksVisible,
@@ -2275,6 +2300,7 @@ export const SettingsDashboard: React.FC = () => {
             collexionsAutostart,
             collexionsInternalUrl,
             collexionsServiceKey,
+            spotifyToPlexInternalUrl,
             upgraderDefaultPreset,
             upgraderMinSizeGB,
             upgraderAutomationEnabled,
@@ -2527,7 +2553,8 @@ export const SettingsDashboard: React.FC = () => {
                                             if (next !== 'plex') {
                                                 setCollexionsEnabled(false);
                                                 setCollexionsAutostart(false);
-                                                if (activeTab === 'collexions') setActiveTab('plex');
+                                                setSpotifyToPlexEnabled(false);
+                                                if (activeTab === 'collexions' || activeTab === 'spotify-sync') setActiveTab('plex');
                                             }
                                         }}
                                         options={[
@@ -3939,6 +3966,7 @@ export const SettingsDashboard: React.FC = () => {
                                     featureStatus={{
                                         upgrader: upgraderEnabled,
                                         collexions: collexionsEnabled,
+                                        spotifySync: spotifyToPlexEnabled,
                                         scanner: scannerEnabled,
                                         mediaAutomation: mediaAutomationEnabled,
                                         posterSets: posterSetsEnabled,
@@ -4872,6 +4900,71 @@ export const SettingsDashboard: React.FC = () => {
                                     </p>
                                 )}
                                 <p className="text-[11px] text-muted mt-2">After changing these options, click Save Settings. Admins use portal login — no Collexions password.</p>
+                            </section>
+                        </div>
+                    )}
+                    {activeTab === 'spotify-sync' && mediaServerType === 'plex' && (
+                        <div className="mb-8 animate-fade-in space-y-6">
+                            <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">Spotify Sync</h3>
+                            <section id={getSettingsSectionElementId('spotify-sync')} className="space-y-3 scroll-mt-24">
+                                <p className="text-xs text-muted -mt-2 mb-1">
+                                    Plex-only integration — syncs Spotify playlists to Plex via the{' '}
+                                    <a href="https://github.com/jjdenhertog/spotify-to-plex" target="_blank" rel="noreferrer" className="text-plex hover:underline">spotify-to-plex</a> sidecar.
+                                </p>
+                                <SettingsToggleRow
+                                    title="Enable Spotify Sync"
+                                    hint={<SettingHint>Admin-only. Runs the spotify-to-plex container (or external sidecar) and embeds its UI in the portal nav. OFF by default.</SettingHint>}
+                                    checked={spotifyToPlexEnabled}
+                                    onChange={setSpotifyToPlexEnabled}
+                                    border={false}
+                                />
+                                <p className={`text-xs mt-2 font-semibold ${spotifyToPlexEnabled ? 'text-green-300' : 'text-yellow-300'}`}>
+                                    Current status: {spotifyToPlexEnabled
+                                        ? (spotifyToPlexInternalUrl.trim() ? 'ON (internal URL set)' : 'Enabled (set internal URL)')
+                                        : 'OFF'}
+                                    {spotifySyncHealth?.ok ? ' · worker reachable' : ''}
+                                </p>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                                    <div>
+                                        <label className="font-semibold text-sm block mb-2">Internal URL</label>
+                                        <input
+                                            type="text"
+                                            className="w-full p-2 rounded border border-border bg-background text-text"
+                                            placeholder="http://spotify-to-plex:9030"
+                                            value={spotifyToPlexInternalUrl}
+                                            onChange={(e) => setSpotifyToPlexInternalUrl(e.target.value)}
+                                            disabled={!spotifyToPlexEnabled}
+                                        />
+                                        <p className="text-[11px] text-muted mt-1">Docker service hostname (e.g. http://spotify-to-plex:9030). Requires ALLOW_PRIVATE_INTEGRATION_URLS=true on LAN hosts.</p>
+                                    </div>
+                                    <div>
+                                        <label className="font-semibold text-sm block mb-2">Spotify redirect URI</label>
+                                        <input
+                                            type="text"
+                                            readOnly
+                                            className="w-full p-2 rounded border border-border bg-background/60 text-text text-sm"
+                                            value={String(initialSettings.spotifyToPlexCallbackUrl || '')}
+                                        />
+                                        <p className="text-[11px] text-muted mt-1">Register this exact URL in your Spotify Developer app. Set Public Base URL in Portal UI first.</p>
+                                    </div>
+                                </div>
+                                {spotifyToPlexEnabled && spotifySyncHealth?.issues?.length ? (
+                                    <p className="text-xs text-yellow-300 mt-2">{spotifySyncHealth.issues.join(' · ')}</p>
+                                ) : null}
+                                <p className="text-[11px] text-muted mt-2">
+                                    Sidecar config volume: <code className="text-xs">config/spotify-to-plex/</code>. Scheduled sync runs inside the sidecar (daily by default).
+                                    Set <code className="text-xs">SPOTIFY_API_REDIRECT_URI</code> on the container to the redirect URI above.
+                                </p>
+                                {spotifyToPlexEnabled && (
+                                    <button
+                                        type="button"
+                                        className="mt-3 px-4 py-2 rounded-md font-bold transition-all bg-plex text-background hover:bg-plex-hover"
+                                        onClick={() => window.location.assign(portalUrl('/spotify-sync'))}
+                                    >
+                                        Open Spotify Sync
+                                    </button>
+                                )}
+                                <p className="text-[11px] text-muted mt-2">After changing these options, click Save Settings.</p>
                             </section>
                         </div>
                     )}

@@ -50,3 +50,25 @@ services:
       timeout: 5s
       retries: 3
       start_period: 20s
+
+  spotify-to-plex:
+    image: jjdenhertog/spotify-to-plex:latest
+    container_name: spotify-to-plex
+    restart: unless-stopped
+    environment:
+      SPOTIFY_API_CLIENT_ID: ${SPOTIFY_API_CLIENT_ID:-}
+      SPOTIFY_API_CLIENT_SECRET: ${SPOTIFY_API_CLIENT_SECRET:-}
+      SPOTIFY_API_REDIRECT_URI: ${SPOTIFY_TO_PLEX_REDIRECT_URI:-}
+      ENCRYPTION_KEY: ${SPOTIFY_TO_PLEX_ENCRYPTION_KEY:-}
+      PLEX_APP_ID: eXf+f9ktw3CZ8i45OY468WxriOCtoFxuNPzVeDcAwfw=
+      TZ: ${TZ:-UTC}
+      SYNC_ON_STARTUP: ${SPOTIFY_TO_PLEX_SYNC_ON_STARTUP:-false}
+    volumes:
+      - ./config/spotify-to-plex:/app/config
+    # Do not publish 9030 publicly — the portal embeds the UI and proxies OAuth via /api/spotify-to-plex/callback
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9030/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s

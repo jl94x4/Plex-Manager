@@ -11703,7 +11703,7 @@ export const MaintenanceDashboard: React.FC = () => {
 interface NavigationProps {
     currentRoute: string;
     onNavigate: (
-        route: 'admin' | 'user' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'editions' | 'requests' | 'discovery' | 'about' | 'achievements' | 'support' | 'chat' | 'preferences' | 'profile' | 'external',
+        route: 'admin' | 'user' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'spotify-sync' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'editions' | 'requests' | 'discovery' | 'about' | 'achievements' | 'support' | 'chat' | 'preferences' | 'profile' | 'external',
         options?: { hash?: string; reviewId?: number; path?: string },
     ) => void;
     onLogout: () => void;
@@ -12005,6 +12005,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         'maintenance': { label: t('navigation.cleaner'), icon: Shield, route: 'maintenance', adminOnly: true },
         'upgrader': { label: t('navigation.upgrader'), icon: ArrowUpCircle, route: 'upgrader', adminOnly: true },
         'collexions': { label: t('navigation.collexions'), icon: Layers, route: 'collexions', adminOnly: true },
+        'spotify-sync': { label: t('navigation.spotifySync'), icon: Music, route: 'spotify-sync', adminOnly: true },
         'scanner': { label: t('navigation.scanner'), icon: Radar, route: 'scanner', adminOnly: true },
         'media-automation': { label: t('navigation.mediaAutomation'), icon: Cpu, route: 'media-automation', adminOnly: true },
         'poster-sets': { label: t('navigation.posterSets'), icon: ImageIcon, route: 'poster-sets', adminOnly: true },
