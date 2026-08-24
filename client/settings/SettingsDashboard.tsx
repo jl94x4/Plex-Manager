@@ -569,22 +569,6 @@ export const SettingsDashboard: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        if (activeTab !== 'spotify-sync' || !spotifyToPlexEnabled) {
-            setSpotifySyncHealth(null);
-            return;
-        }
-        let cancelled = false;
-        void apiFetch('/api/spotify-to-plex/health')
-            .then((data) => {
-                if (!cancelled) setSpotifySyncHealth(data || null);
-            })
-            .catch(() => {
-                if (!cancelled) setSpotifySyncHealth({ ok: false, issues: ['Health check failed'] });
-            });
-        return () => { cancelled = true; };
-    }, [activeTab, spotifyToPlexEnabled, spotifyToPlexInternalUrl]);
-
-    useEffect(() => {
         if (!scrollToSection) return;
         const timer = window.setTimeout(() => {
             const el = document.getElementById(getSettingsSectionElementId(scrollToSection));
@@ -784,6 +768,23 @@ export const SettingsDashboard: React.FC = () => {
     const [spotifyPortalImportMessage, setSpotifyPortalImportMessage] = useState('');
     const [spotifyPortalImporting, setSpotifyPortalImporting] = useState(false);
     const [spotifySyncStarting, setSpotifySyncStarting] = useState(false);
+
+    useEffect(() => {
+        if (activeTab !== 'spotify-sync' || !spotifyToPlexEnabled) {
+            setSpotifySyncHealth(null);
+            return;
+        }
+        let cancelled = false;
+        void apiFetch('/api/spotify-to-plex/health')
+            .then((data) => {
+                if (!cancelled) setSpotifySyncHealth(data || null);
+            })
+            .catch(() => {
+                if (!cancelled) setSpotifySyncHealth({ ok: false, issues: ['Health check failed'] });
+            });
+        return () => { cancelled = true; };
+    }, [activeTab, spotifyToPlexEnabled, spotifyToPlexInternalUrl]);
+
     const [upgraderDefaultPreset, setUpgraderDefaultPreset] = useState('non_hevc');
     const [upgraderMinSizeGB, setUpgraderMinSizeGB] = useState(5);
     const [upgraderAutomationEnabled, setUpgraderAutomationEnabled] = useState(false);
