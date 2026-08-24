@@ -27,6 +27,7 @@ import {
     SERVER_PWA_MASKABLE_BADGE_SCALE,
 } from './lib/portal-branding.js';
 import { resolvePackageVersion } from './lib/resolve-package-version.js';
+import { registrableDomainFromHost } from './lib/registrable-domain.js';
 import {
     getDefaultScannerConfig,
     normalizeScannerConfig,
