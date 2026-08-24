@@ -95,7 +95,7 @@ import {
     pruneDashboardLayoutCustomModules,
     sanitizeHomeCustomModulesForSession,
 } from './lib/home-custom-modules.js';
-import { createCustomTabEmbedProxyHandler, createHomeModuleEmbedProxyHandler } from './lib/custom-tab-embed-proxy.js';
+import { createCustomTabEmbedProxyHandler, createHomeModuleEmbedProxyHandler, isPortalEmbedProxyPath } from './lib/custom-tab-embed-proxy.js';
 import { createSupportTicketFromMediaIssue, attachTicketIdsToIssues } from './lib/support-tickets/fromIssue.js';
 import { mapTautulliHistoryRowToPlexItem } from './lib/achievements/tautulliHistory.js';
 import { isTautulliWatchHistorySource, buildAchievementsHomeRankContext, summarizeAchievementsBackfill, levelProgress } from './lib/achievements/index.js';
@@ -561,11 +561,19 @@ let CLIENT_ID = process.env.CLIENT_ID || 'plex-expiry-manager-client-id'; // Now
 // --- Security: HTTP Security Headers ---
 app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'DENY');
+    // Embed proxy responses are framed by the portal itself. DENY / frame-ancestors 'none'
+    // makes Chrome show "portal.example refused to connect" in the iframe.
+    const embedProxy = isPortalEmbedProxyPath(req.path);
+    res.setHeader('X-Frame-Options', embedProxy ? 'SAMEORIGIN' : 'DENY');
     res.setHeader('X-XSS-Protection', '1; mode=block');
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-    res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-src 'self' https://www.openstreetmap.org; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'");
+    res.setHeader(
+        'Content-Security-Policy',
+        embedProxy
+            ? "frame-ancestors 'self'; object-src 'none'"
+            : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-src 'self' https://www.openstreetmap.org; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'",
+    );
     if (req.secure || FORCE_SECURE_COOKIES) {
         res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     }
