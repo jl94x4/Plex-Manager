@@ -1804,7 +1804,7 @@ const apiCache = createTtlLruCache({
 });
 
 /** Shared media-server sessions cache for Now Playing / watching count (SWR). */
-const mediaSessionsSwr = createSwrCache({ name: 'media-sessions' });
+const mediaSessionsSwr = createSwrCache({ name: 'media-sessions', maxEntries: 8 });
 const MEDIA_SESSIONS_FRESH_MS = 8_000;
 const MEDIA_SESSIONS_STALE_MS = 45_000;
 const PLEX_SESSIONS_SWR_KEY = 'plex_status_sessions';
@@ -8907,6 +8907,21 @@ const discoveryLibraryStackFingerprint = (cfg) => JSON.stringify({
 /** Overlay the current member's active portal requests onto discover items (Requested badges). */
 const memberActiveRequestsOverlayCache = new Map(); // userKey → { at, byKey: Map }
 const MEMBER_ACTIVE_REQUESTS_OVERLAY_TTL_MS = 20 * 1000;
+const MEMBER_ACTIVE_REQUESTS_OVERLAY_MAX_ENTRIES = 200;
+
+const pruneMemberActiveRequestsOverlayCache = () => {
+    const now = Date.now();
+    for (const [key, entry] of memberActiveRequestsOverlayCache.entries()) {
+        if (!entry || now - entry.at >= MEMBER_ACTIVE_REQUESTS_OVERLAY_TTL_MS) {
+            memberActiveRequestsOverlayCache.delete(key);
+        }
+    }
+    while (memberActiveRequestsOverlayCache.size > MEMBER_ACTIVE_REQUESTS_OVERLAY_MAX_ENTRIES) {
+        const oldest = memberActiveRequestsOverlayCache.keys().next().value;
+        if (oldest === undefined) break;
+        memberActiveRequestsOverlayCache.delete(oldest);
+    }
+};
 
 const overlayPortalPendingRequestsOntoItems = async (config, sessionUser, items = []) => {
     if (getRequestEngine(config) !== 'portal' || !sessionUser || !Array.isArray(items) || !items.length) {
@@ -8919,6 +8934,7 @@ const overlayPortalPendingRequestsOntoItems = async (config, sessionUser, items 
         if (cached && (Date.now() - cached.at) < MEMBER_ACTIVE_REQUESTS_OVERLAY_TTL_MS) {
             activeByKey = cached.byKey;
         } else {
+            if (cached && userKey) memberActiveRequestsOverlayCache.delete(userKey);
             const portalRequests = getPortalRequestService(config);
             // Include pending + approved — auto-approve clears "pending" immediately and was
             // leaving detail pages stuck on "Request Movie".
@@ -8952,6 +8968,7 @@ const overlayPortalPendingRequestsOntoItems = async (config, sessionUser, items 
                 }
             }
             if (userKey) {
+                pruneMemberActiveRequestsOverlayCache();
                 memberActiveRequestsOverlayCache.set(userKey, { at: Date.now(), byKey: activeByKey });
             }
         }
@@ -9047,6 +9064,7 @@ const overlaySeerrPendingRequestsOntoItems = async (config, sessionUser, items =
         if (cached && (Date.now() - cached.at) < MEMBER_ACTIVE_REQUESTS_OVERLAY_TTL_MS) {
             activeByKey = cached.byKey;
         } else {
+            if (cached && userKey) memberActiveRequestsOverlayCache.delete(userKey);
             const listed = await requestAppService.listMemberRequests(config, sessionUser, {
                 filter: 'all',
                 take: 50,
@@ -12901,8 +12919,11 @@ app.get('/api/admin/diagnostics', requireAdmin, async (req, res) => {
                     musicBrowse: { size: musicBrowseCache.size, maxEntries: 40 },
                     musicResolve: { size: musicResolveCache.size, maxEntries: 500 },
                     musicArtistPayload: { size: musicArtistPayloadCache.size, maxEntries: 200 },
-                    arrRescanList: { size: arrRescanListCache.size, maxEntries: null },
-                    memberActiveRequestsOverlay: { size: memberActiveRequestsOverlayCache.size, maxEntries: null },
+                    arrRescanList: { size: arrRescanListCache.size, maxEntries: ARR_RESCAN_CACHE_MAX_ENTRIES },
+                    memberActiveRequestsOverlay: {
+                        size: memberActiveRequestsOverlayCache.size,
+                        maxEntries: MEMBER_ACTIVE_REQUESTS_OVERLAY_MAX_ENTRIES,
+                    },
                     fileLocks: { size: fileLocks.size, maxEntries: null },
                     plexOauthStates: { size: plexOauthStates.size, maxEntries: null },
                     jellyfinQuickConnectSessions: { size: jellyfinQuickConnectSessions.size, maxEntries: null },
@@ -25710,11 +25731,24 @@ const countActiveMediaStreams = async () => {
 // Arr rescan hooks: match the changed file to a Sonarr series / Radarr movie by
 // path prefix (library lists cached briefly) and request a targeted rescan.
 const ARR_RESCAN_CACHE_TTL_MS = 5 * 60_000;
+const ARR_RESCAN_CACHE_MAX_ENTRIES = 32;
 const arrRescanListCache = new Map();
+const pruneArrRescanListCache = () => {
+    const now = Date.now();
+    for (const [key, entry] of arrRescanListCache.entries()) {
+        if (!entry || now - entry.at >= ARR_RESCAN_CACHE_TTL_MS) arrRescanListCache.delete(key);
+    }
+    while (arrRescanListCache.size > ARR_RESCAN_CACHE_MAX_ENTRIES) {
+        const oldest = arrRescanListCache.keys().next().value;
+        if (oldest === undefined) break;
+        arrRescanListCache.delete(oldest);
+    }
+};
 const arrCachedList = async (instance, endpoint) => {
     const key = `${instance.id}:${endpoint}`;
     const cached = arrRescanListCache.get(key);
     if (cached && Date.now() - cached.at < ARR_RESCAN_CACHE_TTL_MS) return cached.items;
+    if (cached) arrRescanListCache.delete(key);
     const items = await fetchArrInstanceJson(instance, endpoint, {
         resolveUrl: resolveIntegrationUrlForFetch,
         fetchImpl: fetch,
@@ -25722,6 +25756,7 @@ const arrCachedList = async (instance, endpoint) => {
     });
     const list = Array.isArray(items) ? items : [];
     arrRescanListCache.set(key, { at: Date.now(), items: list });
+    pruneArrRescanListCache();
     return list;
 };
 
