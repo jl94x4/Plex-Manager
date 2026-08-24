@@ -144,7 +144,7 @@ export const createDefaultCustomNavTab = (): CustomNavTab => ({
     enabled: true,
 });
 
-export type CustomTabEmbedIssue = 'mixed-content' | 'blocked-host';
+export type CustomTabEmbedIssue = 'mixed-content' | 'blocked-host' | 'proxy-incompatible';
 
 const BLOCKED_EMBED_HOST_SUFFIXES = [
     'google.com',
@@ -158,26 +158,6 @@ const BLOCKED_EMBED_HOST_SUFFIXES = [
     'office.com',
     'apple.com',
 ];
-
-/** Predict iframe failures before the browser shows a broken embed. */
-export const detectCustomTabEmbedIssue = (
-    url: string,
-    portalProtocol = typeof window !== 'undefined' ? window.location.protocol : 'https:',
-): CustomTabEmbedIssue | null => {
-    const trimmed = String(url || '').trim();
-    if (!trimmed) return null;
-    try {
-        const parsed = new URL(trimmed, typeof window !== 'undefined' ? window.location.origin : 'https://localhost');
-        if (portalProtocol === 'https:' && parsed.protocol === 'http:') return 'mixed-content';
-        const host = parsed.hostname.toLowerCase();
-        for (const suffix of BLOCKED_EMBED_HOST_SUFFIXES) {
-            if (host === suffix || host.endsWith(`.${suffix}`)) return 'blocked-host';
-        }
-    } catch {
-        return null;
-    }
-    return null;
-};
 
 const registrableDomain = (hostname: string) => {
     const parts = String(hostname || '').toLowerCase().split('.').filter(Boolean);
@@ -194,19 +174,51 @@ export const isSameRegistrableDomainHost = (targetHost: string, portalHost: stri
     return base.length > 0 && target.endsWith(`.${base}`) && registrableDomain(target) === base;
 };
 
-/** Route embeds through the portal when direct iframe would be blocked. */
-export const shouldUseCustomTabEmbedProxy = (url: string): boolean => {
-    if (detectCustomTabEmbedIssue(url) === 'blocked-host') return false;
-    if (detectCustomTabEmbedIssue(url) === 'mixed-content') return true;
+/** Immich / SvelteKit apps route on window.location.pathname and cannot run under /api/custom-tab-embed/…. */
+export const isDirectEmbedOnlyAppUrl = (url: string) => {
     try {
-        const portalProtocol = typeof window !== 'undefined' ? window.location.protocol : 'https:';
-        const target = new URL(String(url || '').trim(), typeof window !== 'undefined' ? window.location.origin : 'https://localhost');
+        const parsed = new URL(String(url || '').trim(), typeof window !== 'undefined' ? window.location.origin : 'https://localhost');
+        const host = parsed.hostname.toLowerCase();
+        const port = parsed.port;
+        if (port === '8888' || port === '2283') return true;
+        if (host === 'photos.strymx.co.uk' || /^photos\./i.test(host)) return true;
+        return false;
+    } catch {
+        return false;
+    }
+};
+
+/** Use HTTPS for tunnel subdomains that only publish over TLS (e.g. photos.strymx.co.uk). */
+export const normalizeCustomTabEmbedUrl = (url: string) => {
+    const trimmed = String(url || '').trim();
+    if (!trimmed) return trimmed;
+    try {
+        const parsed = new URL(trimmed, typeof window !== 'undefined' ? window.location.origin : 'https://localhost');
+        const host = parsed.hostname.toLowerCase();
+        if ((host === 'photos.strymx.co.uk' || /^photos\./i.test(host)) && parsed.protocol === 'http:') {
+            parsed.protocol = 'https:';
+            return parsed.href;
+        }
+    } catch {
+        return trimmed;
+    }
+    return trimmed;
+};
+
+const wouldNeedEmbedProxy = (
+    url: string,
+    portalProtocol = typeof window !== 'undefined' ? window.location.protocol : 'https:',
+) => {
+    try {
+        const parsed = new URL(String(url || '').trim(), typeof window !== 'undefined' ? window.location.origin : 'https://localhost');
+        if (portalProtocol === 'https:' && parsed.protocol === 'http:') return true;
         const portalHost = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : '';
-        if (!portalHost || target.hostname.toLowerCase() === portalHost) return false;
+        const targetHost = parsed.hostname.toLowerCase();
+        if (!portalHost || targetHost === portalHost) return false;
         if (
             portalProtocol === 'https:'
-            && target.protocol === 'https:'
-            && isSameRegistrableDomainHost(target.hostname, portalHost)
+            && parsed.protocol === 'https:'
+            && isSameRegistrableDomainHost(targetHost, portalHost)
         ) {
             return false;
         }
@@ -214,7 +226,37 @@ export const shouldUseCustomTabEmbedProxy = (url: string): boolean => {
     } catch {
         return false;
     }
-    return false;
+};
+
+/** Predict iframe failures before the browser shows a broken embed. */
+export const detectCustomTabEmbedIssue = (
+    url: string,
+    portalProtocol = typeof window !== 'undefined' ? window.location.protocol : 'https:',
+): CustomTabEmbedIssue | null => {
+    const trimmed = String(url || '').trim();
+    if (!trimmed) return null;
+    try {
+        const parsed = new URL(trimmed, typeof window !== 'undefined' ? window.location.origin : 'https://localhost');
+        const host = parsed.hostname.toLowerCase();
+        for (const suffix of BLOCKED_EMBED_HOST_SUFFIXES) {
+            if (host === suffix || host.endsWith(`.${suffix}`)) return 'blocked-host';
+        }
+        if (isDirectEmbedOnlyAppUrl(trimmed) && wouldNeedEmbedProxy(trimmed, portalProtocol)) {
+            return 'proxy-incompatible';
+        }
+        if (portalProtocol === 'https:' && parsed.protocol === 'http:') return 'mixed-content';
+    } catch {
+        return null;
+    }
+    return null;
+};
+
+/** Route embeds through the portal when direct iframe would be blocked. */
+export const shouldUseCustomTabEmbedProxy = (url: string): boolean => {
+    const normalized = normalizeCustomTabEmbedUrl(url);
+    if (detectCustomTabEmbedIssue(normalized) === 'blocked-host') return false;
+    if (detectCustomTabEmbedIssue(normalized) === 'proxy-incompatible') return false;
+    return wouldNeedEmbedProxy(normalized);
 };
 
 export const getCustomTabEmbedProxySrc = (tabId: string) => (

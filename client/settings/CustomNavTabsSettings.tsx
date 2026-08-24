@@ -193,6 +193,11 @@ export const CustomNavTabsSettings: React.FC<Props> = ({
                                                 {t('settings.navigation.customTabs.embedWarningBlockedHost')}
                                             </p>
                                         ) : null}
+                                        {tab.openMode === 'embed' && detectCustomTabEmbedIssue(tab.url) === 'proxy-incompatible' ? (
+                                            <p className="mt-2 text-xs font-semibold text-yellow-300/90">
+                                                {t('settings.navigation.customTabs.embedWarningProxyIncompatible')}
+                                            </p>
+                                        ) : null}
                                         {tab.openMode === 'embed' && shouldUseCustomTabEmbedProxy(tab.url) ? (
                                             <p className="mt-2 text-xs font-semibold text-sky-300/90">
                                                 {detectCustomTabEmbedIssue(tab.url) === 'mixed-content'

@@ -6,6 +6,7 @@ import {
     canAccessCustomNavTab,
     detectCustomTabEmbedIssue,
     getCustomTabEmbedProxySrc,
+    normalizeCustomTabEmbedUrl,
     shouldUseCustomTabEmbedProxy,
 } from '../shared/customNavTabs';
 
@@ -23,22 +24,20 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = 
     );
     const [iframeKey, setIframeKey] = useState(0);
     const [embedBlocked, setEmbedBlocked] = useState(false);
+    const resolvedUrl = useMemo(() => normalizeCustomTabEmbedUrl(tab?.url || ''), [tab?.url]);
     const useEmbedProxy = useMemo(
-        () => !!(tab?.url && shouldUseCustomTabEmbedProxy(tab.url)),
-        [tab?.url],
+        () => !!(resolvedUrl && shouldUseCustomTabEmbedProxy(resolvedUrl)),
+        [resolvedUrl],
     );
     const predictedEmbedIssue = useMemo(() => {
-        if (!tab?.url) return null;
-        if (useEmbedProxy) {
-            return detectCustomTabEmbedIssue(tab.url) === 'blocked-host' ? 'blocked-host' : null;
-        }
-        return detectCustomTabEmbedIssue(tab.url);
-    }, [tab?.url, useEmbedProxy]);
+        if (!resolvedUrl) return null;
+        return detectCustomTabEmbedIssue(resolvedUrl);
+    }, [resolvedUrl]);
     const iframeSrc = useMemo(() => {
         if (!tab) return '';
         if (useEmbedProxy) return getCustomTabEmbedProxySrc(tab.id);
-        return tab.url;
-    }, [tab, useEmbedProxy]);
+        return resolvedUrl;
+    }, [tab, useEmbedProxy, resolvedUrl]);
 
     useEffect(() => {
         setEmbedBlocked(false);
@@ -78,7 +77,9 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = 
     const showEmbedWarning = predictedEmbedIssue || embedBlocked;
     const embedWarningText = predictedEmbedIssue === 'blocked-host'
         ? t('settings.navigation.customTabs.embed.blockedHost')
-        : embedBlocked
+        : predictedEmbedIssue === 'proxy-incompatible'
+            ? t('settings.navigation.customTabs.embed.proxyIncompatible')
+            : embedBlocked
             ? t('settings.navigation.customTabs.embed.genericBlocked')
             : '';
 
@@ -106,7 +107,7 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = 
                         </button>
                     ) : null}
                     <a
-                        href={tab.url}
+                        href={resolvedUrl || tab.url}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-2 rounded-xl bg-plex px-3 py-2 text-sm font-bold text-background hover:bg-plex-hover"
@@ -135,7 +136,7 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = 
                     <Globe className="h-12 w-12 text-muted" />
                     <p className="max-w-xl text-sm text-muted">{embedWarningText}</p>
                     <a
-                        href={tab.url}
+                        href={resolvedUrl || tab.url}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-2 rounded-xl bg-plex px-4 py-2 text-sm font-bold text-background hover:bg-plex-hover"

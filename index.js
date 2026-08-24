@@ -568,6 +568,35 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
 
 let CLIENT_ID = process.env.CLIENT_ID || 'plex-expiry-manager-client-id'; // Now dynamically generated if missing
 
+const portalFrameSrcDirective = (hostname = '') => {
+    const parts = String(hostname || '').toLowerCase().split('.').filter(Boolean);
+    const sources = ["'self'", 'https://www.openstreetmap.org'];
+    if (parts.length >= 2) {
+        const base = parts.slice(-2).join('.');
+        if (base) sources.push(`https://*.${base}`);
+    }
+    return `frame-src ${sources.join(' ')}`;
+};
+
+const portalContentSecurityPolicy = (hostname = '', embedProxy = false) => {
+    if (embedProxy) return "frame-ancestors 'self'; object-src 'none'";
+    return [
+        "default-src 'self'",
+        "script-src 'self'",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "img-src 'self' data: blob: https:",
+        "font-src 'self' data: https://fonts.gstatic.com",
+        "connect-src 'self'",
+        portalFrameSrcDirective(hostname),
+        "manifest-src 'self'",
+        "worker-src 'self'",
+        "frame-ancestors 'none'",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+    ].join('; ');
+};
+
 // --- Security: HTTP Security Headers ---
 app.use((req, res, next) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -580,9 +609,7 @@ app.use((req, res, next) => {
     res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
     res.setHeader(
         'Content-Security-Policy',
-        embedProxy
-            ? "frame-ancestors 'self'; object-src 'none'"
-            : "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: blob: https:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self'; frame-src 'self' https://www.openstreetmap.org; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'",
+        portalContentSecurityPolicy(req.hostname, embedProxy),
     );
     if (req.secure || FORCE_SECURE_COOKIES) {
         res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
