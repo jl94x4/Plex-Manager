@@ -179,14 +179,38 @@ export const detectCustomTabEmbedIssue = (
     return null;
 };
 
+const registrableDomain = (hostname: string) => {
+    const parts = String(hostname || '').toLowerCase().split('.').filter(Boolean);
+    if (parts.length <= 2) return parts.join('.');
+    return parts.slice(-2).join('.');
+};
+
+/** HTTPS sibling subdomains (e.g. photos.strymx.co.uk inside portal.strymx.co.uk) can iframe directly. */
+export const isSameRegistrableDomainHost = (targetHost: string, portalHost: string) => {
+    const target = String(targetHost || '').toLowerCase();
+    const portal = String(portalHost || '').toLowerCase();
+    if (!target || !portal || target === portal) return true;
+    const base = registrableDomain(portal);
+    return base.length > 0 && target.endsWith(`.${base}`) && registrableDomain(target) === base;
+};
+
 /** Route embeds through the portal when direct iframe would be blocked. */
 export const shouldUseCustomTabEmbedProxy = (url: string): boolean => {
     if (detectCustomTabEmbedIssue(url) === 'blocked-host') return false;
     if (detectCustomTabEmbedIssue(url) === 'mixed-content') return true;
     try {
+        const portalProtocol = typeof window !== 'undefined' ? window.location.protocol : 'https:';
         const target = new URL(String(url || '').trim(), typeof window !== 'undefined' ? window.location.origin : 'https://localhost');
         const portalHost = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : '';
-        if (portalHost && target.hostname.toLowerCase() !== portalHost) return true;
+        if (!portalHost || target.hostname.toLowerCase() === portalHost) return false;
+        if (
+            portalProtocol === 'https:'
+            && target.protocol === 'https:'
+            && isSameRegistrableDomainHost(target.hostname, portalHost)
+        ) {
+            return false;
+        }
+        return true;
     } catch {
         return false;
     }
