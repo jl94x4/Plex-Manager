@@ -218,10 +218,13 @@ const posterSrcFor = (item: InAppNotification) => {
     return resolveTmdbImageUrl(String(item.meta?.posterPath || ''), 'w185');
 };
 
-const STACK_TILE_W = 40;
-const STACK_TILE_H = 56;
 const STACK_FAN_X = 12;
 const STACK_FAN_Y = 10;
+
+/** Poster tile: mobile 40×56px; desktop md+ 48×72px (2:3). */
+const NOTIF_ARTWORK_SIZE = 'h-14 w-10 md:h-[4.5rem] md:w-12';
+const NOTIF_ARTWORK_STACK_FAN = 'w-[calc(2.5rem+12px)] h-[calc(3.5rem+10px)] md:w-[calc(3rem+12px)] md:h-[calc(4.5rem+10px)]';
+const NOTIF_ARTWORK_STACK_SINGLE = 'w-10 h-14 md:w-12 md:h-[4.5rem]';
 
 const NotificationArtwork: React.FC<{
     item: InAppNotification;
@@ -239,7 +242,7 @@ const NotificationArtwork: React.FC<{
 
     return (
         <span
-            className={`relative inline-flex h-14 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border ${
+            className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden rounded-xl border ${NOTIF_ARTWORK_SIZE} ${
                 peek
                     ? 'shadow-none opacity-70'
                     : 'shadow-[0_6px_14px_rgba(0,0,0,0.28)]'
@@ -255,11 +258,11 @@ const NotificationArtwork: React.FC<{
                     onError={() => setBroken(true)}
                 />
             ) : (
-                <Icon className="h-4 w-4 drop-shadow-[0_1px_4px_rgba(0,0,0,0.45)]" />
+                <Icon className="h-4 w-4 md:h-5 md:w-5 drop-shadow-[0_1px_4px_rgba(0,0,0,0.45)]" />
             )}
             {showPoster && !peek && (
-                <span className={`absolute bottom-0.5 right-0.5 inline-flex h-4 w-4 items-center justify-center rounded-md border shadow-sm ${tone}`}>
-                    <Icon className="h-2.5 w-2.5" />
+                <span className={`absolute bottom-0.5 right-0.5 inline-flex h-4 w-4 md:h-5 md:w-5 items-center justify-center rounded-md border shadow-sm ${tone}`}>
+                    <Icon className="h-2.5 w-2.5 md:h-3 md:w-3" />
                 </span>
             )}
         </span>
@@ -274,11 +277,7 @@ const StackedArtwork: React.FC<{ items: InAppNotification[]; count: number }> = 
     if (!front) return null;
     return (
         <span
-            className="relative inline-flex shrink-0 items-start"
-            style={{
-                width: STACK_TILE_W + (back ? STACK_FAN_X : 0),
-                height: STACK_TILE_H + (back ? STACK_FAN_Y : 0),
-            }}
+            className={`relative inline-flex shrink-0 items-start ${back ? NOTIF_ARTWORK_STACK_FAN : NOTIF_ARTWORK_STACK_SINGLE}`}
         >
             {back && (
                 <span
@@ -326,7 +325,7 @@ const NotificationItemRow: React.FC<{
                     compact ? 'py-1' : 'py-1.5'
                 }`}
             >
-                <div className="flex items-start gap-2.5">
+                <div className="flex items-start gap-2.5 md:gap-3">
                     <NotificationArtwork item={item} />
                     <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-2">
@@ -788,7 +787,7 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                                                     : t('notifications.stack.expand', { count: stack.items.length })}
                                                 className="notif-row-btn min-w-0 flex-1 text-left rounded-xl px-1.5 py-1.5 transition-all duration-200 hover:bg-plex/[0.07] focus-visible:outline-none focus-visible:bg-plex/10"
                                             >
-                                                <div className="flex items-start gap-2.5">
+                                                <div className="flex items-start gap-2.5 md:gap-3">
                                                     <StackedArtwork items={stack.items} count={stack.items.length} />
                                                     <div className="min-w-0 flex-1">
                                                         <div className="flex items-start justify-between gap-2">

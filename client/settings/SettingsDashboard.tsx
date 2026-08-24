@@ -39,7 +39,7 @@ import { CustomSelect, SettingsSwitch, SettingsToggleRow } from '../shared/ui';
 import { Loader, ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { SettingHint, SettingFieldLabel } from './SettingHint';
 import type { User, AuditEntry, DeletedUser, PlexServer, ArrInstance, DownloadClientConfig, CustomNavTab, HomeCustomModule } from '../shared/types';
-import { formatDateTime, formatEventName, hexToRgb, accentHoverRgb, getDaysUntilExpiry, addMonths, addYears, formatDate } from '../shared/format';
+import { formatDateTime, formatEventName, hexToRgb, accentHoverRgb, getDaysUntilExpiry, addMonths, addYears, formatDate, formatPortalDateTime } from '../shared/format';
 
 import { StreamKillRulesPanel } from './StreamKillRulesPanel';
 import { InvitesSettings } from './InvitesSettings';
@@ -1289,9 +1289,8 @@ export const SettingsDashboard: React.FC = () => {
 
     const formatDateTime = (value?: string | null) => {
         if (!value) return t('settings.logs.fallbacks.notAvailable');
-        const date = new Date(value);
-        if (Number.isNaN(date.getTime())) return t('settings.logs.fallbacks.notAvailable');
-        return date.toLocaleString();
+        const formatted = formatPortalDateTime(value);
+        return formatted === 'Unknown' ? t('settings.logs.fallbacks.notAvailable') : formatted;
     };
 
     const stringifyAuditValue = (value: any) => {
@@ -4408,7 +4407,13 @@ export const SettingsDashboard: React.FC = () => {
                                                 <p className="text-xs text-muted mt-1">Shared display defaults.</p>
                                             </div>
                                             <div className="flex-1 min-w-0 divide-y divide-border/40">
-                                                <SettingsToggleRow title="Use 24-Hour Clock across the Portal" checked={use24HourClock} onChange={setUse24HourClock} border={false} />
+                                                <SettingsToggleRow
+                                                    title="Use 24-Hour Clock across the Portal"
+                                                    description="Show times as 13:00 instead of 1:00 PM in watch history, now playing, and dashboards."
+                                                    checked={use24HourClock}
+                                                    onChange={setUse24HourClock}
+                                                    border={false}
+                                                />
                                                 <div id={getSettingsSectionElementId('poster-badges')} className="scroll-mt-24">
                                                     <SettingsToggleRow
                                                         title="Poster Quality Badges"

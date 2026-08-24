@@ -3,9 +3,6 @@ import React from 'react';
 const DAY_LABELS = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-const CELL_GAP_PX = 3;
-const CELL_MIN_PX = 12;
-
 export const ActivityHeatmap: React.FC<{ data: Record<string, number> }> = ({ data }) => {
     const days: { dateStr: string; count: number; date: Date }[] = [];
     const today = new Date();
@@ -45,14 +42,12 @@ export const ActivityHeatmap: React.FC<{ data: Record<string, number> }> = ({ da
         weeks.push(days.slice(i, i + 7));
     }
     const weekCount = weeks.length;
-
-    const gridColumnSize = `minmax(${CELL_MIN_PX}px, 1fr)`;
-    const gridMinWidthPx = weekCount * CELL_MIN_PX + (weekCount - 1) * CELL_GAP_PX;
+    const gridColumnSize = 'minmax(0, 1fr)';
 
     return (
-        <div className="w-full min-w-0 flex flex-col gap-2">
-            <div className="w-full min-w-0 overflow-x-auto overflow-y-visible">
-                <div className="flex gap-1.5 sm:gap-2 items-stretch min-w-full" style={{ minWidth: `${gridMinWidthPx + 28}px` }}>
+        <div className="w-full min-w-0 flex flex-col gap-2 overflow-hidden">
+            <div className="w-full min-w-0 overflow-hidden">
+                <div className="flex gap-1.5 sm:gap-2 w-full min-w-0 items-stretch">
                     <div className="grid grid-rows-7 gap-[3px] shrink-0 w-6 sm:w-7 text-[9px] sm:text-[10px] text-muted font-semibold pt-5">
                         {DAY_LABELS.map((label, i) => (
                             <div key={i} className="flex items-center justify-end pr-0.5 min-h-0 leading-none">
@@ -61,21 +56,21 @@ export const ActivityHeatmap: React.FC<{ data: Record<string, number> }> = ({ da
                         ))}
                     </div>
 
-                    <div className="flex-1 min-w-0 flex flex-col gap-1" style={{ minWidth: gridMinWidthPx }}>
+                    <div className="flex-1 min-w-0 flex flex-col gap-1 overflow-hidden">
                         <div
-                            className="grid gap-[3px] h-4 overflow-visible"
+                            className="grid gap-[3px] h-4 min-w-0"
                             style={{ gridTemplateColumns: `repeat(${weekCount}, ${gridColumnSize})` }}
                         >
                             {weeks.map((week, i) => {
                                 const firstDay = week[0];
-                                if (!firstDay) return <div key={i} className="relative h-4" />;
+                                if (!firstDay) return <div key={i} className="relative h-4 min-w-0" />;
                                 const prevMonth = weeks[i - 1]?.[0]?.date.getMonth();
                                 const isNewMonth = i === 0 || firstDay.date.getMonth() !== prevMonth;
                                 return (
-                                    <div key={i} className="relative h-4 overflow-visible">
+                                    <div key={i} className="relative h-4 min-w-0 overflow-visible">
                                         {isNewMonth ? (
                                             <span
-                                                className="absolute left-0 top-0 z-10 whitespace-nowrap text-[10px] sm:text-[11px] text-muted font-semibold leading-4 pointer-events-none"
+                                                className="absolute left-0 top-0 z-10 whitespace-nowrap text-[9px] sm:text-[10px] text-muted font-semibold leading-4 pointer-events-none"
                                             >
                                                 {MONTHS[firstDay.date.getMonth()]}
                                             </span>
@@ -86,7 +81,7 @@ export const ActivityHeatmap: React.FC<{ data: Record<string, number> }> = ({ da
                         </div>
 
                         <div
-                            className="grid grid-rows-7 grid-flow-col gap-[3px] w-full overflow-visible"
+                            className="grid grid-rows-7 grid-flow-col gap-[3px] w-full min-w-0"
                             style={{ gridAutoColumns: gridColumnSize }}
                         >
                             {days.map((day) => (

@@ -11,7 +11,7 @@ import { InAppNotificationsBell } from './shared/InAppNotificationsBell';
 import { IN_APP_NOTIFICATIONS_CHANGED_EVENT } from './shared/inAppNotificationsRefresh';
 import { getPublicOrigin, logoUrl, portalUrl, resolvePortalAssetUrl, stripBasePath, PLEX_ICON_URL, JELLYFIN_ICON_URL, EMBY_ICON_URL } from './shared/basePath';
 import { LoginBrandMark } from './shared/LoginBrandMark';
-import { formatDate, getDaysUntilExpiry, getAccessProgressPct, addMonths, addYears, formatTime, formatEventName, formatDateTime, hexToRgb, formatSizeCeil, formatStreamingHour } from './shared/format';
+import { formatDate, getDaysUntilExpiry, getAccessProgressPct, addMonths, addYears, formatTime, formatEventName, formatDateTime, hexToRgb, formatSizeCeil, formatStreamingHour, formatPortalDateTime, formatPortalDateTimeCompact } from './shared/format';
 import { CustomSelect, ConfirmModal, StyledCheckbox, ScrollReveal } from './shared/ui';
 import { PeriodDropdown } from './shared/PeriodDropdown';
 import { ActivityHeatmap } from './shared/ActivityHeatmap';
@@ -1169,7 +1169,7 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                                                         )}
                                                         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1">
                                                             <span className="text-plex font-mono text-[10px]">
-                                                                {h.viewedAt ? (h.viewedAt > 9999999999 ? new Date(h.viewedAt).toLocaleString() : new Date(h.viewedAt * 1000).toLocaleString()) : t('userAnalytics.history.unknownDate')}
+                                                                {h.viewedAt ? formatPortalDateTime(h.viewedAt) : t('userAnalytics.history.unknownDate')}
                                                             </span>
                                                             {durationLabel ? (
                                                                 <span className="text-muted font-mono text-[10px]">{durationLabel}</span>
@@ -1610,7 +1610,7 @@ const PersonalAnalyticsDashboard: React.FC<{ username: string, thumb: string | n
                                             <div className="flex flex-col overflow-hidden">
                                                 <span className="font-bold text-sm text-text truncate">{h.title}</span>
                                                 {h.episodeTitle && <span className="text-muted text-xs truncate">{h.episodeTitle}</span>}
-                                                <span className="text-plex font-mono text-[10px] mt-1">{new Date(h.viewedAt * 1000).toLocaleString()}</span>
+                                                <span className="text-plex font-mono text-[10px] mt-1">{formatPortalDateTime(h.viewedAt)}</span>
                                             </div>
                                         </a>
                                     ))}
@@ -3531,7 +3531,7 @@ const LibraryDeltaBadge: React.FC<{ value?: number }> = ({ value }) => {
 const formatCatalogScanAge = (generatedAt?: number | string | null) => {
     const n = typeof generatedAt === 'number' ? generatedAt : Date.parse(String(generatedAt || ''));
     if (!Number.isFinite(n) || n <= 0) return null;
-    return new Date(n).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    return formatPortalDateTime(n);
 };
 const AnimatedLeaderboard: React.FC<{ users: any[], resolveAvatar: (thumb: string | null | undefined, w?: number, h?: number) => string, isAdmin: boolean, onUserClick: (u: any) => void }> = ({ users, resolveAvatar, onUserClick }) => {
     const prevUsersRef = useRef<any[]>([]);
@@ -5074,8 +5074,7 @@ export const LogsDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) 
     // Helper functions
     const formatDateTime = (dateString: string) => {
         if (!dateString) return '';
-        const d = new Date(dateString);
-        return `${d.getDate()} ${d.toLocaleString('default', { month: 'short' })}, ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+        return formatPortalDateTime(dateString);
     };
 
     const formatEventName = (event: string) => {
@@ -6235,7 +6234,7 @@ const PublicUptimeBanner: React.FC = () => {
                     <h3 className="text-text font-bold uppercase tracking-[0.14em] text-xs">Live System Status</h3>
                     {staleHint ? (
                         <p className="mt-1 text-[11px] text-amber-300/90">
-                            Showing last update{lastUpdatedAt ? ` (${new Date(lastUpdatedAt).toLocaleTimeString()})` : ''} — refresh failed
+                            Showing last update{lastUpdatedAt ? ` (${formatTime(new Date(lastUpdatedAt))})` : ''} — refresh failed
                         </p>
                     ) : null}
                 </div>
@@ -6769,7 +6768,7 @@ const RebuildLibraryCacheButton: React.FC = () => {
             </button>
             {lastBuilt && (
                 <p className="text-[10px] text-muted text-center">
-                    Last built: {new Date(lastBuilt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    Last built: {formatPortalDateTime(lastBuilt)}
                 </p>
             )}
             {lastWarning && status !== 'building' && status !== 'starting' && (
@@ -8523,7 +8522,7 @@ export const UserDashboard: React.FC<{
                                                 {item.episodeTitle && <p className="text-[11px] font-semibold text-muted/70 truncate mt-0.5">{item.episodeTitle}</p>}
                                                 <div className="flex items-center gap-1.5 mt-1.5">
                                                     <Clock className="w-3 h-3 text-plex/80" />
-                                                    <p className="text-[10px] font-mono font-bold text-muted/60 uppercase tracking-wider">{new Date(item.viewedAt * 1000).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</p>
+                                                    <p className="text-[10px] font-mono font-bold text-muted/60 uppercase tracking-wider">{formatPortalDateTime(item.viewedAt)}</p>
                                                 </div>
                                             </div>
                                         </button>
@@ -10057,7 +10056,7 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
                                                                                 <span className="font-bold text-white truncate text-sm group-hover:text-plex transition-colors">{h.user}</span>
                                                                             </button>
                                                                             <div className="flex-1 flex flex-wrap md:flex-nowrap items-center gap-3 text-muted md:justify-end text-[11px] md:text-xs">
-                                                                                <span className="flex items-center gap-1.5 shrink-0 md:min-w-[125px] md:justify-end"><Calendar size={12} className="opacity-50"/> {new Date(h.date * 1000).toLocaleString([], { year: '2-digit', month: '2-digit', day: '2-digit', hour: '2-digit', minute:'2-digit'})}</span>
+                                                                                <span className="flex items-center gap-1.5 shrink-0 md:min-w-[125px] md:justify-end"><Calendar size={12} className="opacity-50"/> {formatPortalDateTimeCompact(h.date)}</span>
                                                                                 <span className="opacity-30">|</span>
                                                                                 <span className="flex items-center gap-1.5 shrink-0 min-w-[50px]"><Clock size={12} className="opacity-50"/> {Math.round(h.duration / 60)}m</span>
                                                                                 {h.player && (
