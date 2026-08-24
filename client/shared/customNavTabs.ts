@@ -159,11 +159,9 @@ const BLOCKED_EMBED_HOST_SUFFIXES = [
     'apple.com',
 ];
 
-const registrableDomain = (hostname: string) => {
-    const parts = String(hostname || '').toLowerCase().split('.').filter(Boolean);
-    if (parts.length <= 2) return parts.join('.');
-    return parts.slice(-2).join('.');
-};
+import { registrableDomainFromHost } from '../../lib/registrable-domain.js';
+
+const registrableDomain = (hostname: string) => registrableDomainFromHost(hostname);
 
 /** HTTPS sibling subdomains (e.g. photos.strymx.co.uk inside portal.strymx.co.uk) can iframe directly. */
 export const isSameRegistrableDomainHost = (targetHost: string, portalHost: string) => {

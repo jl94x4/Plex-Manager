@@ -95,7 +95,7 @@ import {
     pruneDashboardLayoutCustomModules,
     sanitizeHomeCustomModulesForSession,
 } from './lib/home-custom-modules.js';
-import { createCustomTabEmbedProxyHandler, createHomeModuleEmbedProxyHandler, isPortalEmbedProxyPath, isLeakedArrEmbedAssetPath, parseEmbedProxyFromReferer } from './lib/custom-tab-embed-proxy.js';
+import { registrableDomainFromHost } from './lib/registrable-domain.js';
 import { createSupportTicketFromMediaIssue, attachTicketIdsToIssues } from './lib/support-tickets/fromIssue.js';
 import { mapTautulliHistoryRowToPlexItem } from './lib/achievements/tautulliHistory.js';
 import { isTautulliWatchHistorySource, buildAchievementsHomeRankContext, summarizeAchievementsBackfill, levelProgress } from './lib/achievements/index.js';
@@ -569,11 +569,10 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
 let CLIENT_ID = process.env.CLIENT_ID || 'plex-expiry-manager-client-id'; // Now dynamically generated if missing
 
 const portalFrameSrcDirective = (hostname = '') => {
-    const parts = String(hostname || '').toLowerCase().split('.').filter(Boolean);
     const sources = ["'self'", 'https://www.openstreetmap.org'];
-    if (parts.length >= 2) {
-        const base = parts.slice(-2).join('.');
-        if (base) sources.push(`https://*.${base}`);
+    const base = registrableDomainFromHost(hostname);
+    if (base && String(hostname || '').includes('.')) {
+        sources.push(`https://*.${base}`);
     }
     return `frame-src ${sources.join(' ')}`;
 };
