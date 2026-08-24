@@ -12087,7 +12087,13 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     };
 
     const navListRef = useRef<HTMLDivElement>(null);
+    const navCompressStepRef = useRef(0);
+    const navCompressSignatureRef = useRef('');
     const [navCompressStep, setNavCompressStep] = useState(0);
+
+    const desktopNavKeySignature = useMemo(() => (
+        normalizedNavOrder.filter((key) => key !== 'logs').join('|')
+    ), [normalizedNavOrder]);
 
     const desktopNavKeys = useMemo(() => (
         normalizedNavOrder.filter((key) => key !== 'logs' && navItemsConfig[key])
@@ -12147,36 +12153,63 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     const IDENTITY_STYLE_BY_STEP = [0, 1, 2, 3];
     const MAX_NAV_COMPRESS_STEP = NAV_STYLE_BY_STEP.length - 1;
 
-    useLayoutEffect(() => {
-        setNavCompressStep(0);
-    }, [desktopNavKeys, sidebarIdentityPosition]);
+    const settleNavCompressStep = useCallback((nav: HTMLDivElement) => {
+        let step = 0;
+        let cancelled = false;
 
-    useLayoutEffect(() => {
-        const nav = navListRef.current;
-        if (!nav) return;
-        const overflow = nav.scrollHeight - nav.clientHeight;
-        if (overflow > 1 && navCompressStep < MAX_NAV_COMPRESS_STEP) {
-            setNavCompressStep((step) => Math.min(MAX_NAV_COMPRESS_STEP, step + 1));
-        }
-    }, [navCompressStep, desktopNavKeys, MAX_NAV_COMPRESS_STEP]);
-
-    useLayoutEffect(() => {
-        const nav = navListRef.current;
-        if (!nav) return;
-        const onResize = () => {
+        const settle = () => {
+            if (cancelled) return;
             const overflow = nav.scrollHeight - nav.clientHeight;
-            if (overflow > 1) {
-                setNavCompressStep((step) => Math.min(MAX_NAV_COMPRESS_STEP, step + 1));
+            if (overflow > 1 && step < MAX_NAV_COMPRESS_STEP) {
+                step += 1;
+                navCompressStepRef.current = step;
+                setNavCompressStep(step);
+                requestAnimationFrame(settle);
+                return;
             }
+            navCompressStepRef.current = step;
+            setNavCompressStep(step);
         };
-        const ro = new ResizeObserver(onResize);
-        ro.observe(nav);
-        window.addEventListener('resize', onResize);
+
+        navCompressStepRef.current = 0;
+        setNavCompressStep(0);
+        requestAnimationFrame(() => requestAnimationFrame(settle));
+
         return () => {
-            ro.disconnect();
-            window.removeEventListener('resize', onResize);
+            cancelled = true;
         };
     }, [MAX_NAV_COMPRESS_STEP]);
+
+    useLayoutEffect(() => {
+        const nav = navListRef.current;
+        if (!nav) return;
+
+        const layoutSignature = `${desktopNavKeySignature}|${sidebarIdentityPosition}`;
+        if (layoutSignature === navCompressSignatureRef.current) {
+            setNavCompressStep(navCompressStepRef.current);
+            return;
+        }
+        navCompressSignatureRef.current = layoutSignature;
+        return settleNavCompressStep(nav);
+    }, [desktopNavKeySignature, sidebarIdentityPosition, settleNavCompressStep]);
+
+    useEffect(() => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const onResize = () => {
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(() => {
+                const nav = navListRef.current;
+                if (!nav) return;
+                navCompressSignatureRef.current = `${desktopNavKeySignature}|${sidebarIdentityPosition}`;
+                settleNavCompressStep(nav);
+            }, 200);
+        };
+        window.addEventListener('resize', onResize);
+        return () => {
+            if (timer) clearTimeout(timer);
+            window.removeEventListener('resize', onResize);
+        };
+    }, [settleNavCompressStep, desktopNavKeySignature, sidebarIdentityPosition]);
 
     const compressStep = Math.min(Math.max(navCompressStep, 0), MAX_NAV_COMPRESS_STEP);
     const desktopNavDensity = DESKTOP_NAV_STYLES[NAV_STYLE_BY_STEP[compressStep]];
@@ -12246,27 +12279,27 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     };
 
     const renderServerIdentity = (placement: 'top' | 'bottom') => (
-        <div className={`flex flex-col items-center w-full shrink-0 transition-all duration-300 ${placement === 'top' ? identityDensity.sectionTop : identityDensity.sectionBottom} border-white/10 group cursor-default ${placement === 'top' ? 'border-b' : 'border-t'}`}>
+        <div className={`flex flex-col items-center w-full shrink-0 ${placement === 'top' ? identityDensity.sectionTop : identityDensity.sectionBottom} border-white/10 ${placement === 'top' ? 'border-b' : 'border-t'}`}>
             <div className={`relative ${identityDensity.logoMb} ${customLogoUrl ? `${identityDensity.customWrap} flex items-center justify-center` : ''}`}>
                 {customLogoUrl ? (
                     <img
                         src={serverIcon}
                         alt="Server Logo"
-                        className={`${identityDensity.customImg} object-contain drop-shadow-[0_0_24px_rgba(0,0,0,0.75)] group-hover:scale-105 transition-transform duration-700 ease-out`}
+                        className={`${identityDensity.customImg} object-contain drop-shadow-[0_0_24px_rgba(0,0,0,0.75)]`}
                         onError={(e) => {
                             (e.target as HTMLImageElement).src = logoUrl();
                         }}
                     />
                 ) : (
                     <>
-                        <div className="absolute inset-0 bg-plex blur-[29px] opacity-20 group-hover:opacity-40 transition-opacity duration-700 rounded-full"></div>
-                        <div className="absolute -inset-1 rounded-full bg-gradient-to-tr from-plex via-amber-300 to-orange-600 opacity-60 group-hover:opacity-100 group-hover:rotate-180 transition-all duration-1000 ease-out"></div>
-                        <div className={`relative ${identityDensity.round} rounded-full p-[3px] shadow-2xl bg-card transition-all duration-300`}>
+                        <div className="absolute inset-0 bg-plex blur-[29px] opacity-20 rounded-full"></div>
+                        <div className="absolute -inset-1 rounded-full bg-gradient-to-tr from-plex via-amber-300 to-orange-600 opacity-60"></div>
+                        <div className={`relative ${identityDensity.round} rounded-full p-[3px] shadow-2xl bg-card`}>
                             <div className="w-full h-full rounded-full overflow-hidden bg-background">
                                 <img
                                     src={serverIcon}
                                     alt="Server Logo"
-                                    className="w-full h-full group-hover:scale-110 transition-transform duration-700 ease-out object-cover"
+                                    className="w-full h-full object-cover"
                                     onError={(e) => {
                                         (e.target as HTMLImageElement).src = logoUrl();
                                     }}
@@ -12278,7 +12311,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             </div>
 
             <div className="flex flex-col items-center text-center px-2">
-                <h2 className={`${identityDensity.title} font-black text-text tracking-tight leading-tight line-clamp-2 transition-all duration-300`}>
+                <h2 className={`${identityDensity.title} font-black text-text tracking-tight leading-tight line-clamp-2`}>
                     {serverName}
                 </h2>
                 {identityDensity.showPortal && (
