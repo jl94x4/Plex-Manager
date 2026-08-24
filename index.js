@@ -246,6 +246,15 @@ const withBasePath = (route = '/') => {
 };
 
 const plexImageUrl = (mediaPath) => withBasePath(`/api/plex/image?path=${encodeURIComponent(mediaPath)}`);
+/** Poster-sized transcode so home cards are not stretched from tiny history thumbs. */
+const PLEX_POSTER_WIDTH = 600;
+const PLEX_POSTER_HEIGHT = 900;
+const plexPosterUrl = (mediaPath) => {
+    if (!mediaPath) return null;
+    return withBasePath(
+        `/api/plex/image?path=${encodeURIComponent(mediaPath)}&width=${PLEX_POSTER_WIDTH}&height=${PLEX_POSTER_HEIGHT}`,
+    );
+};
 
 const stripBasePathFromUrl = (url = '/') => {
     const [pathname, ...queryParts] = String(url).split('?');
@@ -1020,7 +1029,7 @@ const plexMetadataCache = createTtlLruCache({
 
 // Personal Wrap-Up (`/api/plex/analytics/me`) — serve last payload instantly while refreshing.
 const PERSONAL_ANALYTICS_CACHE_MS = 10 * 60 * 1000;
-const PERSONAL_ANALYTICS_CACHE_VERSION = 'v7';
+const PERSONAL_ANALYTICS_CACHE_VERSION = 'v8';
 const PERSONAL_WRAPUP_HISTORY_DAYS = 730;
 const WRAP_UP_WARM_PERIODS = ['365', '120', '90', '30', '7'];
 const WRAP_UP_COMPARE_FETCH_MAX_DAYS = 180;
@@ -16789,8 +16798,8 @@ const hydratePersonalTopWatchedItems = async (uri, config, serverIdentifier, ite
                     title: meta.title || item.title,
                     thumb,
                     art,
-                    thumbUrl: thumb ? plexImageUrl(thumb) : null,
-                    artUrl: art ? plexImageUrl(art) : (thumb ? plexImageUrl(thumb) : null),
+                    thumbUrl: thumb ? plexPosterUrl(thumb) : null,
+                    artUrl: art ? plexImageUrl(art) : (thumb ? plexPosterUrl(thumb) : null),
                     plexUrl: `https://app.plex.tv/desktop/#!/server/${serverIdentifier}/details?key=${encodeURIComponent(key)}`,
                     live: true,
                 };
@@ -16806,9 +16815,21 @@ const hydratePersonalTopWatchedItems = async (uri, config, serverIdentifier, ite
             }
         }
     };
-    const workerCount = Math.min(6, items.length);
+    const workerCount = Math.min(8, items.length);
     await Promise.all(Array.from({ length: workerCount }, () => worker()));
     return results;
+};
+
+const hydrateTopWatchedOrKeep = async (uri, config, serverIdentifier, items, timeoutMs) => {
+    if (!Array.isArray(items) || !items.length) return items;
+    const work = hydratePersonalTopWatchedItems(uri, config, serverIdentifier, items);
+    const result = await Promise.race([
+        work,
+        new Promise((resolve) => setTimeout(() => resolve(null), timeoutMs)),
+    ]);
+    if (result) return result;
+    void work.catch(() => null);
+    return items;
 };
 
 /** Drop fat Plex history fields so analytics/achievements don't retain multi-GB Metadata graphs. */
@@ -17330,16 +17351,17 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
         const allLibraries = Object.values(libraryCounts).sort((a, b) => b.plays - a.plays);
         const topLibraries = allLibraries.slice(0, 5);
         let topWatched = Object.values(contentCounts).filter(c => c.type !== 'track').sort(sortByPlaysThenRecent).slice(0, 30).map(c => {
-            if (c.thumb) c.thumbUrl = plexImageUrl(c.thumb);
+            if (c.thumb) c.thumbUrl = plexPosterUrl(c.thumb);
             return c;
         });
         try {
-            const hydratePromise = hydratePersonalTopWatchedItems(uri, config, config.serverIdentifier, topWatched);
-            topWatched = await Promise.race([
-                hydratePromise,
-                new Promise((resolve) => setTimeout(() => resolve(topWatched), 1200)),
-            ]);
-            void hydratePromise.catch(() => null);
+            const head = topWatched.slice(0, 12);
+            const tail = topWatched.slice(12);
+            const hydratedHead = await hydrateTopWatchedOrKeep(uri, config, config.serverIdentifier, head, 4000);
+            const hydratedTail = tail.length
+                ? await hydrateTopWatchedOrKeep(uri, config, config.serverIdentifier, tail, 2500)
+                : [];
+            topWatched = [...hydratedHead, ...hydratedTail];
         } catch (e) {
             log(`Most Watched metadata hydrate failed: ${e.message}`);
         }
@@ -17374,8 +17396,8 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
         }
         const topShows = topShowsRaw.map(s => ({
             ...s,
-            artUrl: s.art ? plexImageUrl(s.art) : (s.thumb ? plexImageUrl(s.thumb) : null),
-            thumbUrl: s.thumb ? plexImageUrl(s.thumb) : null,
+            artUrl: s.art ? plexImageUrl(s.art) : (s.thumb ? plexPosterUrl(s.thumb) : null),
+            thumbUrl: s.thumb ? plexPosterUrl(s.thumb) : null,
         }));
         const topBinge = topShows.length > 0 ? topShows[0] : null;
 
@@ -17423,8 +17445,8 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
         }
         const topMovies = topMoviesRaw.map(m => ({
             ...m,
-            artUrl: m.art ? plexImageUrl(m.art) : (m.thumb ? plexImageUrl(m.thumb) : null),
-            thumbUrl: m.thumb ? plexImageUrl(m.thumb) : null,
+            artUrl: m.art ? plexImageUrl(m.art) : (m.thumb ? plexPosterUrl(m.thumb) : null),
+            thumbUrl: m.thumb ? plexPosterUrl(m.thumb) : null,
         }));
         const topMovie = topMovies.length > 0 ? topMovies[0] : null;
 

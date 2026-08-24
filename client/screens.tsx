@@ -7517,6 +7517,19 @@ export const UserDashboard: React.FC<{
         }
         return portalUrl(`/api/plex/image?path=${encodeURIComponent(thumbUrl)}&width=256&height=256`);
     };
+    const sizedPlexPosterUrl = (url: string | null | undefined, width = 600, height = 900) => {
+        if (!url) return '';
+        const resolved = resolvePortalAssetUrl(url);
+        if (!resolved.includes('/api/plex/image')) return resolved;
+        const hashAt = resolved.indexOf('#');
+        const withoutHash = hashAt >= 0 ? resolved.slice(0, hashAt) : resolved;
+        const qAt = withoutHash.indexOf('?');
+        const base = qAt >= 0 ? withoutHash.slice(0, qAt) : withoutHash;
+        const params = new URLSearchParams(qAt >= 0 ? withoutHash.slice(qAt + 1) : '');
+        if (!params.get('width')) params.set('width', String(width));
+        if (!params.get('height')) params.set('height', String(height));
+        return `${base}?${params.toString()}`;
+    };
     const heroBg = publicConfig?.backgroundImageUrl
         ? resolvePortalAssetUrl(publicConfig.backgroundImageUrl)
         : resolveHomeImage(
@@ -8595,8 +8608,11 @@ export const UserDashboard: React.FC<{
                                             {item.thumbUrl ? (
                                                 <>
                                                     <img
-                                                        src={resolvePortalAssetUrl(item.thumbUrl)}
+                                                        src={sizedPlexPosterUrl(item.thumbUrl)}
                                                         alt={item.title}
+                                                        width={400}
+                                                        height={600}
+                                                        decoding="async"
                                                         className="w-full h-full object-cover transition-[transform,opacity] duration-300 group-hover:scale-105 group-hover:opacity-80"
                                                         onError={(e) => {
                                                             e.currentTarget.style.display = 'none';
