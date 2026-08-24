@@ -83,8 +83,8 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = 
             : '';
 
     return (
-        <div className="flex min-h-[calc(100dvh-8rem)] flex-col gap-3">
-            <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+        <div className="flex w-full min-h-0 flex-1 flex-col gap-2 md:gap-3">
+            <div className="flex shrink-0 flex-wrap items-start justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-2.5 md:py-3">
                 <div className="min-w-0">
                     <h1 className="truncate text-lg font-bold text-text">{tab.name}</h1>
                     {tab.description ? (
@@ -118,13 +118,13 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = 
             </div>
 
             {useEmbedProxy ? (
-                <div className="rounded-2xl border border-sky-500/25 bg-sky-500/10 px-4 py-3 text-sm leading-relaxed text-sky-100">
+                <div className="shrink-0 rounded-xl border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-xs leading-relaxed text-sky-100 md:text-sm">
                     {t('settings.navigation.customTabs.embed.proxyActive')}
                 </div>
             ) : null}
 
             {showEmbedWarning ? (
-                <div className="rounded-2xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm leading-relaxed text-yellow-100">
+                <div className="shrink-0 rounded-2xl border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm leading-relaxed text-yellow-100">
                     <p>{embedWarningText}</p>
                     <p className="mt-2 text-yellow-200/90">{t('settings.navigation.customTabs.embed.useOpenInBrowser')}</p>
                 </div>
@@ -145,12 +145,12 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = 
                     </a>
                 </div>
             ) : (
-                <div className="min-h-[60vh] flex-1 overflow-hidden rounded-2xl border border-white/10 bg-black/30">
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/30">
                     <iframe
                         key={iframeKey}
                         title={tab.name}
                         src={iframeSrc}
-                        className="h-full min-h-[60vh] w-full border-0 bg-white"
+                        className="block min-h-0 flex-1 w-full min-w-0 border-0 bg-white"
                         style={{ colorScheme: 'normal' }}
                         sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-downloads"
                         referrerPolicy="same-origin"
