@@ -10,6 +10,7 @@ import { apiFetch, apiFetchShared } from './shared/api';
 import { InAppNotificationsBell } from './shared/InAppNotificationsBell';
 import { IN_APP_NOTIFICATIONS_CHANGED_EVENT } from './shared/inAppNotificationsRefresh';
 import { getPublicOrigin, logoUrl, portalUrl, resolvePortalAssetUrl, stripBasePath, PLEX_ICON_URL, JELLYFIN_ICON_URL, EMBY_ICON_URL } from './shared/basePath';
+import { sizedPlexImageUrl } from './shared/plexImageUrl';
 import { LoginBrandMark } from './shared/LoginBrandMark';
 import { formatDate, getDaysUntilExpiry, getAccessProgressPct, addMonths, addYears, formatTime, formatEventName, formatDateTime, hexToRgb, formatSizeCeil, formatStreamingHour, formatPortalDateTime, formatPortalDateTimeCompact } from './shared/format';
 import { CustomSelect, ConfirmModal, StyledCheckbox, ScrollReveal } from './shared/ui';
@@ -7508,20 +7509,7 @@ export const UserDashboard: React.FC<{
         if (thumbUrl.startsWith('http://') || thumbUrl.startsWith('https://') || thumbUrl.startsWith('/api/')) {
             return resolvePortalAssetUrl(thumbUrl);
         }
-        return portalUrl(`/api/plex/image?path=${encodeURIComponent(thumbUrl)}&width=256&height=256`);
-    };
-    const sizedPlexPosterUrl = (url: string | null | undefined, width = 600, height = 900) => {
-        if (!url) return '';
-        const resolved = resolvePortalAssetUrl(url);
-        if (!resolved.includes('/api/plex/image')) return resolved;
-        const hashAt = resolved.indexOf('#');
-        const withoutHash = hashAt >= 0 ? resolved.slice(0, hashAt) : resolved;
-        const qAt = withoutHash.indexOf('?');
-        const base = qAt >= 0 ? withoutHash.slice(0, qAt) : withoutHash;
-        const params = new URLSearchParams(qAt >= 0 ? withoutHash.slice(qAt + 1) : '');
-        if (!params.get('width')) params.set('width', String(width));
-        if (!params.get('height')) params.set('height', String(height));
-        return `${base}?${params.toString()}`;
+        return sizedPlexImageUrl(thumbUrl, 256, 256);
     };
     const heroBg = publicConfig?.backgroundImageUrl
         ? resolvePortalAssetUrl(publicConfig.backgroundImageUrl)
@@ -8512,7 +8500,13 @@ export const UserDashboard: React.FC<{
                                         <button onClick={() => setDetailsItem(item)} className="flex items-center flex-1 min-w-0 gap-4 p-2.5 -my-2.5 rounded-2xl hover:bg-white/5 transition-colors border-0 bg-transparent text-left cursor-pointer outline-none w-full relative group">
                                             <div className={`w-10 sm:w-12 ${item.type === 'track' ? 'aspect-square' : 'aspect-[2/3]'} rounded-md overflow-hidden bg-black/50 flex-shrink-0 shadow-lg border border-white/5 group-hover:border-plex/40 transition-colors`}>
                                                 {item.thumbUrl ? (
-                                                    <img src={resolvePortalAssetUrl(item.thumbUrl)} alt={item.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                                                    <img
+                                                        src={item.type === 'track'
+                                                            ? sizedPlexImageUrl(item.thumbUrl, 240, 240)
+                                                            : sizedPlexImageUrl(item.thumbUrl, 240, 360)}
+                                                        alt={item.title}
+                                                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                                                    />
                                                 ) : (
                                                     <div className="w-full h-full flex items-center justify-center">
                                                         <PlaySquare className="w-5 h-5 text-muted/50" />
@@ -8601,7 +8595,7 @@ export const UserDashboard: React.FC<{
                                             {item.thumbUrl ? (
                                                 <>
                                                     <img
-                                                        src={sizedPlexPosterUrl(item.thumbUrl)}
+                                                        src={sizedPlexImageUrl(item.thumbUrl)}
                                                         alt={item.title}
                                                         width={400}
                                                         height={600}

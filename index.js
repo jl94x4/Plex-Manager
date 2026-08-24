@@ -17854,7 +17854,7 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
             topShows,
             topMovies,
             recentHistory: recentHistory.map(h => {
-                if (h.thumb) h.thumbUrl = plexImageUrl(h.thumb);
+                if (h.thumb) h.thumbUrl = plexPosterUrl(h.thumb);
                 return h;
             }),
             compare: compareEnabled
@@ -17993,7 +17993,7 @@ app.get('/api/plex/analytics/me', requireAuth, requireMember, async (req, res) =
                     episodeTitle: item.type === 'episode' || item.type === 'track' ? item.title : null,
                     viewedAt: item.viewedAt,
                     thumb,
-                    thumbUrl: thumb ? plexImageUrl(thumb) : null,
+                    thumbUrl: thumb ? plexPosterUrl(thumb) : null,
                     type: item.type,
                 };
             });
@@ -18489,7 +18489,13 @@ app.get('/api/plex/analytics/user/:id/history', requireAdmin, async (req, res) =
                 
                 if (tRes && tRes.response && tRes.response.data && tRes.response.data.data) {
                     totalRecords = tRes.response.data.recordsFiltered;
-                    historyData = tRes.response.data.data.map(item => ({
+                    historyData = tRes.response.data.data.map(item => {
+                        const thumb = item.media_type === 'episode'
+                            ? (item.grandparent_thumb || item.parent_thumb || item.thumb)
+                            : item.media_type === 'track'
+                                ? (item.parent_thumb || item.grandparent_thumb || item.thumb)
+                                : item.thumb;
+                        return {
                         id: item.row_id != null ? String(item.row_id) : `${item.rating_key || ''}-${item.started || item.date || ''}`,
                         title: item.full_title || item.title,
                         parentTitle: item.grandparent_title || item.parent_title || null,
@@ -18502,7 +18508,7 @@ app.get('/api/plex/analytics/user/:id/history', requireAdmin, async (req, res) =
                         viewedAt: item.date,
                         startedAt: item.started != null ? Number(item.started) : null,
                         stoppedAt: item.stopped != null ? Number(item.stopped) : null,
-                        thumbUrl: item.thumb ? plexImageUrl(item.thumb) : null,
+                        thumbUrl: thumb ? plexPosterUrl(thumb) : null,
                         duration: item.duration != null ? Number(item.duration) : null,
                         playDuration: item.play_duration != null ? Number(item.play_duration) : null,
                         percentComplete: item.percent_complete != null ? Number(item.percent_complete) : null,
@@ -18515,7 +18521,8 @@ app.get('/api/plex/analytics/user/:id/history', requireAdmin, async (req, res) =
                         location: item.location || null,
                         watchedStatus: item.watched_status != null ? Number(item.watched_status) : null,
                         year: item.year != null ? Number(item.year) : null,
-                    }));
+                    };
+                    });
                     usedTautulli = true;
                 }
             }
@@ -18524,7 +18531,13 @@ app.get('/api/plex/analytics/user/:id/history', requireAdmin, async (req, res) =
         if (!usedTautulli) {
             const allHistory = await fetchPlexAccountHistory(uri, config, accountID, { maxItems: 10000 });
             
-            const mapHistoryToRecent = (item) => ({
+            const mapHistoryToRecent = (item) => {
+                const thumb = item.type === 'episode'
+                    ? (item.grandparentThumb || item.parentThumb || item.thumb)
+                    : item.type === 'track'
+                        ? (item.parentThumb || item.grandparentThumb || item.thumb)
+                        : item.thumb;
+                return {
                 id: `${item.ratingKey || item.key || ''}-${item.viewedAt || ''}`,
                 title: item.type === 'episode' ? (item.grandparentTitle || item.parentTitle || item.title) : item.type === 'track' ? (item.parentTitle || item.grandparentTitle || item.title) : item.title,
                 episodeTitle: item.type === 'episode' || item.type === 'track' ? item.title : null,
@@ -18537,7 +18550,7 @@ app.get('/api/plex/analytics/user/:id/history', requireAdmin, async (req, res) =
                 startedAt: null,
                 stoppedAt: null,
                 type: item.type,
-                thumbUrl: item.thumb ? plexImageUrl(item.thumb) : null,
+                thumbUrl: thumb ? plexPosterUrl(thumb) : null,
                 duration: null,
                 playDuration: null,
                 percentComplete: null,
@@ -18550,7 +18563,8 @@ app.get('/api/plex/analytics/user/:id/history', requireAdmin, async (req, res) =
                 location: null,
                 watchedStatus: null,
                 year: null,
-            });
+            };
+            };
 
             let filtered = allHistory.map(mapHistoryToRecent);
             if (search) {
@@ -18725,7 +18739,7 @@ app.get('/api/plex/analytics/user/:id', requireAdmin, async (req, res) => {
             dayOfWeekCounts,
             hourDistribution,
             recentHistory: recentHistory.map(h => {
-                if (h.thumb) h.thumbUrl = plexImageUrl(h.thumb);
+                if (h.thumb) h.thumbUrl = plexPosterUrl(h.thumb);
                 return h;
             })
         });

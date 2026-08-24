@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom';
 import { Calendar, Clapperboard, Clock, Coffee, Compass, Film, Layers, PieChart, PlayCircle, Tv, X } from 'lucide-react';
 import { formatStreamingHour } from './format';
 import { resolvePortalAssetUrl } from './basePath';
+import { sizedPlexImageUrl } from './plexImageUrl';
 import { lockBackgroundScroll } from './lockBackgroundScroll';
 
 export const WrapUpModal: React.FC<{
@@ -224,7 +225,7 @@ export const WrapUpModal: React.FC<{
                                     {recentItems.map((item: any, i: number) => (
                                         <div key={i} className="flex items-center gap-3 bg-white/5 border border-white/5 rounded-lg px-3 py-2 hover:bg-white/10 transition-colors">
                                             {item.thumbUrl
-                                                ? <img src={resolvePortalAssetUrl(item.thumbUrl)} className="w-8 h-8 rounded object-cover flex-shrink-0" />
+                                                ? <img src={sizedPlexImageUrl(item.thumbUrl, 160, item.type === 'track' ? 160 : 240)} className="w-8 h-8 rounded object-cover flex-shrink-0" />
                                                 : <div className="w-8 h-8 rounded bg-white/10 flex-shrink-0" />}
                                             <div className="flex flex-col text-left overflow-hidden">
                                                 <span className="font-bold text-sm text-gray-200 truncate">{item.title}</span>
