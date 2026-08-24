@@ -103,6 +103,7 @@ import { loadAchievementsState, setLeaderboardOptOut } from './lib/achievements/
 import { resolveAchievementsAccountId } from './lib/profile/assemble.js';
 import { sanitizeProfileBio } from './lib/profile/social.js';
 import { wrapUpFromHistoryItems, buildWrapUpCompare, summarizeWrapUpHistoryWindow, formatWrapUpNewsletterHtml, historyViewedAtSeconds, filterHistoryByUnixWindow } from './lib/profile/wrapUp.js';
+import { filterRecentlyWatchedHistory, historyItemCountsAsRecentlyWatched } from './lib/profile/recentWatched.js';
 import { mapJellyfinPlayedItemsToHistory } from './lib/achievements/jellyfinMap.js';
 import {
     applyMemberNamePrivacyToRows,
@@ -1029,7 +1030,7 @@ const plexMetadataCache = createTtlLruCache({
 
 // Personal Wrap-Up (`/api/plex/analytics/me`) — serve last payload instantly while refreshing.
 const PERSONAL_ANALYTICS_CACHE_MS = 10 * 60 * 1000;
-const PERSONAL_ANALYTICS_CACHE_VERSION = 'v8';
+const PERSONAL_ANALYTICS_CACHE_VERSION = 'v9';
 const PERSONAL_WRAPUP_HISTORY_DAYS = 730;
 const WRAP_UP_WARM_PERIODS = ['365', '120', '90', '30', '7'];
 const WRAP_UP_COMPARE_FETCH_MAX_DAYS = 180;
@@ -16859,6 +16860,7 @@ const slimPlexHistoryItem = (item) => {
         grandparentRatingKey: item.grandparentRatingKey,
         duration: item.duration,
         viewOffset: item.viewOffset,
+        playDuration: item.playDuration,
         watchedStatus: item.watchedStatus,
         percentComplete: item.percentComplete,
         videoResolution: item.Media?.[0]?.videoResolution || item.videoResolution || null,
@@ -17268,7 +17270,7 @@ const buildPersonalWrapUpAnalyticsPayload = async ({
         const currentHistoryItems = cutoffDate > 0
             ? filterHistoryByUnixWindow(historyItems, { startSec: cutoffDate })
             : historyItems;
-        const recentHistory = currentHistoryItems.slice(0, 50).map(mapHistoryToRecent);
+        const recentHistory = filterRecentlyWatchedHistory(currentHistoryItems, { limit: 50 }).map(mapHistoryToRecent);
 
         let plexTotalHourOfDay = 0;
         let plexHourCount = 0;
@@ -17718,15 +17720,15 @@ app.get('/api/plex/analytics/me', requireAuth, requireMember, async (req, res) =
                     username: req.user?.username || portalUserForHistory?.username,
                     email: req.user?.email || portalUserForHistory?.email,
                     plexAccountName: plexAccountNameForHistory,
-                    maxItems: 40,
+                    maxItems: 80,
                 });
                 if (!historyItems.length) {
-                    historyItems = await fetchPlexAccountHistory(uri, config, accountID, { maxItems: 40 });
+                    historyItems = await fetchPlexAccountHistory(uri, config, accountID, { maxItems: 80 });
                 }
             } else {
-                historyItems = await fetchPlexAccountHistory(uri, config, accountID, { maxItems: 40 });
+                historyItems = await fetchPlexAccountHistory(uri, config, accountID, { maxItems: 80 });
             }
-            const recentHistory = historyItems.slice(0, 20).map((item) => {
+            const recentHistory = filterRecentlyWatchedHistory(historyItems, { limit: 20 }).map((item) => {
                 const thumb = item.type === 'episode'
                     ? (item.grandparentThumb || item.parentThumb || item.thumb)
                     : item.type === 'track'
@@ -18406,8 +18408,8 @@ app.get('/api/plex/analytics/user/:id', requireAdmin, async (req, res) => {
             const day = getWeekdayInTimezone(item.viewedAt, statsTimezone);
             if (day >= 0 && day <= 6) dayOfWeekCounts[day]++;
 
-            // Recent history
-            if (recentHistory.length < 50) {
+            // Recent history — movies/episodes need at least 75% watched
+            if (recentHistory.length < 50 && historyItemCountsAsRecentlyWatched(item)) {
                 recentHistory.push({
                     title: item.type === 'episode' ? (item.grandparentTitle || item.parentTitle || item.title) : item.type === 'track' ? (item.parentTitle || item.grandparentTitle || item.title) : item.title,
                     episodeTitle: item.type === 'episode' || item.type === 'track' ? item.title : null,

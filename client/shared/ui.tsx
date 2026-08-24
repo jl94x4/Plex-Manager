@@ -271,7 +271,7 @@ export const ConfirmModal: React.FC<{
             onMouseDown={(event) => event.stopPropagation()}
         >
             <div
-                className={`glass-card overflow-hidden animate-slide-up max-w-md w-full p-6 pointer-events-auto ${
+                className={`glass-card overflow-hidden min-w-0 animate-slide-up max-w-md w-full p-6 pointer-events-auto ${
                     danger ? 'border border-red-500/40 shadow-[0_0_40px_rgba(239,68,68,0.15)]' : ''
                 }`}
                 role="dialog"
@@ -290,11 +290,11 @@ export const ConfirmModal: React.FC<{
                 ) : null}
                 <h3
                     id="portal-confirm-title"
-                    className={`text-xl font-black mb-4 tracking-tight ${danger ? 'text-red-200' : 'text-text'}`}
+                    className={`text-xl font-black mb-4 tracking-tight break-words [overflow-wrap:anywhere] ${danger ? 'text-red-200' : 'text-text'}`}
                 >
                     {title}
                 </h3>
-                <p className="text-muted mb-8 text-sm leading-relaxed whitespace-pre-line">{message}</p>
+                <p className="text-muted mb-8 text-sm leading-relaxed whitespace-pre-line min-w-0 max-w-full break-words [overflow-wrap:anywhere]">{message}</p>
                 <div className="flex gap-3 justify-end">
                     {!hideCancel && (
                         <button type="button" className="btn-secondary px-4 py-2.5 text-sm" onClick={onCancel}>{cancelLabel}</button>

@@ -1587,7 +1587,7 @@ export const PosterSetsSettingsView: React.FC = () => {
                         />
                         <SettingsToggleRow
                             title="Auto-watch on apply"
-                            description="After you apply a set (or it fails because the title is not in your library yet), pin it on Watching so posters auto-apply when the title lands."
+                            description="After you apply a set — including bulk queue and bulk lists — pin it on Watching so posters auto-apply when the title lands or the set gets new art."
                             checked={configDraft.autoWatchOnApply !== false}
                             onChange={(next) => setConfigDraft((prev) => ({ ...prev, autoWatchOnApply: next }))}
                         />

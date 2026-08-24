@@ -28,7 +28,7 @@ export const PosterSetsFloatingBars: React.FC = () => {
                     onClick={() => void queueBulkSelected()}
                 >
                     {busy === 'bulk-select' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ListOrdered className="h-4 w-4" />}
-                    Queue selected
+                    Queue & watch
                 </button>
                 <button
                     type="button"

@@ -1516,15 +1516,19 @@ export function usePosterSetsDashboardState() {
         const entries = Object.values(selectedBulkSets);
         if (!entries.length) return;
         if (entries.length > 5) {
-            const ok = await askConfirm(`Queue ${entries.length} selected sets for apply?`, {
-                title: 'Queue selected sets?',
-                confirmLabel: 'Add to queue',
-                cancelLabel: 'Cancel',
-            });
+            const ok = await askConfirm(
+                `Queue ${entries.length} selected sets for apply and add each one to Watching?`,
+                {
+                    title: 'Queue selected sets?',
+                    confirmLabel: 'Queue & watch',
+                    cancelLabel: 'Cancel',
+                },
+            );
             if (!ok) return;
         }
         setBusy('bulk-select');
         let queued = 0;
+        let watched = 0;
         try {
             for (const entry of entries) {
                 const setMeta: PosterSetsSetMeta = {
@@ -1540,13 +1544,27 @@ export function usePosterSetsDashboardState() {
                 setActiveJob(response.job);
                 rememberRecentFromContext(jobSetMeta(response.job) || setMeta, entry.url);
                 queued += 1;
+                try {
+                    await posterSetsApi.addWatch({
+                        url: entry.url,
+                        title: entry.title || undefined,
+                        user: entry.user || undefined,
+                        thumbUrl: entry.thumbUrl || undefined,
+                        provider: entry.provider || undefined,
+                        setId: entry.setId || undefined,
+                    });
+                    watched += 1;
+                } catch {
+                    /* apply still queued */
+                }
             }
             clearBulkSelection();
             await loadQueue();
             await loadHistory();
+            await loadWatches();
             toast(queuePaused
-                ? `Queued ${queued} set${queued === 1 ? '' : 's'} (queue paused).`
-                : `Queued ${queued} set${queued === 1 ? '' : 's'}.`);
+                ? `Queued ${queued} set${queued === 1 ? '' : 's'} (queue paused)${watched ? ` and watching ${watched}` : ''}.`
+                : `Queued ${queued} set${queued === 1 ? '' : 's'}${watched ? ` and watching ${watched}` : ''}.`);
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to queue selected sets', 'error');
         } finally {
@@ -2199,9 +2217,28 @@ export function usePosterSetsDashboardState() {
                 : await posterSetsApi.bulk({ text: bulkText });
             setActiveJob(response.job);
             await loadQueue();
-            toast(queuePaused
-                ? (fromFile ? 'Bulk file queued (paused).' : 'Bulk list queued (paused).')
-                : (fromFile ? 'Bulk file added to queue.' : 'Bulk list added to queue.'));
+            if (!fromFile) {
+                const urls = bulkText.split(/\r?\n/).map((line) => line.trim()).filter((line) => (
+                    line && !line.startsWith('#') && !line.startsWith('//') && /^https?:\/\//i.test(line)
+                ));
+                let watched = 0;
+                for (const url of urls) {
+                    try {
+                        await posterSetsApi.addWatch({ url });
+                        watched += 1;
+                    } catch {
+                        /* apply still queued */
+                    }
+                }
+                if (watched) await loadWatches();
+                toast(queuePaused
+                    ? `Bulk list queued (paused)${watched ? ` and watching ${watched} set${watched === 1 ? '' : 's'}` : ''}.`
+                    : `Bulk list added to queue${watched ? ` and watching ${watched} set${watched === 1 ? '' : 's'}` : ''}.`);
+            } else {
+                toast(queuePaused
+                    ? 'Bulk file queued (paused). Sets will be added to Watching as they apply.'
+                    : 'Bulk file added to queue. Sets will be added to Watching as they apply.');
+            }
             await loadHistory();
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Bulk apply failed', 'error');
