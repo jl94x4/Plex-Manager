@@ -27,6 +27,7 @@ import { IN_APP_NOTIFICATIONS_CHANGED_EVENT, notifyInAppNotificationsChanged } f
 import { resolveNotificationDestination } from './notificationDestination';
 import { navigateToSummaryDigest } from './SummaryDigestCard';
 import { stackInAppNotifications } from './notificationStacks';
+import { getNotificationRepeatEntries, type NotificationRepeatEntry } from './notificationRepeats';
 import { resolveTmdbImageUrl } from '../discovery/tmdbImageUrl';
 import { useDiscoverI18n } from '../discovery/i18n';
 import type { DiscoverTranslate } from '../discovery/i18n/types';
@@ -299,16 +300,129 @@ const StackedArtwork: React.FC<{ items: InAppNotification[]; count: number }> = 
     );
 };
 
+const RepeatEntryRow: React.FC<{
+    entry: NotificationRepeatEntry;
+    item: InAppNotification;
+    t: DiscoverTranslate;
+    onOpen: (item: InAppNotification) => void;
+}> = ({ entry, item, t, onOpen }) => {
+    const displayItem: InAppNotification = {
+        ...item,
+        body: entry.body,
+        createdAt: entry.createdAt || item.createdAt,
+        meta: {
+            ...item.meta,
+            posterUrl: entry.posterUrl ?? item.meta?.posterUrl,
+            posterPath: entry.posterPath ?? item.meta?.posterPath,
+        },
+    };
+    return (
+        <button
+            type="button"
+            onClick={() => onOpen(item)}
+            className="notif-row-btn w-full text-left rounded-xl px-1.5 py-1 transition-all duration-200 hover:bg-plex/[0.07] focus-visible:outline-none focus-visible:bg-plex/10"
+        >
+            <div className="flex items-start gap-2.5 md:gap-3">
+                <NotificationArtwork item={displayItem} hoverLift={false} />
+                <div className="min-w-0 flex-1">
+                    <p className="text-sm text-muted leading-relaxed">{entry.body}</p>
+                    <span className="mt-1 block text-xs text-muted/80">
+                        {formatRelative(entry.createdAt || item.createdAt, t)}
+                    </span>
+                </div>
+            </div>
+        </button>
+    );
+};
+
 const NotificationItemRow: React.FC<{
     item: InAppNotification;
     t: DiscoverTranslate;
     onOpen: (item: InAppNotification) => void;
     onRemove: (item: InAppNotification) => void;
     compact?: boolean;
-}> = ({ item, t, onOpen, onRemove, compact = false }) => {
+    expanded?: boolean;
+    onToggleExpand?: () => void;
+}> = ({ item, t, onOpen, onRemove, compact = false, expanded = false, onToggleExpand }) => {
     const unreadItem = !item.readAt;
     const dest = resolveNotificationDestination(item);
-    const repeatCount = Math.max(1, Number(item?.meta?.repeatCount || 1));
+    const repeatEntries = getNotificationRepeatEntries(item);
+    const repeatCount = Math.max(repeatEntries.length, Number(item?.meta?.repeatCount || 1));
+    const isRepeatGroup = repeatEntries.length > 1 && !compact;
+    const latestEntry = repeatEntries[0];
+    const displayBody = latestEntry?.body || item.body;
+    const displayCreatedAt = latestEntry?.createdAt || item.createdAt;
+
+    if (isRepeatGroup) {
+        return (
+            <>
+                <div
+                    className={`group relative flex items-start ${
+                        compact ? 'px-2 sm:px-3 py-1.5' : 'px-2 sm:px-3 py-2'
+                    } ${unreadItem ? 'bg-plex/[0.045]' : ''}`}
+                >
+                    {unreadItem && (
+                        <span className={`notif-unread-bar absolute left-0 top-3 bottom-3 w-0.5 rounded-full ${item.type === 'media_job_completed' ? 'bg-emerald-500' : 'bg-plex'}`} />
+                    )}
+                    <button
+                        type="button"
+                        onClick={onToggleExpand}
+                        aria-expanded={expanded}
+                        aria-label={expanded
+                            ? t('notifications.repeat.collapse')
+                            : t('notifications.repeat.expand', { count: repeatCount })}
+                        className={`notif-row-btn min-w-0 flex-1 text-left rounded-xl px-1.5 py-1 transition-all duration-200 hover:bg-plex/[0.07] focus-visible:outline-none focus-visible:bg-plex/10 ${
+                            compact ? 'py-1' : 'py-1.5'
+                        }`}
+                    >
+                        <div className="flex items-start gap-2.5 md:gap-3">
+                            <NotificationArtwork item={item} />
+                            <div className="min-w-0 flex-1">
+                                <div className="flex items-start justify-between gap-2">
+                                    <p className={`text-sm leading-snug ${unreadItem ? 'font-bold text-text' : 'font-semibold text-text/90'}`}>
+                                        {item.title}
+                                    </p>
+                                    <span className="shrink-0 rounded-md border border-plex/30 bg-plex/10 px-1.5 py-0.5 text-xs font-bold text-plex">
+                                        {t('notifications.repeats', { count: repeatCount })}
+                                    </span>
+                                    <ChevronDown className={`mt-0.5 h-4 w-4 shrink-0 text-muted transition-transform duration-200 ${expanded ? 'rotate-180 text-plex' : 'group-hover:text-plex'}`} />
+                                </div>
+                                {displayBody ? (
+                                    <p className="text-sm text-muted mt-0.5 line-clamp-2 leading-relaxed">{displayBody}</p>
+                                ) : null}
+                                <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs">
+                                    <span className="text-muted/80">{formatRelative(displayCreatedAt, t)}</span>
+                                    <span className="text-border">·</span>
+                                    <span className="font-semibold text-plex/90 transition-colors duration-200 group-hover:text-plex">
+                                        {t(dest.labelKey)}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => onRemove(item)}
+                        aria-label={t('notifications.removeAria')}
+                        title={t('notifications.remove')}
+                        className="mt-1.5 mr-0.5 shrink-0 rounded-lg p-1.5 text-muted hover:bg-white/10 hover:text-text focus-visible:outline-none focus-visible:bg-white/10"
+                    >
+                        <X className="h-3.5 w-3.5" />
+                    </button>
+                </div>
+                {expanded ? (
+                    <ul className="border-t border-border/40 bg-black/20">
+                        {repeatEntries.map((entry, index) => (
+                            <li key={`${item.id}-repeat-${index}`} className="border-b border-border/30 last:border-b-0 px-2 sm:px-3 py-1">
+                                <RepeatEntryRow entry={entry} item={item} t={t} onOpen={onOpen} />
+                            </li>
+                        ))}
+                    </ul>
+                ) : null}
+            </>
+        );
+    }
+
     return (
         <div
             className={`group relative flex items-start ${
@@ -337,10 +451,15 @@ const NotificationItemRow: React.FC<{
                                     {t('notifications.repeats', { count: repeatCount })}
                                 </span>
                             )}
-                            <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted opacity-0 -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0 group-hover:text-plex" />
+                            {!compact && repeatCount > 1 && repeatEntries.length <= 1 ? null : (
+                                <ChevronRight className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted opacity-0 -translate-x-1 transition-all duration-200 group-hover:opacity-100 group-hover:translate-x-0 group-hover:text-plex" />
+                            )}
                         </div>
                         {item.body ? (
                             <p className="text-sm text-muted mt-0.5 line-clamp-2 leading-relaxed">{item.body}</p>
+                        ) : null}
+                        {repeatCount > 1 && repeatEntries.length <= 1 ? (
+                            <p className="text-[11px] text-muted/70 mt-1">{t('notifications.repeat.legacyHint', { count: repeatCount })}</p>
                         ) : null}
                         <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs">
                             <span className="text-muted/80">{formatRelative(item.createdAt, t)}</span>
@@ -397,6 +516,7 @@ export const InAppNotificationsBell: React.FC<Props> = ({
     const [clearing, setClearing] = useState(false);
     const [panelBox, setPanelBox] = useState<PanelBox | null>(null);
     const [expandedStacks, setExpandedStacks] = useState<Set<string>>(() => new Set());
+    const [expandedRepeats, setExpandedRepeats] = useState<Set<string>>(() => new Set());
     const buttonRef = useRef<HTMLButtonElement>(null);
     const panelRef = useRef<HTMLDivElement>(null);
 
@@ -517,8 +637,20 @@ export const InAppNotificationsBell: React.FC<Props> = ({
     }, [open]);
 
     useEffect(() => {
-        if (!open) setExpandedStacks(new Set());
+        if (!open) {
+            setExpandedStacks(new Set());
+            setExpandedRepeats(new Set());
+        }
     }, [open]);
+
+    const toggleRepeat = (id: string) => {
+        setExpandedRepeats((current) => {
+            const next = new Set(current);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
 
     const stacks = useMemo(() => stackInAppNotifications(items), [items]);
 
@@ -758,6 +890,8 @@ export const InAppNotificationsBell: React.FC<Props> = ({
                                                 t={t}
                                                 onOpen={openItem}
                                                 onRemove={(row) => { void removeItems([row.id]); }}
+                                                expanded={expandedRepeats.has(item.id)}
+                                                onToggleExpand={() => toggleRepeat(item.id)}
                                             />
                                         </li>
                                     );

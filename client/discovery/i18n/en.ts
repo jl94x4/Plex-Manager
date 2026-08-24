@@ -473,6 +473,12 @@ export const en = {
         unreadCount: '{count} unread',
         unreadCount_plural: '{count} unread',
         repeats: '{count}x',
+        repeat: {
+            expand: 'Show {count} updates',
+            expand_plural: 'Show {count} updates',
+            collapse: 'Hide repeated updates',
+            legacyHint: 'Showing the latest of {count} similar alerts.',
+        },
         openInDiscover: 'Open in Discover',
         openMyRequests: 'Open My Requests',
         openRequestQueue: 'Open request queue',
