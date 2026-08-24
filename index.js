@@ -15182,6 +15182,10 @@ app.get('/api/streams/now-playing', requireAuth, requireMember, async (req, res)
         }
 
         let mapped = mapPlexSessionToNowPlaying(mineMeta);
+        if (mapped?.mediaType === 'tv') {
+            const seriesTmdb = extractTmdbIdFromPlexItem(mineMeta);
+            if (seriesTmdb) mapped.tmdbId = seriesTmdb;
+        }
         if (mapped && !mapped.tmdbId) {
             const enrichKey = mapped.mediaType === 'tv'
                 ? (mineMeta.grandparentRatingKey || mineMeta.ratingKey)

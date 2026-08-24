@@ -346,6 +346,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
         let cancelled = false;
         setLoading(true);
         setError(null);
+        setPayload(null);
 
         const run = async () => {
             const detailPath = `/api/discovery/proxy/${mediaType}/${tmdbId}`;
@@ -474,6 +475,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
         }
         let cancelled = false;
         setFactLoading(true);
+        setFactPayload(null);
         apiFetch(`/api/discovery/fact?mediaType=${mediaType}&mediaId=${tmdbId}`)
             .then((res) => {
                 if (cancelled) return;
