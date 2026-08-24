@@ -59,9 +59,10 @@ services:
       - ./config/spotify-to-plex.env
     environment:
       TZ: ${TZ:-UTC}
-      SYNC_ON_STARTUP: ${SPOTIFY_TO_PLEX_SYNC_ON_STARTUP:-false}
     volumes:
       - ./config/spotify-to-plex:/app/config
+      # Portal-generated supervisord.conf: disables container sync-scheduler when schedule mode is portal
+      - ./config/spotify-to-plex/supervisord.conf:/etc/supervisor/conf.d/supervisord.conf:ro
     # Do not publish 9030 publicly — the portal embeds the UI and proxies OAuth via /api/spotify-to-plex/callback
     healthcheck:
       test: ["CMD", "curl", "-f", "http://127.0.0.1:9030/"]

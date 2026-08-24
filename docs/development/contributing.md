@@ -96,4 +96,38 @@ For the full localization workflow and current project coverage, see the [Locali
 
 ## Release Notes
 
-User-facing changes belong in `CHANGELOG.md`.
+User-facing changes belong in `CHANGELOG.md`. Merges to `main` are versioned by [Release Please](https://github.com/googleapis/release-please) from **Conventional Commits** on the PR title / squash commit.
+
+### Commit messages (release-please)
+
+Use a type and optional scope, then a clear summary:
+
+```text
+feat(spotify-sync): add Compose supervisord mount for portal-managed sync schedule
+fix(docker): mount spotify-to-plex env_file from portal-generated config
+```
+
+| Type | When |
+| --- | --- |
+| `feat` | New capability |
+| `fix` | Bug fix |
+| `perf` | Performance |
+| `docs` | Docs only |
+| `chore` | Tooling, deps, no user impact |
+
+**Docker / Compose wording** (for changelog and operator-facing text):
+
+| Prefer | Instead of |
+| --- | --- |
+| `spotify-to-plex` **container** or **Compose service** | sidecar |
+| **image** (`jjdenhertog/spotify-to-plex`) | app binary |
+| **env_file** / `config/spotify-to-plex.env` | host `.env` credentials |
+| **bind mount** / **volume** (`config/spotify-to-plex`) | config folder (vague) |
+| **supervisor** `sync-scheduler` process | sidecar cron (in logs) |
+| **restart the container** | restart the sidecar |
+| **Docker network** service URL (`http://spotify-to-plex:9030`) | internal URL (in docs, clarify) |
+
+Internal config keys (e.g. `spotifyToPlexScheduleMode: sidecar`) stay as-is for compatibility; user-facing copy and commit summaries should use the terms above.
+
+Scopes that match the repo: `spotify-sync`, `docker`, `compose`, `collexions`, `settings`, `ui`, etc.
+

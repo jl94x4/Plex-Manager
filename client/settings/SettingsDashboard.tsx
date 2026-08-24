@@ -762,7 +762,7 @@ export const SettingsDashboard: React.FC = () => {
     const [spotifyToPlexClientSecret, setSpotifyToPlexClientSecret] = useState('');
     const [spotifyToPlexEncryptionKey, setSpotifyToPlexEncryptionKey] = useState('');
     const [spotifyToPlexHomeWidgetEnabled, setSpotifyToPlexHomeWidgetEnabled] = useState(false);
-    const [spotifyToPlexScheduledSyncEnabled, setSpotifyToPlexScheduledSyncEnabled] = useState(false);
+    const [spotifyToPlexScheduleMode, setSpotifyToPlexScheduleMode] = useState<'sidecar' | 'portal'>('sidecar');
     const [spotifyToPlexScheduledSyncIntervalHours, setSpotifyToPlexScheduledSyncIntervalHours] = useState(24);
     const [spotifySyncHealth, setSpotifySyncHealth] = useState<{ ok?: boolean; issues?: string[] } | null>(null);
     const [spotifyPortalImportMessage, setSpotifyPortalImportMessage] = useState('');
@@ -1907,7 +1907,11 @@ export const SettingsDashboard: React.FC = () => {
             if (initialSettings.spotifyToPlexClientSecret !== undefined) setSpotifyToPlexClientSecret(String(initialSettings.spotifyToPlexClientSecret || ''));
             if (initialSettings.spotifyToPlexEncryptionKey !== undefined) setSpotifyToPlexEncryptionKey(String(initialSettings.spotifyToPlexEncryptionKey || ''));
             if (initialSettings.spotifyToPlexHomeWidgetEnabled !== undefined) setSpotifyToPlexHomeWidgetEnabled(!!initialSettings.spotifyToPlexHomeWidgetEnabled);
-            if (initialSettings.spotifyToPlexScheduledSyncEnabled !== undefined) setSpotifyToPlexScheduledSyncEnabled(!!initialSettings.spotifyToPlexScheduledSyncEnabled);
+            if (initialSettings.spotifyToPlexScheduleMode === 'portal' || initialSettings.spotifyToPlexScheduleMode === 'sidecar') {
+                setSpotifyToPlexScheduleMode(initialSettings.spotifyToPlexScheduleMode);
+            } else if (initialSettings.spotifyToPlexScheduledSyncEnabled) {
+                setSpotifyToPlexScheduleMode('portal');
+            }
             if (initialSettings.spotifyToPlexScheduledSyncIntervalHours !== undefined) {
                 setSpotifyToPlexScheduledSyncIntervalHours(
                     Math.min(168, Math.max(1, Number(initialSettings.spotifyToPlexScheduledSyncIntervalHours) || 24)),
@@ -2325,7 +2329,7 @@ export const SettingsDashboard: React.FC = () => {
             spotifyToPlexClientSecret,
             spotifyToPlexEncryptionKey,
             spotifyToPlexHomeWidgetEnabled,
-            spotifyToPlexScheduledSyncEnabled,
+            spotifyToPlexScheduleMode,
             spotifyToPlexScheduledSyncIntervalHours,
             upgraderDefaultPreset,
             upgraderMinSizeGB,
@@ -4934,7 +4938,7 @@ export const SettingsDashboard: React.FC = () => {
                             <IntegrationHeading
                                 app="lidarr"
                                 title="Spotify Sync"
-                                subtitle="Sync Spotify playlists to Plex via the spotify-to-plex sidecar — credentials are saved here, not in a host .env"
+                                subtitle="Sync Spotify playlists to Plex via the spotify-to-plex Compose service — credentials are written to config/spotify-to-plex.env, not the host .env"
                             />
                             <section id={getSettingsSectionElementId('spotify-sync')} className="space-y-3 scroll-mt-24">
                                 <SettingsToggleRow
@@ -4951,7 +4955,7 @@ export const SettingsDashboard: React.FC = () => {
                                     Current status: {spotifyToPlexEnabled
                                         ? (spotifyToPlexInternalUrl.trim() ? 'ON' : 'Enabled — set internal URL')
                                         : 'OFF'}
-                                    {spotifySyncHealth?.ok ? ' · sidecar reachable' : ''}
+                                    {spotifySyncHealth?.ok ? ' · container reachable' : ''}
                                     {spotifyToPlexEnabled && initialSettings.spotifyToPlexCredentialsReady ? ' · credentials saved' : ''}
                                 </p>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
@@ -5017,17 +5021,26 @@ export const SettingsDashboard: React.FC = () => {
                                     <p className="text-xs text-yellow-300 mt-2">{spotifySyncHealth.issues.join(' · ')}</p>
                                 ) : null}
                                 <p className="text-[11px] text-muted mt-2">
-                                    After saving credential changes, restart the <code className="text-xs">spotify-to-plex</code> container once so it picks up the generated env file.
-                                    The sidecar also runs its own daily cron (~02:00 UTC). Portal scheduling below is optional and off by default.
+                                    After credential or schedule changes, restart the <code className="text-xs">spotify-to-plex</code> container so it reloads the generated <code className="text-xs">env_file</code> and supervisor config.
+                                    Choose one schedule mode below — portal mode stops the container&apos;s built-in <code className="text-xs">sync-scheduler</code> process.
                                 </p>
-                                <SettingsToggleRow
-                                    title="Portal scheduled sync"
-                                    hint={<SettingHint>Runs sync from the portal on an interval (Background Tasks → Spotify Sync). Off by default to avoid doubling the sidecar&apos;s built-in daily cron.</SettingHint>}
-                                    checked={spotifyToPlexScheduledSyncEnabled}
-                                    onChange={setSpotifyToPlexScheduledSyncEnabled}
-                                    disabled={!spotifyToPlexEnabled}
-                                    border={false}
-                                />
+                                <div className="mt-2">
+                                    <label className="font-semibold text-sm block mb-2">Sync schedule</label>
+                                    <select
+                                        className="w-full p-2 rounded border border-border bg-background text-text disabled:opacity-50"
+                                        value={spotifyToPlexScheduleMode}
+                                        onChange={(e) => setSpotifyToPlexScheduleMode(
+                                            e.target.value === 'portal' ? 'portal' : 'sidecar',
+                                        )}
+                                        disabled={!spotifyToPlexEnabled}
+                                    >
+                                        <option value="sidecar">Container cron (daily ~02:00 UTC)</option>
+                                        <option value="portal">Portal Background Tasks interval (disables container sync-scheduler)</option>
+                                    </select>
+                                    <p className="text-[11px] text-muted mt-1">
+                                        Portal interval appears under Background Tasks → Spotify Sync.
+                                    </p>
+                                </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
                                     <div>
                                         <label className="font-semibold text-sm block mb-2">Portal sync interval (hours)</label>
@@ -5040,13 +5053,13 @@ export const SettingsDashboard: React.FC = () => {
                                             onChange={(e) => setSpotifyToPlexScheduledSyncIntervalHours(
                                                 Math.min(168, Math.max(1, Number(e.target.value) || 24)),
                                             )}
-                                            disabled={!spotifyToPlexEnabled || !spotifyToPlexScheduledSyncEnabled}
+                                            disabled={!spotifyToPlexEnabled || spotifyToPlexScheduleMode !== 'portal'}
                                         />
                                         <p className="text-[11px] text-muted mt-1">1–168 hours. Checked every 30 minutes.</p>
                                     </div>
                                     {initialSettings.spotifyToPlexScheduledSyncLastRunAt ? (
                                         <div>
-                                            <label className="font-semibold text-sm block mb-2">Last portal scheduled sync</label>
+                                            <label className="font-semibold text-sm block mb-2">Last portal-managed sync</label>
                                             <p className="text-sm text-muted">{String(initialSettings.spotifyToPlexScheduledSyncLastRunAt)}</p>
                                         </div>
                                     ) : null}
@@ -5069,7 +5082,7 @@ export const SettingsDashboard: React.FC = () => {
                                             setSpotifyPortalImportMessage('');
                                             try {
                                                 const data = await apiFetch('/api/spotify-to-plex/apply-portal-defaults', { method: 'POST' });
-                                                setSpotifyPortalImportMessage(data?.message || 'Portal defaults applied to sidecar.');
+                                                setSpotifyPortalImportMessage(data?.message || 'Portal defaults applied to the spotify-to-plex container.');
                                                 pushToast(data?.message || 'Applied portal defaults', 'success');
                                             } catch (e: any) {
                                                 setSpotifyPortalImportMessage(e?.message || 'Import failed');

@@ -128,6 +128,13 @@ import {
     getSpotifyToPlexEnvFilePath,
 } from './lib/spotify-to-plex-env.js';
 import {
+    syncSpotifyToPlexSupervisorConfig,
+} from './lib/spotify-to-plex-supervisor.js';
+import {
+    normalizeSpotifyToPlexScheduleMode,
+    resolveSpotifyToPlexScheduleMode,
+} from './lib/spotify-to-plex-schedule-mode.js';
+import {
     buildSpotifyToPlexPortalApplyPlan,
     fetchSpotifyToPlexJson,
     summarizeSpotifyToPlexLogs,
@@ -1708,7 +1715,7 @@ const createDefaultStatusConfig = (config = {}) => {
         addService('collexions', 'ColleXions', String(config.collexionsInternalUrl).trim().replace(/\/+$/, ''), 'external', 'Plex collections sidecar', { visibleToUsers: false });
     }
     if (config.spotifyToPlexEnabled && String(config.spotifyToPlexInternalUrl || '').trim()) {
-        addService('spotify-sync', 'Spotify Sync', String(config.spotifyToPlexInternalUrl).trim().replace(/\/+$/, ''), 'external', 'Spotify-to-Plex sidecar', { visibleToUsers: false });
+        addService('spotify-sync', 'Spotify Sync', String(config.spotifyToPlexInternalUrl).trim().replace(/\/+$/, ''), 'external', 'spotify-to-plex Compose service', { visibleToUsers: false });
     }
 
     return { groups, services, announcement: null };
@@ -5424,7 +5431,8 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 spotifyToPlexCredentialsReady: isSpotifyToPlexCredentialsReady(config),
                 spotifyToPlexCallbackUrl: resolveSpotifyToPlexCallbackUrl(config, withBasePath, resolvePublicBaseUrlFromConfig),
                 spotifyToPlexHomeWidgetEnabled: !!config.spotifyToPlexHomeWidgetEnabled,
-                spotifyToPlexScheduledSyncEnabled: !!config.spotifyToPlexScheduledSyncEnabled,
+                spotifyToPlexScheduleMode: resolveSpotifyToPlexScheduleMode(config),
+                spotifyToPlexScheduledSyncEnabled: resolveSpotifyToPlexScheduleMode(config) === 'portal',
                 spotifyToPlexScheduledSyncIntervalHours: normalizeSpotifySyncIntervalHours(
                     config.spotifyToPlexScheduledSyncIntervalHours,
                     24,
@@ -5614,6 +5622,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 spotifyToPlexCredentialsReady: false,
                 spotifyToPlexCallbackUrl: '',
                 spotifyToPlexHomeWidgetEnabled: false,
+                spotifyToPlexScheduleMode: 'sidecar',
                 spotifyToPlexScheduledSyncEnabled: false,
                 spotifyToPlexScheduledSyncIntervalHours: 24,
                 spotifyToPlexScheduledSyncLastRunAt: '',
@@ -5651,7 +5660,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         inactiveCleanupEnabled, inactiveCleanupDays,
         primaryColor, customLogoUrl, customLoginLogoUrl, loginLogoCircleFrame, customFaviconUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, customNavTabs, homeCustomModules, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
-        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, spotifyToPlexEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, supportTicketsEnabled, chatEnabled, chatMentionNotifyInApp, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, scannerNotifyDeleted, scannerNotifyUpgrade, scannerNotifyImport, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, spotifyToPlexInternalUrl, spotifyToPlexClientId, spotifyToPlexClientSecret, spotifyToPlexEncryptionKey, spotifyToPlexHomeWidgetEnabled, spotifyToPlexScheduledSyncEnabled, spotifyToPlexScheduledSyncIntervalHours, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
+        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, spotifyToPlexEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, supportTicketsEnabled, chatEnabled, chatMentionNotifyInApp, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, scannerNotifyDeleted, scannerNotifyUpgrade, scannerNotifyImport, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, spotifyToPlexInternalUrl, spotifyToPlexClientId, spotifyToPlexClientSecret, spotifyToPlexEncryptionKey, spotifyToPlexHomeWidgetEnabled, spotifyToPlexScheduleMode, spotifyToPlexScheduledSyncEnabled, spotifyToPlexScheduledSyncIntervalHours, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
     } = req.body;
 
@@ -6322,14 +6331,33 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
                 ? !!spotifyToPlexHomeWidgetEnabled
                 : !!existingConfig.spotifyToPlexHomeWidgetEnabled;
         })(),
+        spotifyToPlexScheduleMode: (() => {
+            const spotifyOn = spotifyToPlexEnabled !== undefined
+                ? !!spotifyToPlexEnabled
+                : !!existingConfig.spotifyToPlexEnabled;
+            if (!spotifyOn || normalizedMediaServerType !== 'plex') return 'sidecar';
+            if (spotifyToPlexScheduleMode !== undefined) {
+                return normalizeSpotifyToPlexScheduleMode(spotifyToPlexScheduleMode, 'sidecar');
+            }
+            if (spotifyToPlexScheduledSyncEnabled !== undefined) {
+                return spotifyToPlexScheduledSyncEnabled ? 'portal' : 'sidecar';
+            }
+            return resolveSpotifyToPlexScheduleMode(existingConfig);
+        })(),
         spotifyToPlexScheduledSyncEnabled: (() => {
             const spotifyOn = spotifyToPlexEnabled !== undefined
                 ? !!spotifyToPlexEnabled
                 : !!existingConfig.spotifyToPlexEnabled;
             if (!spotifyOn || normalizedMediaServerType !== 'plex') return false;
-            return spotifyToPlexScheduledSyncEnabled !== undefined
-                ? !!spotifyToPlexScheduledSyncEnabled
-                : !!existingConfig.spotifyToPlexScheduledSyncEnabled;
+            let mode = 'sidecar';
+            if (spotifyToPlexScheduleMode !== undefined) {
+                mode = normalizeSpotifyToPlexScheduleMode(spotifyToPlexScheduleMode, 'sidecar');
+            } else if (spotifyToPlexScheduledSyncEnabled !== undefined) {
+                mode = spotifyToPlexScheduledSyncEnabled ? 'portal' : 'sidecar';
+            } else {
+                mode = resolveSpotifyToPlexScheduleMode(existingConfig);
+            }
+            return mode === 'portal';
         })(),
         spotifyToPlexScheduledSyncIntervalHours: (() => {
             const spotifyOn = spotifyToPlexEnabled !== undefined
@@ -6457,11 +6485,15 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
             resolveSpotifyToPlexCallbackUrl,
             log,
         });
-        if (envSync.written) {
-            log('[spotify-sync] Sidecar env file updated — restart spotify-to-plex to apply credential changes.');
+        const supervisorSync = await syncSpotifyToPlexSupervisorConfig(spotifySyncConfig, {
+            configDir: CONFIG_DIR,
+            log,
+        });
+        if (envSync.written || supervisorSync.written) {
+            log('[spotify-sync] spotify-to-plex env_file/supervisor updated — restart the spotify-to-plex container to apply credential or schedule changes.');
         }
     } catch (e) {
-        log(`[spotify-sync] Failed to write sidecar env file: ${e.message}`);
+        log(`[spotify-sync] Failed to write spotify-to-plex env_file: ${e.message}`);
     }
     try {
         await syncCollexionsEmbeddedWorker(spotifySyncConfig, { configDir: CONFIG_DIR, log });
@@ -19811,7 +19843,7 @@ const systemJobs = {
     spotifySync: {
         id: 'spotifySync',
         name: 'Spotify Sync',
-        description: 'Triggers spotify-to-plex sync/all on a portal schedule (optional; sidecar also runs daily cron by default).',
+        description: 'Calls spotify-to-plex POST /api/sync/all when schedule mode is Portal Background Tasks (container sync-scheduler disabled in that mode).',
         lastRun: null,
         nextRun: null,
         running: false,
@@ -25748,7 +25780,7 @@ const sanitizeCollexionsProxyBase = (rawUrl) => {
     return normalized.replace(/\/+$/, '');
 };
 
-/** Portal-side Spotify Sync health (works even when sidecar is down). */
+/** Portal-side Spotify Sync health (works when the spotify-to-plex container is down). */
 app.get('/api/spotify-to-plex/health', requireAdmin, async (req, res) => {
     try {
         const config = await loadFile(CONFIG_PATH, {});
@@ -29831,6 +29863,16 @@ app.listen(PORT, BIND_HOST, async () => {
         title: payload?.failures?.map((f) => `${f.type}: ${f.message}`).join(' · ') || 'Spotify Sync failed',
         dedupeKey: `spotify-sync:${payload?.signature || 'failed'}`,
     }));
+    void (async () => {
+        try {
+            const cfg = await loadFile(CONFIG_PATH, {});
+            if (cfg.spotifyToPlexEnabled) {
+                await syncSpotifyToPlexSupervisorConfig(cfg, { configDir: CONFIG_DIR, log });
+            }
+        } catch (error) {
+            log(`[spotify-sync] supervisor boot sync failed: ${error.message}`);
+        }
+    })();
     startSpotifyToPlexStatusWatcher({
         loadConfig: async () => loadFile(CONFIG_PATH, {}),
         fetchWithTimeout,

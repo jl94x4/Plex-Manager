@@ -62,7 +62,7 @@ export const SpotifySyncHomeWidget: React.FC<Props> = ({ onOpen }) => {
                         </div>
                         <div className="min-w-0">
                             <p className="text-muted text-[10px] uppercase tracking-widest font-bold">Spotify Sync</p>
-                            <p className="text-text font-bold text-base truncate">Playlist sync sidecar</p>
+                            <p className="text-text font-bold text-base truncate">spotify-to-plex service</p>
                         </div>
                     </div>
                     <button
