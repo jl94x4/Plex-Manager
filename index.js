@@ -6525,7 +6525,11 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         log(`[spotify-sync] Portal Plex config file sync failed: ${e.message}`);
     }
     try {
-        await syncSpotifyToPlexEmbeddedWorker(spotifySyncConfig, { configDir: CONFIG_DIR, log });
+        await syncSpotifyToPlexEmbeddedWorker(spotifySyncConfig, {
+            configDir: CONFIG_DIR,
+            log,
+            forceRestart: true,
+        });
     } catch (e) {
         log(`[spotify-sync] Bundled spotify-to-plex sync failed: ${e.message}`);
     }
@@ -25907,11 +25911,18 @@ app.get('/api/spotify-to-plex/health', requireAdmin, async (req, res) => {
         }
 
         const uniqueIssues = [...new Set(issues.filter(Boolean))];
+        const embedded = getSpotifyToPlexEmbeddedStatus();
+        if (enabled && !worker.reachable && embedded.bundledAvailable && !embedded.running) {
+            uniqueIssues.push(embedded.lastError
+                ? `Bundled worker is not running: ${embedded.lastError}`
+                : 'Bundled worker process is not running. Save Settings → Spotify Sync, or restart the portal container.');
+        }
         return res.json({
             ok: enabled && worker.reachable && worker.ok && !!callbackUrl && isSpotifyToPlexCredentialsReady(config),
             enabled,
             callbackUrl,
             worker,
+            embedded,
             issues: uniqueIssues,
         });
     } catch (e) {
@@ -26019,6 +26030,30 @@ app.post('/api/spotify-to-plex/apply-portal-defaults', requireAdmin, requireSpot
         return res.json(result);
     } catch (e) {
         return res.status(e?.status || 502).json({ error: e.message || 'Failed to apply portal defaults to Spotify Sync.' });
+    }
+});
+
+app.post('/api/spotify-to-plex/start-worker', requireAdmin, requireSpotifyToPlex, async (req, res) => {
+    try {
+        const config = req.spotifyToPlexConfig || await loadFile(CONFIG_PATH, {});
+        if (!isSpotifyToPlexBundledAvailable() || !isUsingBundledSpotifyToPlexUrl(config)) {
+            return res.status(400).json({
+                error: 'This portal image is using an external spotify-to-plex URL. Restart that Compose service instead.',
+            });
+        }
+        const result = await syncSpotifyToPlexEmbeddedWorker(config, {
+            configDir: CONFIG_DIR,
+            log,
+            forceRestart: true,
+        });
+        return res.json({
+            ok: !!result.running,
+            message: result.running ? 'Spotify Sync worker started' : 'Worker did not start',
+            ...result,
+            embedded: getSpotifyToPlexEmbeddedStatus(),
+        });
+    } catch (e) {
+        return res.status(502).json({ error: e.message || 'Failed to start bundled Spotify Sync worker.' });
     }
 });
 
@@ -29864,9 +29899,8 @@ app.listen(PORT, BIND_HOST, async () => {
     setInterval(monitorConcurrentSessions, 15000);
     startBackgroundService();
     loadFile(CONFIG_PATH, {}).then(async (bootConfig) => {
+        const bootWithId = { ...(bootConfig || {}), clientId: CLIENT_ID || bootConfig?.clientId };
         try {
-            // Prefer the in-memory CLIENT_ID so Collexions shares the same Plex device identity.
-            const bootWithId = { ...(bootConfig || {}), clientId: CLIENT_ID || bootConfig?.clientId };
             const { config: withCollexions, changed } = applyCollexionsBundledDefaults(bootWithId, {
                 configDir: CONFIG_DIR,
                 log,
@@ -29875,7 +29909,12 @@ app.listen(PORT, BIND_HOST, async () => {
                 await saveFile(CONFIG_PATH, withCollexions);
             }
             await syncCollexionsEmbeddedWorker(withCollexions, { configDir: CONFIG_DIR, log });
-            const { config: withSpotifyBundled, changed: spotifyBundledChanged } = applySpotifyToPlexBundledDefaults(withCollexions, {
+        } catch (e) {
+            log(`[collexions] Startup embedded worker sync failed: ${e.message}`);
+        }
+        try {
+            const latest = await loadFile(CONFIG_PATH, bootWithId);
+            const { config: withSpotifyBundled, changed: spotifyBundledChanged } = applySpotifyToPlexBundledDefaults(latest, {
                 configDir: CONFIG_DIR,
                 log,
             });
@@ -29898,7 +29937,7 @@ app.listen(PORT, BIND_HOST, async () => {
                 log(`[spotify-sync] Portal Plex/Lidarr apply on boot failed: ${e.message}`);
             }
         } catch (e) {
-            log(`[collexions] Startup embedded worker sync failed: ${e.message}`);
+            log(`[spotify-sync] Startup bundled worker sync failed: ${e.message}`);
         }
         // Phase 4: Discover prefs are portal-owned — skip Seerr settings sync on boot.
     });
@@ -29955,28 +29994,22 @@ app.listen(PORT, BIND_HOST, async () => {
         try {
             const cfg = await loadFile(CONFIG_PATH, {});
             if (!cfg.spotifyToPlexEnabled) return;
+            if (isSpotifyToPlexBundledAvailable() && isUsingBundledSpotifyToPlexUrl(cfg)) {
+                return;
+            }
             try {
                 syncSpotifyToPlexPlexConfigFile(cfg, spotifyToPlexPortalDefaultsDeps());
             } catch (error) {
-                log(`[spotify-sync] Portal Plex config file sync on bundled boot failed: ${error.message}`);
+                log(`[spotify-sync] Portal Plex config file sync on external boot failed: ${error.message}`);
             }
-            if (!isSpotifyToPlexBundledAvailable()) {
-                await syncSpotifyToPlexSupervisorConfig(cfg, { configDir: CONFIG_DIR, log });
-                try {
-                    await applySpotifyToPlexPortalDefaults(cfg, spotifyToPlexPortalDefaultsDeps());
-                } catch (error) {
-                    log(`[spotify-sync] Portal Plex/Lidarr apply on external boot failed: ${error.message}`);
-                }
-                return;
-            }
-            await syncSpotifyToPlexEmbeddedWorker(cfg, { configDir: CONFIG_DIR, log });
+            await syncSpotifyToPlexSupervisorConfig(cfg, { configDir: CONFIG_DIR, log });
             try {
                 await applySpotifyToPlexPortalDefaults(cfg, spotifyToPlexPortalDefaultsDeps());
             } catch (error) {
-                log(`[spotify-sync] Portal Plex/Lidarr apply on bundled boot failed: ${error.message}`);
+                log(`[spotify-sync] Portal Plex/Lidarr apply on external boot failed: ${error.message}`);
             }
         } catch (error) {
-            log(`[spotify-sync] bundled boot sync failed: ${error.message}`);
+            log(`[spotify-sync] external boot sync failed: ${error.message}`);
         }
     })();
     startSpotifyToPlexStatusWatcher({

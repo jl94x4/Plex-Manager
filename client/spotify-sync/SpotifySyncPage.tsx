@@ -45,6 +45,11 @@ type SyncStatus = {
     plexUri?: string;
     playlistRunCount?: number;
     lastSync?: Record<string, string | null>;
+    embedded?: {
+        running?: boolean;
+        bundledAvailable?: boolean;
+        lastError?: string;
+    };
 };
 
 type SavedItem = {
@@ -142,6 +147,20 @@ export const SpotifySyncPage: React.FC = () => {
         }
     };
 
+    const startWorker = async () => {
+        setBusy(true);
+        try {
+            const data = await apiFetch('/api/spotify-to-plex/start-worker', { method: 'POST' });
+            pushToast(data?.message || 'Worker start requested', 'success');
+            await loadStatus();
+        } catch (e: any) {
+            pushToast(e?.message || 'Could not start worker', 'error');
+            await loadStatus();
+        } finally {
+            setBusy(false);
+        }
+    };
+
     const applyPlex = async () => {
         setBusy(true);
         try {
@@ -228,11 +247,16 @@ export const SpotifySyncPage: React.FC = () => {
                 <div className="rounded-xl border border-rose-400/25 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
                     <p className="font-semibold">Spotify Sync worker is not reachable</p>
                     <p className="mt-1 text-xs text-rose-100/80">
-                        {statusError || 'The bundled worker is still starting, or the last image build did not include spotify-to-plex. Redeploy the latest nightly image and restart the portal container — this page talks to the worker over loopback, not through Cloudflare.'}
+                        {statusError
+                            || status?.embedded?.lastError
+                            || 'Nothing is listening on 127.0.0.1:9030 inside the portal container. Start the bundled worker, or redeploy the latest nightly image if this build did not include spotify-to-plex.'}
                     </p>
                     <div className="mt-3 flex flex-wrap gap-2">
-                        <button type="button" className={buttonClass} onClick={() => void applyPlex()}>Apply Plex from portal</button>
-                        <button type="button" className={buttonClass} onClick={() => void loadStatus()}>Retry</button>
+                        <button type="button" className={primaryButtonClass} onClick={() => void startWorker()} disabled={busy}>
+                            Start worker
+                        </button>
+                        <button type="button" className={buttonClass} onClick={() => void applyPlex()} disabled={busy}>Apply Plex from portal</button>
+                        <button type="button" className={buttonClass} onClick={() => void loadStatus()} disabled={busy}>Retry</button>
                     </div>
                 </div>
             ) : null}
