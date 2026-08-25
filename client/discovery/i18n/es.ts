@@ -419,6 +419,10 @@ export const es: DeepPartial<EnCatalog> = {
         noBiography: 'No hay biografía para {name}.',
         knownFor: 'Conocido por',
     },
+    pwa: { install: {
+        button: 'Instalar', howTo: 'Cómo hacerlo', dismiss: 'Cerrar el banner de instalación', bannerTitle: 'Instalar {server}', bannerSubtitle: 'Añade el portal a la pantalla de inicio', helpTitle: 'Instalar aplicación', helpSubtitle: 'Portal de {server}', closeHelp: 'Cerrar ayuda de instalación',
+        helpIos: 'En iPhone o iPad, toca Compartir en Safari y después Añadir a la pantalla de inicio. Abre el portal mediante HTTPS y, a continuación, inícialo desde ese icono.', helpFirefox: 'Abre el menú de Firefox (⋮) y elige Instalar. Usa tu URL pública HTTPS, no una dirección http://IP normal.', helpAndroidChrome: 'En el portal, abre Más → Instalar, o el menú de Chrome (⋮) → Instalar aplicación. Debes usar HTTPS (no http://IP). Si no aparece Instalar, permanece en esta página unos 30 segundos, tócala una vez, recarga e inténtalo de nuevo.', helpGeneric: 'Abre el menú del navegador y elige Instalar aplicación o Añadir a la pantalla de inicio.', checking: 'Comprobando requisitos de instalación…', resetReload: 'Restablecer datos de instalación y recargar', done: 'Listo', successTitle: 'Aplicación instalada', successBody: 'Abre {server} desde la pantalla de inicio para disfrutar de toda la experiencia de la aplicación.', openInstalled: 'Ya estás usando la aplicación instalada.', dismissToast: 'Cerrar',
+    } },
     calendar: {
         page: { tvDescription: 'Estrenos de series, descargas y actividad en tu ecosistema multimedia.', movieDescription: 'Estrenos de películas, descargas y actividad en tu ecosistema multimedia.' },
         actions: { refresh: 'Actualizar', configureInSettings: 'Configurar en Ajustes →' },

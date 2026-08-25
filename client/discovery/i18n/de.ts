@@ -419,6 +419,10 @@ export const de: DeepPartial<EnCatalog> = {
         noBiography: 'Keine Biografie für {name}.',
         knownFor: 'Bekannt für',
     },
+    pwa: { install: {
+        button: 'Installieren', howTo: 'Anleitung', dismiss: 'Installationsbanner schließen', bannerTitle: '{server} installieren', bannerSubtitle: 'Füge das Portal zu deinem Startbildschirm hinzu', helpTitle: 'App installieren', helpSubtitle: '{server}-Portal', closeHelp: 'Installationshilfe schließen',
+        helpIos: 'Tippe auf dem iPhone oder iPad in Safari auf „Teilen“ und dann auf „Zum Home-Bildschirm“. Öffne das Portal über HTTPS und starte es anschließend über dieses Symbol.', helpFirefox: 'Öffne das Firefox-Menü (⋮) und wähle dann „Installieren“. Verwende deine öffentliche HTTPS-URL – keine einfache http://IP-Adresse.', helpAndroidChrome: 'Öffne im Portal „Mehr“ → „Installieren“ oder in Chrome das Menü (⋮) → „App installieren“. Du musst HTTPS verwenden (nicht http://IP). Falls „Installieren“ fehlt, bleibe etwa 30 Sekunden auf dieser Seite, tippe einmal, lade neu und versuche es erneut.', helpGeneric: 'Öffne das Browsermenü und wähle „App installieren“ oder „Zum Home-Bildschirm“.', checking: 'Installationsvoraussetzungen werden geprüft…', resetReload: 'Installationsdaten zurücksetzen und neu laden', done: 'Fertig', successTitle: 'App installiert', successBody: 'Öffne {server} über deinen Startbildschirm, um alle App-Funktionen zu nutzen.', openInstalled: 'Du verwendest bereits die installierte App.', dismissToast: 'Schließen',
+    } },
     calendar: {
         page: { tvDescription: 'Serienstarts, Downloads und Aktivitäten in deinem Medien-Stack.', movieDescription: 'Filmstarts, Downloads und Aktivitäten in deinem Medien-Stack.' },
         actions: { refresh: 'Aktualisieren', configureInSettings: 'In den Einstellungen konfigurieren →' },
