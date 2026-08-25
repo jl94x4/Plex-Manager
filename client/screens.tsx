@@ -4098,11 +4098,15 @@ export const AnalyticsDashboard: React.FC<{ isAdmin: boolean, sessionInfo: any, 
         sync();
         window.addEventListener('resize', sync);
         window.addEventListener('scroll', sync, true);
+        window.visualViewport?.addEventListener('resize', sync);
+        window.visualViewport?.addEventListener('scroll', sync);
         const mainScroll = document.getElementById('main-scroll-container');
         mainScroll?.addEventListener('scroll', sync, { passive: true });
         return () => {
             window.removeEventListener('resize', sync);
             window.removeEventListener('scroll', sync, true);
+            window.visualViewport?.removeEventListener('resize', sync);
+            window.visualViewport?.removeEventListener('scroll', sync);
             mainScroll?.removeEventListener('scroll', sync);
         };
     }, [userSearchOpen, userSearchQuery, userSearchMatches.length]);
@@ -4752,7 +4756,9 @@ return (
                                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
                                     <input
                                         ref={userSearchInputRef}
-                                        type="search"
+                                        type="text"
+                                        inputMode="search"
+                                        enterKeyHint="search"
                                         value={userSearchQuery}
                                         onChange={(event) => {
                                             setUserSearchQuery(event.target.value);
@@ -4772,8 +4778,11 @@ return (
                                             }
                                         }}
                                         placeholder="e.g. username or email…"
-                                        className="w-full rounded-lg border border-border bg-background py-2.5 pl-10 pr-3 text-base text-text outline-none transition focus:border-plex"
+                                        className="w-full appearance-none rounded-lg border border-border bg-background py-2.5 pl-10 pr-3 text-[16px] leading-5 text-text outline-none transition focus:border-plex"
                                         autoComplete="off"
+                                        autoCorrect="off"
+                                        autoCapitalize="none"
+                                        spellCheck={false}
                                     />
                                     {userSearchOpen && userSearchQuery.trim() && userSearchMenuBox && typeof document !== 'undefined'
                                         ? ReactDOM.createPortal(
