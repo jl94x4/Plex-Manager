@@ -3,6 +3,7 @@ const SettingsDashboard = lazy(() => import('./settings/SettingsDashboard').then
 import { bindAppConfirm, bindAskConfirm, bindAppAlert, type AskConfirmOptions } from './shared/confirm';
 import { apiFetch } from './shared/api';
 import { getPublicOrigin, portalUrl, resolvePortalAssetUrl, stripBasePath } from './shared/basePath';
+import { isStandalonePwa, syncExistingWebPushSubscription } from './shared/webPushSubscribe';
 import { ConfirmModal } from './shared/ui';
 import { Loader } from './shared/toast';
 import { AppAmbientBackground } from './shared/theme';
@@ -236,10 +237,17 @@ export const MainApp: React.FC = () => {
         const isFirefox = /Firefox/i.test(navigator.userAgent || '');
         let cancelled = false;
         let refreshing = false;
+        let hadController = !!navigator.serviceWorker.controller;
 
         const onControllerChange = () => {
-            // Pick up portal-sw v8 (iOS push click URLs) without requiring a manual hard refresh.
+            // Reload only after an *update*. The first claim on Android Chrome used to
+            // reload mid-subscribe and leave the device locally subscribed but missing
+            // from the server store.
             if (refreshing || cancelled) return;
+            if (!hadController) {
+                hadController = true;
+                return;
+            }
             refreshing = true;
             window.location.reload();
         };
@@ -248,10 +256,10 @@ export const MainApp: React.FC = () => {
         (async () => {
             try {
                 const regs = await navigator.serviceWorker.getRegistrations();
-
-                // Firefox does not need a SW for Install/A2HS. A leftover broken SW
-                // from earlier PWA work makes Install silently do nothing — remove it.
-                if (isFirefox) {
+                const permissionGranted = typeof Notification !== 'undefined' && Notification.permission === 'granted';
+                // Firefox Install used to no-op with a leftover SW. Keep that workaround
+                // only until the PWA is installed or the user has already granted push.
+                if (isFirefox && !isStandalonePwa() && !permissionGranted) {
                     await Promise.all(regs.map((reg) => reg.unregister()));
                     return;
                 }
@@ -280,6 +288,12 @@ export const MainApp: React.FC = () => {
             navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
         };
     }, []);
+
+    useEffect(() => {
+        if (!sessionInfo) return;
+        if (currentRoute === 'login' || currentRoute === 'loading' || currentRoute === 'invite') return;
+        void syncExistingWebPushSubscription();
+    }, [sessionInfo, currentRoute]);
 
     useEffect(() => {
         if (currentRoute === 'status' && !sessionInfo && publicConfig?.showPublicStatusMonitor === false) {

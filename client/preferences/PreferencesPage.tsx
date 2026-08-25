@@ -4,7 +4,7 @@ import { apiFetch } from '../shared/api';
 import { portalUrl } from '../shared/basePath';
 import { DashboardHero, DashboardPageShell, DashboardPanel } from '../shared/dashboard/DashboardChrome';
 import { pushToast, ToastContainer, type ToastMessage } from '../shared/toast';
-import { subscribeWebPush, unsubscribeWebPush, webPushSupported, getIosWebPushBlockReason } from '../shared/webPushSubscribe';
+import { subscribeWebPush, unsubscribeWebPush, webPushSupported, getIosWebPushBlockReason, isAndroidDevice, isStandalonePwa, syncExistingWebPushSubscription } from '../shared/webPushSubscribe';
 import { useDiscoverI18n } from '../discovery/i18n';
 import { DiscoverLocaleSelect } from '../discovery/i18n/DiscoverLocaleSelect';
 
@@ -105,6 +105,9 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
     const [browserPushReady, setBrowserPushReady] = useState(false);
     const browserPushSupportedFlag = webPushSupported();
     const iosPushBlock = typeof window !== 'undefined' ? getIosWebPushBlockReason() : null;
+    const androidPushInstallHint = typeof window !== 'undefined'
+        && isAndroidDevice()
+        && !isStandalonePwa();
 
     useEffect(() => {
         if (dirty) return;
@@ -220,7 +223,14 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
         (async () => {
             if (!browserPushSupportedFlag) return;
             try {
-                const reg = await navigator.serviceWorker.getRegistration(portalUrl('/'));
+                const synced = await syncExistingWebPushSubscription();
+                if (cancelled) return;
+                if (synced) {
+                    setBrowserPushReady(true);
+                    return;
+                }
+                const reg = await navigator.serviceWorker.getRegistration(portalUrl('/'))
+                    || (await navigator.serviceWorker.getRegistrations())[0];
                 const sub = await reg?.pushManager.getSubscription();
                 if (!cancelled) setBrowserPushReady(!!sub);
             } catch {
@@ -533,11 +543,18 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                             {t('homeDashboard.iosPushNeeds164')}
                                         </p>
                                     ) : (
-                                        <p className="text-muted text-xs">
-                                            {browserPushReady
-                                                ? t('homeDashboard.browserPushSubscribed')
-                                                : t('homeDashboard.browserPushSubscribe')}
-                                        </p>
+                                        <>
+                                            <p className="text-muted text-xs">
+                                                {browserPushReady
+                                                    ? t('homeDashboard.browserPushSubscribed')
+                                                    : t('homeDashboard.browserPushSubscribe')}
+                                            </p>
+                                            {androidPushInstallHint ? (
+                                                <p className="text-amber-300/90 text-xs leading-relaxed">
+                                                    {t('homeDashboard.androidPushInstallHint')}
+                                                </p>
+                                            ) : null}
+                                        </>
                                     )}
                                     <div className="flex flex-wrap gap-2">
                                         {!browserPushReady && (

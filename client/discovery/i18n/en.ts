@@ -755,6 +755,7 @@ export const en = {
         browserPushSubscribe: 'Subscribe this browser to receive push notifications.',
         iosPushAddToHomeScreen: 'On iPhone, Safari cannot receive push. Open Share → Add to Home Screen, launch that icon, then tap Enable on this device.',
         iosPushNeeds164: 'iPhone push notifications need iOS 16.4 or later.',
+        androidPushInstallHint: 'On Android, use Chrome → Install app (not Add to Home screen / shortcut), open that installed app, allow notifications, then tap Enable on this device. Background push will not arrive from a normal Chrome tab.',
         enableOnThisDevice: 'Enable on this device',
         disableOnThisDevice: 'Disable on this device',
         enjoyingTempAccess: 'Enjoying your Temporary Access?',

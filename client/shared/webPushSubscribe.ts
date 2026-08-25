@@ -29,6 +29,10 @@ export const isIosDevice = () => {
     return navigator.platform === 'MacIntel' && Number(navigator.maxTouchPoints || 0) > 1;
 };
 
+export const isAndroidDevice = () => (
+    typeof navigator !== 'undefined' && /Android/i.test(navigator.userAgent || '')
+);
+
 export const isStandalonePwa = () => {
     if (typeof window === 'undefined') return false;
     return !!(
@@ -68,6 +72,64 @@ const waitForActiveWorker = async (registration: ServiceWorkerRegistration) => {
     });
 };
 
+const waitForController = async () => {
+    if (navigator.serviceWorker.controller) return;
+    await Promise.race([
+        new Promise<void>((resolve) => {
+            navigator.serviceWorker.addEventListener('controllerchange', () => resolve(), { once: true });
+        }),
+        new Promise<void>((resolve) => { window.setTimeout(resolve, 4000); }),
+    ]);
+};
+
+const applicationServerKeysMatch = (existing: PushSubscription, nextKey: Uint8Array) => {
+    const raw = existing.options?.applicationServerKey;
+    if (!raw) return false;
+    const current = raw instanceof Uint8Array ? raw : new Uint8Array(raw);
+    if (current.byteLength !== nextKey.byteLength) return false;
+    return current.every((value, index) => value === nextKey[index]);
+};
+
+const resolvePushRegistration = async () => {
+    let registration = await navigator.serviceWorker.getRegistration(portalUrl('/'));
+    if (!registration) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        registration = regs[0];
+    }
+    if (!registration) {
+        registration = await navigator.serviceWorker.register(portalUrl('/service-worker.js'), {
+            scope: portalUrl('/'),
+            updateViaCache: 'none',
+        });
+    }
+    await waitForActiveWorker(registration);
+    await navigator.serviceWorker.ready;
+    await waitForController();
+    return registration;
+};
+
+const persistSubscription = async (subscription: PushSubscription) => {
+    await apiFetch('/api/notifications/push/subscribe', {
+        method: 'POST',
+        body: JSON.stringify({ subscription: subscription.toJSON() }),
+    });
+};
+
+/** Re-save an existing device subscription so a SW reload cannot drop the server copy. */
+export const syncExistingWebPushSubscription = async () => {
+    if (!webPushSupported()) return false;
+    try {
+        const registration = await navigator.serviceWorker.getRegistration(portalUrl('/'))
+            || (await navigator.serviceWorker.getRegistrations())[0];
+        const subscription = await registration?.pushManager.getSubscription();
+        if (!subscription) return false;
+        await persistSubscription(subscription);
+        return true;
+    } catch {
+        return false;
+    }
+};
+
 export const subscribeWebPush = async () => {
     if (!webPushSupported()) {
         const err = new Error('Web Push is not supported in this browser');
@@ -99,33 +161,28 @@ export const subscribeWebPush = async () => {
     const { publicKey } = await apiFetch('/api/notifications/push/vapid-public-key');
     if (!publicKey) throw new Error('Push is not configured on this server');
 
-    let registration = await navigator.serviceWorker.getRegistration(portalUrl('/'));
-    if (!registration) {
-        registration = await navigator.serviceWorker.register(portalUrl('/service-worker.js'), {
-            scope: portalUrl('/'),
-            updateViaCache: 'none',
+    const registration = await resolvePushRegistration();
+    const applicationServerKey = urlBase64ToUint8Array(String(publicKey));
+    const existing = await registration.pushManager.getSubscription();
+    let subscription = existing;
+    if (!subscription || !applicationServerKeysMatch(subscription, applicationServerKey)) {
+        if (subscription) {
+            try { await subscription.unsubscribe(); } catch { /* replace stale VAPID key */ }
+        }
+        subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey,
         });
     }
-    await waitForActiveWorker(registration);
-    await navigator.serviceWorker.ready;
 
-    const existing = await registration.pushManager.getSubscription();
-    const subscription = existing || await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(String(publicKey)),
-    });
-
-    await apiFetch('/api/notifications/push/subscribe', {
-        method: 'POST',
-        body: JSON.stringify({ subscription: subscription.toJSON() }),
-    });
-
+    await persistSubscription(subscription);
     return subscription;
 };
 
 export const unsubscribeWebPush = async () => {
     if (!webPushSupported()) return false;
-    const registration = await navigator.serviceWorker.getRegistration(portalUrl('/'));
+    const registration = await navigator.serviceWorker.getRegistration(portalUrl('/'))
+        || (await navigator.serviceWorker.getRegistrations())[0];
     const subscription = await registration?.pushManager.getSubscription();
     if (!subscription) return false;
     const endpoint = subscription.endpoint;

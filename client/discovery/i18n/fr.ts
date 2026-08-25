@@ -548,6 +548,7 @@ export const fr: DeepPartial<EnCatalog> = {
         browserPushSubscribe: 'Abonnez ce navigateur pour recevoir les notifications push.',
         iosPushAddToHomeScreen: 'Sur iPhone, Safari ne reçoit pas les push. Partager → Sur l’écran d’accueil, ouvrez cette icône, puis touchez Activer sur cet appareil.',
         iosPushNeeds164: 'Les notifications push iPhone nécessitent iOS 16.4 ou plus récent.',
+        androidPushInstallHint: 'Sur Android, utilisez Chrome → Installer l’application (pas Ajouter à l’écran d’accueil), ouvrez cette appli, autorisez les notifications, puis touchez Activer sur cet appareil. Un onglet Chrome normal ne reçoit pas les push en arrière-plan.',
         enableOnThisDevice: 'Activer sur cet appareil',
         disableOnThisDevice: 'Désactiver sur cet appareil',
         enjoyingTempAccess: 'Vous profitez de votre accès temporaire ?',

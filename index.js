@@ -19237,7 +19237,7 @@ if (BASE_PATH) {
 
 // Chromium Android uses this for WebAPK installability. Firefox deliberately does not
 // register it (a bad SW makes Firefox Install silently no-op).
-const serviceWorkerScript = `/* portal-sw v9 */
+const serviceWorkerScript = `/* portal-sw v10 */
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
@@ -19271,7 +19271,7 @@ self.addEventListener('push', (event) => {
   try { icon = new URL('static/pwa-icon-192.png', self.registration.scope).href; } catch (_) {}
   const iconUrl = typeof data.icon === 'string' && /^https?:\\/\\//i.test(data.icon) ? data.icon : '';
   const image = typeof data.image === 'string' && /^https?:\\/\\//i.test(data.image) ? data.image : '';
-  event.waitUntil(self.registration.showNotification(String(data.title || 'Notification'), {
+  const options = {
     body: String(data.body || ''),
     tag: String(data.tag || 'portal'),
     data: { href },
@@ -19279,7 +19279,9 @@ self.addEventListener('push', (event) => {
     badge: iconUrl || icon || undefined,
     image: image || undefined,
     renotify: true,
-  }));
+    vibrate: [120, 80, 120],
+  };
+  event.waitUntil(self.registration.showNotification(String(data.title || 'Notification'), options));
 });
 
 self.addEventListener('notificationclick', (event) => {
@@ -19289,12 +19291,12 @@ self.addEventListener('notificationclick', (event) => {
     const allClients = await clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const client of allClients) {
       try {
-        if ('focus' in client) {
-          await client.focus();
-          if (href && 'navigate' in client) {
-            try { await client.navigate(href); } catch (_) {}
-          }
-          return;
+        let sameOrigin = false;
+        try { sameOrigin = new URL(client.url).origin === self.location.origin; } catch (_) {}
+        if (!sameOrigin) continue;
+        if ('focus' in client) await client.focus();
+        if (href && typeof client.navigate === 'function') {
+          try { await client.navigate(href); return; } catch (_) {}
         }
       } catch (_) {}
     }
