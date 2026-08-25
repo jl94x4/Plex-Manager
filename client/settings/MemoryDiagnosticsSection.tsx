@@ -22,6 +22,7 @@ type DiagnosticsPayload = {
         memoryUsageMB?: MemoryUsageMB;
         os?: { totalMemMB?: number; freeMemMB?: number };
         memoryCaches?: Record<string, CacheStat | Record<string, CacheStat>>;
+        allocator?: { jemalloc?: boolean; mallocArenaMax?: string | null };
     };
     caches?: Record<string, DiskCacheStat>;
     checkedAt?: string;
@@ -151,6 +152,14 @@ export const MemoryDiagnosticsSection: React.FC<MemoryDiagnosticsSectionProps> =
                     <p className="text-xs text-muted leading-relaxed">
                         <strong className="text-text">Total (RSS)</strong> is what Docker and your host see — all RAM held by this process.
                         Compare it to <strong className="text-text">JS heap</strong> below: if Total is much higher than heap, growth is likely buffers, native code, or fragmentation—not just JavaScript objects.
+                        {app?.allocator ? (
+                            <>
+                                {' '}Allocator: <strong className="text-text">{app.allocator.jemalloc ? 'jemalloc' : 'glibc'}</strong>
+                                {app.allocator.jemalloc
+                                    ? ' — freed RAM can return to the host.'
+                                    : ' — rebuild the container image to enable jemalloc so RSS can shrink after spikes.'}
+                            </>
+                        ) : null}
                     </p>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">

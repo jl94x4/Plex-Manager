@@ -112,6 +112,7 @@ import {
     isPortalEmbedProxyPath,
     parseEmbedProxyFromReferer,
 } from './lib/custom-tab-embed-proxy.js';
+import { discardFetchBody, pipeFetchBodyToResponse, sendFetchImage } from './lib/fetch-body.js';
 import {
     applySpotifyToPlexDefaults,
     createSpotifyToPlexCallbackHandler,
@@ -7809,22 +7810,16 @@ app.get('/api/plex/image', requireAuth, requireMember, async (req, res) => {
     try {
         const config = await loadFile(CONFIG_PATH, {});
         const uri = await getPlexConnectionUri(config);
-
-        let url;
-        if (width && height) {
-            url = `${uri}/photo/:/transcode?url=${encodeURIComponent(thumbPath)}&width=${encodeURIComponent(width)}&height=${encodeURIComponent(height)}&minSize=1&X-Plex-Token=${config.plexToken}`;
-        } else {
-            url = `${uri}${thumbPath}?X-Plex-Token=${config.plexToken}`;
-        }
+        const transcodeWidth = Math.min(Math.max(parseInt(width, 10) || PLEX_POSTER_WIDTH, 16), 1200);
+        const transcodeHeight = Math.min(Math.max(parseInt(height, 10) || PLEX_POSTER_HEIGHT, 16), 1800);
+        // Always transcode — original Plex art can be tens of MB each and was buffered in RAM.
+        const url = `${uri}/photo/:/transcode?url=${encodeURIComponent(thumbPath)}&width=${encodeURIComponent(transcodeWidth)}&height=${encodeURIComponent(transcodeHeight)}&minSize=1&X-Plex-Token=${config.plexToken}`;
 
         const response = await fetchWithTimeout(url, { headers: plexClientHeaders(config.plexToken) }, 15000);
-        if (!response.ok) throw new Error('fetch failed');
-        const buffer = Buffer.from(await response.arrayBuffer());
-        res.setHeader('Content-Type', response.headers.get('content-type') || 'image/jpeg');
-        res.setHeader('Cache-Control', 'public, max-age=86400');
-        res.send(buffer);
+        await sendFetchImage(res, response);
     } catch (e) {
-        res.status(500).send('');
+        if (!res.headersSent) res.status(500).send('');
+        else if (!res.writableEnded) res.destroy();
     }
 });
 
@@ -8248,6 +8243,7 @@ const fetchImageBuffer = async (config, thumbPath) => {
         if (res.ok) {
             return Buffer.from(await res.arrayBuffer());
         }
+        discardFetchBody(res);
     } catch (e) { }
     return null;
 };
@@ -8280,6 +8276,7 @@ const fetchJellyfinImageBufferForNewsletter = async (config, itemIds, { width = 
                     if (response.ok && contentType.startsWith('image/')) {
                         return Buffer.from(await response.arrayBuffer());
                     }
+                    discardFetchBody(response);
                 } catch (e) { }
             }
         }
@@ -8307,7 +8304,10 @@ const fetchJellyfinLibraryStatsForNewsletter = async (config) => {
             const response = await fetchWithTimeout(`${baseUrl}/Items?${params.toString()}`, {
                 headers: jellyfinHeaders(config.jellyfinApiKey),
             }, 15000);
-            if (!response.ok) return 0;
+            if (!response.ok) {
+                discardFetchBody(response);
+                return 0;
+            }
             const data = await response.json().catch(() => ({}));
             return Number(data.TotalRecordCount || 0) || 0;
         };
@@ -8333,7 +8333,11 @@ const fetchJellyfinServerNameForNewsletter = async (config, providerLabel) => {
         const response = await fetchWithTimeout(`${baseUrl}/System/Info/Public`, {
             headers: jellyfinHeaders(config.jellyfinApiKey),
         }, 10000);
-        const data = response.ok ? await response.json().catch(() => ({})) : {};
+        if (!response.ok) {
+            discardFetchBody(response);
+            return `${providerLabel} Server`;
+        }
+        const data = await response.json().catch(() => ({}));
         return data.ServerName || data.LocalAddress || `${providerLabel} Server`;
     } catch {
         return `${providerLabel} Server`;
@@ -10072,15 +10076,10 @@ app.get('/api/dynamic-theme/sample-image', requireAuth, requireMember, async (re
         // Do not follow redirects — an allowlisted host could otherwise bounce to an internal URL.
         const response = await fetchWithTimeout(rawUrl, { redirect: 'manual' }, 15000);
         if (response.status >= 300 && response.status < 400) {
+            discardFetchBody(response);
             return res.status(400).send('redirects not allowed');
         }
-        if (!response.ok) throw new Error('fetch failed');
-        const contentType = response.headers.get('content-type') || 'image/jpeg';
-        if (!contentType.startsWith('image/')) return res.status(400).send('not an image');
-        const buffer = Buffer.from(await response.arrayBuffer());
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Cache-Control', 'public, max-age=3600');
-        res.send(buffer);
+        await sendFetchImage(res, response, { cacheControl: 'public, max-age=3600', fallbackStatus: 502 });
     } catch (e) {
         log(`Dynamic theme sample-image error: ${e.message}`);
         res.status(502).send('image fetch failed');
@@ -11401,10 +11400,12 @@ app.get('/api/discovery/music/cover', requireAuth, requireMember, async (req, re
         ];
         let imageRes = null;
         for (const coverPath of coverPaths) {
+            discardFetchBody(imageRes);
             imageRes = await fetch(`${base}${coverPath}`, { headers }).catch(() => null);
             if (imageRes?.ok) break;
         }
         if (!imageRes?.ok) {
+            discardFetchBody(imageRes);
             const artist = await fetchArrInstanceJson(instance, `/api/v1/artist/${artistId}`, {
                 resolveUrl,
                 fetchImpl: fetch,
@@ -11419,11 +11420,7 @@ app.get('/api/discovery/music/cover', requireAuth, requireMember, async (req, re
                 if (safeRemote) imageRes = await fetch(safeRemote).catch(() => null);
             }
         }
-        if (!imageRes?.ok) return res.status(imageRes?.status || 404).send('Cover not found');
-        const contentType = imageRes.headers.get('content-type') || 'image/jpeg';
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Cache-Control', 'public, max-age=86400');
-        res.send(Buffer.from(await imageRes.arrayBuffer()));
+        await sendFetchImage(res, imageRes);
     } catch (e) {
         log(`Discovery music cover error: ${e.message}`);
         res.status(500).send('Failed to load cover art');
@@ -13236,6 +13233,10 @@ app.get('/api/admin/diagnostics', requireAdmin, async (req, res) => {
                     // Anything here is RSS not accounted for by the V8 heap + external/arrayBuffers
                     // figures above — native allocations, thread stacks, mmap'd regions, fragmentation.
                     unaccounted: toMB(mem.rss - mem.heapTotal - mem.external),
+                },
+                allocator: {
+                    jemalloc: String(process.env.LD_PRELOAD || '').includes('jemalloc'),
+                    mallocArenaMax: process.env.MALLOC_ARENA_MAX || null,
                 },
                 v8HeapStats: v8.getHeapStatistics(),
                 v8HeapSpaces: v8.getHeapSpaceStatistics().map((space) => ({
@@ -15423,7 +15424,10 @@ const fetchJellyfinItems = async (config, includeItemTypes, limit) => {
     const response = await fetchWithTimeout(`${baseUrl}/Items?${params.toString()}`, {
         headers: jellyfinHeaders(config.jellyfinApiKey),
     }, 15000);
-    if (!response.ok) throw new Error(`Jellyfin Items returned HTTP ${response.status}`);
+    if (!response.ok) {
+        discardFetchBody(response);
+        throw new Error(`Jellyfin Items returned HTTP ${response.status}`);
+    }
     const data = await response.json();
     return Array.isArray(data.Items) ? data.Items : [];
 };
@@ -15443,12 +15447,8 @@ app.get('/api/jellyfin/image', requireAuth, requireMember, async (req, res) => {
         }, 15000);
         if (!response.ok) {
             log(`Jellyfin image ${itemId} returned HTTP ${response.status}`);
-            return res.status(404).send('');
         }
-        const buffer = Buffer.from(await response.arrayBuffer());
-        res.setHeader('Content-Type', response.headers.get('content-type') || 'image/jpeg');
-        res.setHeader('Cache-Control', 'public, max-age=86400');
-        res.send(buffer);
+        await sendFetchImage(res, response);
     } catch (e) {
         res.status(500).send('');
     }
@@ -15465,11 +15465,7 @@ app.get('/api/jellyfin/user-image', requireAuth, requireMember, async (req, res)
         const response = await fetchWithTimeout(imageUrl, {
             headers: jellyfinHeaders(config.jellyfinApiKey),
         }, 15000);
-        if (!response.ok) return res.status(404).send('');
-        const buffer = Buffer.from(await response.arrayBuffer());
-        res.setHeader('Content-Type', response.headers.get('content-type') || 'image/jpeg');
-        res.setHeader('Cache-Control', 'public, max-age=86400');
-        res.send(buffer);
+        await sendFetchImage(res, response);
     } catch (e) {
         res.status(500).send('');
     }
@@ -15483,12 +15479,11 @@ const proxyJellyfinBrandingAsset = async (res, paths, fallbackContentType = 'ima
         const response = await fetchWithTimeout(`${baseUrl}${path}`, {
             headers: jellyfinHeaders(config.jellyfinApiKey, { Accept: 'image/*,*/*;q=0.8' }),
         }, 15000).catch(() => null);
-        if (!response || !response.ok) continue;
-        const buffer = Buffer.from(await response.arrayBuffer());
-        if (!buffer.length) continue;
-        res.setHeader('Content-Type', response.headers.get('content-type') || fallbackContentType);
-        res.setHeader('Cache-Control', 'public, max-age=3600');
-        return res.send(buffer);
+        if (!response || !response.ok) {
+            discardFetchBody(response);
+            continue;
+        }
+        return sendFetchImage(res, response, { cacheControl: 'public, max-age=3600' });
     }
     return res.status(404).send('');
 };
@@ -26310,8 +26305,8 @@ app.all('/api/collexions/*', requireAdmin, requireCollexions, async (req, res) =
                 });
             }
         }
-        const buf = Buffer.from(await upstream.arrayBuffer());
-        return res.send(buf);
+        await pipeFetchBodyToResponse(upstream, res);
+        return;
     } catch (e) {
         const timedOut = e?.name === 'AbortError' || /aborted/i.test(String(e?.message || ''));
         log(`Collexions proxy error: ${e.message}`);
@@ -28662,6 +28657,7 @@ app.get('/api/upgrader/arr-cover', requireAdmin, async (req, res) => {
         });
 
         if (!imageRes.ok) {
+            discardFetchBody(imageRes);
             let entity = null;
             if (arrType === 'sonarr') {
                 entity = await fetchSonarrSeriesById(instance, entityId, { resolveUrl, fetchImpl: fetch });
@@ -28675,17 +28671,15 @@ app.get('/api/upgrader/arr-cover', requireAdmin, async (req, res) => {
                 const safeRemote = await resolveSafeArrRemoteImageUrl(remoteUrl, base).catch(() => null);
                 if (safeRemote) {
                     imageRes = await fetch(safeRemote);
+                } else {
+                    imageRes = null;
                 }
+            } else {
+                imageRes = null;
             }
         }
 
-        if (!imageRes?.ok) return res.status(imageRes?.status || 404).send('Cover not found');
-
-        const contentType = imageRes.headers.get('content-type') || 'image/jpeg';
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Cache-Control', 'public, max-age=86400');
-        const buffer = Buffer.from(await imageRes.arrayBuffer());
-        res.send(buffer);
+        await sendFetchImage(res, imageRes);
     } catch (e) {
         res.status(500).send('Failed to load cover art');
     }
@@ -28716,12 +28710,11 @@ app.get('/api/upgrader/arr-episode-image', requireAdmin, async (req, res) => {
             if (tryRes?.ok) {
                 const contentType = tryRes.headers.get('content-type') || 'image/jpeg';
                 if (contentType.startsWith('image/')) {
-                    res.setHeader('Content-Type', contentType);
-                    res.setHeader('Cache-Control', 'public, max-age=86400');
-                    res.send(Buffer.from(await tryRes.arrayBuffer()));
+                    await sendFetchImage(res, tryRes);
                     return;
                 }
             }
+            discardFetchBody(tryRes);
         }
 
         // Strategy 2: fetch via the episode API and look at images array
@@ -28733,12 +28726,7 @@ app.get('/api/upgrader/arr-episode-image', requireAdmin, async (req, res) => {
         const safeRemote = await resolveSafeArrRemoteImageUrl(remoteUrl, base).catch(() => null);
         if (!safeRemote) return res.status(404).send('Cover not found');
         const imageRes = await fetch(safeRemote, { headers });
-        if (!imageRes?.ok) return res.status(imageRes?.status || 404).send('Cover not found');
-
-        const contentType = imageRes.headers.get('content-type') || 'image/jpeg';
-        res.setHeader('Content-Type', contentType);
-        res.setHeader('Cache-Control', 'public, max-age=86400');
-        res.send(Buffer.from(await imageRes.arrayBuffer()));
+        await sendFetchImage(res, imageRes);
     } catch (e) {
         res.status(500).send('Failed to load episode image');
     }

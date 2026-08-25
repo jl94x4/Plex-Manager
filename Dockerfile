@@ -70,6 +70,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ffmpeg \
         gosu \
+        libjemalloc2 \
         libva2 \
         mesa-va-drivers \
         pciutils \

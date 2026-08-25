@@ -54,6 +54,22 @@ collect_dri_gids() {
 gids="$PGID"
 collect_dri_gids
 
+# jemalloc returns freed RAM to the OS; glibc's malloc does not (issue #181).
+# Only preload it for the Node portal — Chromium (spotify-to-plex) crashes if it
+# inherits this LD_PRELOAD. Child spawns strip it in lib/child-env.js as well.
+if [ "$1" = "node" ]; then
+  for jemalloc_lib in \
+    /usr/lib/x86_64-linux-gnu/libjemalloc.so.2 \
+    /usr/lib/aarch64-linux-gnu/libjemalloc.so.2
+  do
+    if [ -f "$jemalloc_lib" ]; then
+      export LD_PRELOAD="$jemalloc_lib"
+      export MALLOC_CONF="${MALLOC_CONF:-dirty_decay_ms:1000,muzzy_decay_ms:1000}"
+      break
+    fi
+  done
+fi
+
 # Prefer setpriv so we can attach /dev/dri GIDs as supplementary groups.
 # Do not combine --clear-groups with --groups (mutually exclusive on util-linux).
 if command -v setpriv >/dev/null 2>&1; then
