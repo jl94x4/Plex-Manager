@@ -330,6 +330,8 @@ const PlaylistsPanel: React.FC = () => {
             setPreviewing(false);
         }
     };
+
+    const addItem = async () => {
         if (!search.trim()) return;
         setAdding(true);
         try {
