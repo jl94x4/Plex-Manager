@@ -27,7 +27,8 @@ You do **not** need Spotify variables in the host `.env` when using Settings —
 
 ## Onboarding
 
-- **Apply Plex/Lidarr from portal** — pushes portal Plex URL/token and the first enabled Lidarr instance into spotify-to-plex (`POST /api/spotify-to-plex/apply-portal-defaults`).
+- **Plex from portal** — portal Plex URL/token (Settings → Plex) are written into spotify-to-plex automatically on save, boot, and when you open Spotify Sync. You do not need the embedded Plex login button.
+- **Apply Plex/Lidarr from portal** — manual re-push of portal Plex URL/token and the first enabled Lidarr instance (`POST /api/spotify-to-plex/apply-portal-defaults`).
 - **Sync now** — triggers sync jobs (`POST /api/spotify-to-plex/sync` with `type: all`).
 - **Container logs** — opens the embedded `advanced/logs` view (or use Status monitor when service URLs are configured).
 

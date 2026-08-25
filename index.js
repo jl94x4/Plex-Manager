@@ -143,11 +143,14 @@ import {
     resolveSpotifyToPlexScheduleMode,
 } from './lib/spotify-to-plex-schedule-mode.js';
 import {
-    buildSpotifyToPlexPortalApplyPlan,
     fetchSpotifyToPlexJson,
     summarizeSpotifyToPlexLogs,
     SPOTIFY_TO_PLEX_SYNC_TYPES,
 } from './lib/spotify-to-plex-api.js';
+import {
+    applySpotifyToPlexPortalDefaults,
+    syncSpotifyToPlexPlexConfigFile,
+} from './lib/spotify-to-plex-portal-defaults.js';
 import {
     setSpotifyToPlexFailureNotify,
     startSpotifyToPlexStatusWatcher,
@@ -6516,9 +6519,22 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         log(`[spotify-sync] Failed to write spotify-to-plex env_file: ${e.message}`);
     }
     try {
+        syncSpotifyToPlexPlexConfigFile(spotifySyncConfig, spotifyToPlexPortalDefaultsDeps());
+    } catch (e) {
+        log(`[spotify-sync] Portal Plex config file sync failed: ${e.message}`);
+    }
+    try {
         await syncSpotifyToPlexEmbeddedWorker(spotifySyncConfig, { configDir: CONFIG_DIR, log });
     } catch (e) {
         log(`[spotify-sync] Bundled spotify-to-plex sync failed: ${e.message}`);
+    }
+    try {
+        const portalDefaults = await applySpotifyToPlexPortalDefaults(spotifySyncConfig, spotifyToPlexPortalDefaultsDeps());
+        if (portalDefaults.applied?.length) {
+            log(`[spotify-sync] ${portalDefaults.message}`);
+        }
+    } catch (e) {
+        log(`[spotify-sync] Portal Plex/Lidarr apply failed: ${e.message}`);
     }
     try {
         await syncCollexionsEmbeddedWorker(spotifySyncConfig, { configDir: CONFIG_DIR, log });
@@ -7299,6 +7315,19 @@ const handleSpotifyToPlexCallback = createSpotifyToPlexCallbackHandler({
     resolvePublicBaseUrlFromConfig,
     fetchWithTimeout: embedProxyFetch,
     allowPrivateIntegrationUrls: ALLOW_PRIVATE_INTEGRATION_URLS,
+    log,
+});
+
+const spotifyToPlexPortalDefaultsDeps = () => ({
+    configDir: CONFIG_DIR,
+    resolveConfiguredPlexServerUrl,
+    getArrInstances,
+    isArrInstanceReady,
+    fetchSpotifyToPlexJson: (opts) => fetchSpotifyToPlexJson({
+        ...opts,
+        fetchWithTimeout,
+        allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS,
+    }),
     log,
 });
 
@@ -25964,47 +25993,8 @@ app.post('/api/spotify-to-plex/sync', requireAdmin, requireSpotifyToPlex, async 
 app.post('/api/spotify-to-plex/apply-portal-defaults', requireAdmin, requireSpotifyToPlex, async (req, res) => {
     try {
         const config = req.spotifyToPlexConfig || await loadFile(CONFIG_PATH, {});
-        const plan = buildSpotifyToPlexPortalApplyPlan(config, {
-            resolveConfiguredPlexServerUrl,
-            getArrInstances,
-            isArrInstanceReady,
-        });
-        const applied = [];
-        const skipped = [];
-        if (plan.plex) {
-            await fetchSpotifyToPlexJson({
-                config,
-                path: '/api/settings',
-                method: 'POST',
-                body: plan.plex,
-                fetchWithTimeout,
-                allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS,
-            });
-            applied.push('Plex connection');
-        } else {
-            skipped.push('Plex (missing URL or token in portal Settings)');
-        }
-        if (plan.lidarr) {
-            await fetchSpotifyToPlexJson({
-                config,
-                path: '/api/lidarr/settings',
-                method: 'PUT',
-                body: plan.lidarr,
-                fetchWithTimeout,
-                allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS,
-            });
-            applied.push('Lidarr');
-        } else {
-            skipped.push('Lidarr (no enabled instance in Integrations)');
-        }
-        return res.json({
-            ok: true,
-            applied,
-            skipped,
-            message: applied.length
-                ? `Applied portal defaults: ${applied.join(', ')}`
-                : 'Nothing to apply — configure Plex and/or Lidarr in portal Settings first.',
-        });
+        const result = await applySpotifyToPlexPortalDefaults(config, spotifyToPlexPortalDefaultsDeps());
+        return res.json(result);
     } catch (e) {
         return res.status(e?.status || 502).json({ error: e.message || 'Failed to apply portal defaults to Spotify Sync.' });
     }
@@ -29846,7 +29836,20 @@ app.listen(PORT, BIND_HOST, async () => {
             if (spotifyBundledChanged) {
                 await saveFile(CONFIG_PATH, withSpotifyBundled);
             }
+            try {
+                syncSpotifyToPlexPlexConfigFile(bootSpotifyConfig, spotifyToPlexPortalDefaultsDeps());
+            } catch (e) {
+                log(`[spotify-sync] Portal Plex config file sync on boot failed: ${e.message}`);
+            }
             await syncSpotifyToPlexEmbeddedWorker(bootSpotifyConfig, { configDir: CONFIG_DIR, log });
+            try {
+                const portalDefaults = await applySpotifyToPlexPortalDefaults(bootSpotifyConfig, spotifyToPlexPortalDefaultsDeps());
+                if (portalDefaults.applied?.length) {
+                    log(`[spotify-sync] ${portalDefaults.message}`);
+                }
+            } catch (e) {
+                log(`[spotify-sync] Portal Plex/Lidarr apply on boot failed: ${e.message}`);
+            }
         } catch (e) {
             log(`[collexions] Startup embedded worker sync failed: ${e.message}`);
         }
@@ -29905,11 +29908,26 @@ app.listen(PORT, BIND_HOST, async () => {
         try {
             const cfg = await loadFile(CONFIG_PATH, {});
             if (!cfg.spotifyToPlexEnabled) return;
+            try {
+                syncSpotifyToPlexPlexConfigFile(cfg, spotifyToPlexPortalDefaultsDeps());
+            } catch (error) {
+                log(`[spotify-sync] Portal Plex config file sync on bundled boot failed: ${error.message}`);
+            }
             if (!isSpotifyToPlexBundledAvailable()) {
                 await syncSpotifyToPlexSupervisorConfig(cfg, { configDir: CONFIG_DIR, log });
+                try {
+                    await applySpotifyToPlexPortalDefaults(cfg, spotifyToPlexPortalDefaultsDeps());
+                } catch (error) {
+                    log(`[spotify-sync] Portal Plex/Lidarr apply on external boot failed: ${error.message}`);
+                }
                 return;
             }
             await syncSpotifyToPlexEmbeddedWorker(cfg, { configDir: CONFIG_DIR, log });
+            try {
+                await applySpotifyToPlexPortalDefaults(cfg, spotifyToPlexPortalDefaultsDeps());
+            } catch (error) {
+                log(`[spotify-sync] Portal Plex/Lidarr apply on bundled boot failed: ${error.message}`);
+            }
         } catch (error) {
             log(`[spotify-sync] bundled boot sync failed: ${error.message}`);
         }

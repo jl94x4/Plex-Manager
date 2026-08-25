@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Music, RefreshCw, Play, ExternalLink } from 'lucide-react';
 import { portalUrl } from '../shared/basePath';
 import { apiFetch } from '../shared/api';
@@ -36,6 +36,17 @@ export const SpotifySyncPage: React.FC = () => {
     }, []);
 
     usePoll(() => { void loadStatus(); }, 60_000, { immediate: true });
+
+    useEffect(() => {
+        void (async () => {
+            try {
+                await apiFetch('/api/spotify-to-plex/apply-portal-defaults', { method: 'POST' });
+                await loadStatus();
+            } catch {
+                // worker may still be starting
+            }
+        })();
+    }, [loadStatus]);
 
     const runSync = async () => {
         setSyncing(true);

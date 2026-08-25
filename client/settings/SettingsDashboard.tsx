@@ -5100,6 +5100,9 @@ export const SettingsDashboard: React.FC = () => {
                                     disabled={!spotifyToPlexEnabled}
                                     border={false}
                                 />
+                                <p className="text-[11px] text-muted mt-2">
+                                    Plex URL and token from Settings → Plex (Media Player) are pushed into spotify-to-plex automatically on save and when you open Spotify Sync — no separate Plex login in the embedded UI.
+                                </p>
                                 <div className="flex flex-wrap gap-2 mt-3">
                                     <button
                                         type="button"
