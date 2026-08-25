@@ -44,6 +44,9 @@ ENV FORCE_SECURE_COOKIES=false
 # climbs and drops back to baseline solely on process restart — see issue #181. This
 # does not change app behavior, only how many malloc arenas glibc is allowed to use.
 ENV MALLOC_ARENA_MAX=2
+# Cap V8 old-space so analytics/history JSON spikes fail soft instead of unbounded heap.
+# Compose can override NODE_OPTIONS; Unraid templates without it still get this default.
+ENV NODE_OPTIONS="--max-old-space-size=2048"
 ENV COLLEXIONS_APP_DIR=/app/collexions
 ENV COLLEXIONS_EMBEDDED_PORT=15755
 ENV POSTER_SETS_APP_DIR=/app/poster-sets

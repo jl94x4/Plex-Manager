@@ -113,6 +113,7 @@ import {
     parseEmbedProxyFromReferer,
 } from './lib/custom-tab-embed-proxy.js';
 import { discardFetchBody, pipeFetchBodyToResponse, sendFetchImage } from './lib/fetch-body.js';
+import { shouldSkipGzipForUrl } from './lib/skip-gzip.js';
 import {
     applySpotifyToPlexDefaults,
     createSpotifyToPlexCallbackHandler,
@@ -245,10 +246,14 @@ const normalizePlexBandwidthKbps = (raw) => {
 
 const app = express();
 app.use(compression({
+    // Lower zlib window than the default (8) so concurrent gzip streams stay small.
+    level: 4,
+    memLevel: 5,
+    threshold: 1024,
     filter: (req, res) => {
         // Speed tests must stay uncompressed — gzip of repetitive payloads skews Mbps badly.
         const url = String(req.originalUrl || req.url || '');
-        if (url.includes('/api/speedtest/')) return false;
+        if (shouldSkipGzipForUrl(url)) return false;
         // Embed proxy streams large JS/CSS/image payloads; compressing them duplicates buffers in RAM.
         if (isPortalEmbedProxyPath(url)) return false;
         const pathOnly = url.split('?')[0];
@@ -1142,7 +1147,7 @@ const personalAnalyticsCache = createTtlLruCache({
 });
 const personalHistoryCache = createTtlLruCache({
     name: 'personalHistory',
-    maxEntries: 24,
+    maxEntries: 8,
     defaultTtlMs: Number.POSITIVE_INFINITY,
 });
 const personalAnalyticsRefreshJobs = new Map(); // key -> Promise
@@ -19507,6 +19512,18 @@ app.use((req, res, next) => {
     });
 });
 
+let cachedPortalIndexHtml = { mtimeMs: -1, text: '' };
+const readPortalIndexHtml = async () => {
+    const indexPath = path.join(process.cwd(), 'index.html');
+    const stat = await fs.stat(indexPath);
+    if (cachedPortalIndexHtml.text && stat.mtimeMs === cachedPortalIndexHtml.mtimeMs) {
+        return cachedPortalIndexHtml.text;
+    }
+    const text = await fs.readFile(indexPath, 'utf8');
+    cachedPortalIndexHtml = { mtimeMs: stat.mtimeMs, text };
+    return text;
+};
+
 // Serve the main index.html for SPA routes (after base-path strip, paths are root-relative)
 app.get(/^\/(?!api\/|static\/|manifest\.(?:webmanifest|json)|site\.webmanifest|service-worker\.js).*$/, async (req, res) => {
     if (!arePortalFrontendAssetsReady()) {
@@ -19516,8 +19533,7 @@ app.get(/^\/(?!api\/|static\/|manifest\.(?:webmanifest|json)|site\.webmanifest|s
         return res.send(buildMissingFrontendAssetsHtml());
     }
     try {
-        const indexPath = path.join(process.cwd(), 'index.html');
-        const html = lockViewportForAppleClients(await fs.readFile(indexPath, 'utf8'), req.headers['user-agent']);
+        const html = lockViewportForAppleClients(await readPortalIndexHtml(), req.headers['user-agent']);
         const socialMeta = await buildSocialMetaTags(req);
         const updatedHtml = injectBasePathHtml(injectAppIconLinks(html
             .replace(/<title>[\s\S]*?<\/title>/i, `<title>${escapeHtmlAttr(socialMeta.title)}</title>`)
@@ -19528,8 +19544,7 @@ app.get(/^\/(?!api\/|static\/|manifest\.(?:webmanifest|json)|site\.webmanifest|s
         res.send(updatedHtml);
     } catch (e) {
         try {
-            const indexPath = path.join(process.cwd(), 'index.html');
-            const html = lockViewportForAppleClients(await fs.readFile(indexPath, 'utf8'), req.headers['user-agent']);
+            const html = lockViewportForAppleClients(await readPortalIndexHtml(), req.headers['user-agent']);
             res.setHeader('Content-Type', 'text/html; charset=utf-8');
             res.send(injectBasePathHtml(html));
         } catch {
@@ -26293,7 +26308,9 @@ app.all('/api/collexions/*', requireAdmin, requireCollexions, async (req, res) =
                 return res.end();
             }
             try {
-                return res.json(JSON.parse(raw));
+                JSON.parse(raw);
+                res.setHeader('Content-Type', contentType || 'application/json');
+                return res.send(raw);
             } catch (parseErr) {
                 log(`Collexions proxy JSON parse error (HTTP ${upstream.status}): ${parseErr.message}`);
                 const status = upstream.ok ? 502 : upstream.status;
