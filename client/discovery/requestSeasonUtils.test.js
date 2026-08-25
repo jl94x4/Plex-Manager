@@ -45,3 +45,14 @@ test('buildSeasonStatusFromCatalogCache handles partial seasons without lastEpis
     assert.equal(rows[0].seasonNumber, 1);
     assert.ok(rows[0].statusLabel);
 });
+
+test('getRequestButtonState keeps Request Series when TMDB has no seasons yet', () => {
+    const { getRequestButtonState } = loadRequestSeasonUtils();
+    const button = getRequestButtonState('tv', 1, [], { status: 1 }, {
+        name: 'The Librarians: The Next Chapter',
+        firstAirDate: '2025-05-24',
+        status: 'Returning Series',
+    });
+    assert.equal(button.label, 'Request Series');
+    assert.equal(button.disabled, false);
+});
