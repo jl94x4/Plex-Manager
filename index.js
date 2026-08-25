@@ -1582,6 +1582,8 @@ import {
     sendWebPushToUser,
     isWebPushGloballyEnabled,
     getWebPushAdminSummary,
+    listWebPushSubscriptionsForIdentities,
+    webPushIdentityIdsForUser,
 } from './lib/notifications/webPush.js';
 import {
     buildSummaryDigest,
@@ -4515,6 +4517,18 @@ app.get('/api/admin/notifications/status', requireAdmin, async (req, res) => {
         const users = await loadFile(USERS_PATH, []);
         const inApp = await getInAppNotificationsAdminSummary({ limit: 1 });
         const push = await getWebPushAdminSummary();
+        let thisUserDeviceCount = 0;
+        try {
+            const { localUser } = await ensurePortalUserForNotifications(req.user, { config });
+            if (localUser?.id) {
+                const mine = await listWebPushSubscriptionsForIdentities(
+                    webPushIdentityIdsForUser(localUser.id, localUser),
+                );
+                thisUserDeviceCount = mine.length;
+            }
+        } catch {
+            thisUserDeviceCount = 0;
+        }
         let vapidReady = false;
         try {
             const key = await getVapidPublicKey();
@@ -4562,6 +4576,7 @@ app.get('/api/admin/notifications/status', requireAdmin, async (req, res) => {
             webPush: {
                 enabled: isWebPushGloballyEnabled(config),
                 vapidReady,
+                thisUserDeviceCount,
                 ...push,
             },
             email: {
@@ -4705,7 +4720,14 @@ app.post('/api/admin/notifications/test', requireAdmin, async (req, res) => {
                 }, { config, user: localUser, log });
                 results.webPush = (push?.sent || 0) > 0;
                 if (!results.webPush) {
-                    results.errors.push(`webPush: ${push?.skipped || 'no devices subscribed for this admin'}`);
+                    const hints = {
+                        'no-subscriptions': 'no device subscribed for this admin — on this phone, install the PWA in Chrome, open it, then Send test again (or Preferences → Enable on this device)',
+                        disabled: 'Web Push is turned off in Settings',
+                        'user-opt-out': 'Browser push is off in Preferences for this account',
+                        'expired-subscription': 'this device’s push subscription expired — Enable on this device again',
+                        'send-failed': push?.error || 'FCM rejected the push',
+                    };
+                    results.errors.push(`webPush: ${hints[push?.skipped] || push?.error || push?.skipped || 'send failed'}`);
                 }
             } catch (error) {
                 results.errors.push(`webPush: ${error?.message || error}`);

@@ -7,6 +7,43 @@ import { navigateToSummaryDigest } from '../shared/SummaryDigestCard';
 import { CustomSelect, SettingsToggleRow } from '../shared/ui';
 import { SettingFieldLabel, SettingHint } from './SettingHint';
 import { NotificationTemplatesPanel } from './NotificationTemplatesPanel';
+import { subscribeWebPush } from '../shared/webPushSubscribe';
+
+const TEST_CHANNELS_STORAGE_KEY = 'portal-notification-test-channels';
+const DEFAULT_TEST_CHANNELS = {
+    inApp: true,
+    webPush: false,
+    email: false,
+    discord: false,
+    ntfy: false,
+    webhook: false,
+};
+
+const readStoredTestChannels = () => {
+    try {
+        const raw = localStorage.getItem(TEST_CHANNELS_STORAGE_KEY);
+        if (!raw) return { ...DEFAULT_TEST_CHANNELS };
+        const parsed = JSON.parse(raw);
+        return {
+            inApp: parsed?.inApp !== false,
+            webPush: !!parsed?.webPush,
+            email: !!parsed?.email,
+            discord: !!parsed?.discord,
+            ntfy: !!parsed?.ntfy,
+            webhook: !!parsed?.webhook,
+        };
+    } catch {
+        return { ...DEFAULT_TEST_CHANNELS };
+    }
+};
+
+const persistTestChannels = (channels: typeof DEFAULT_TEST_CHANNELS) => {
+    try {
+        localStorage.setItem(TEST_CHANNELS_STORAGE_KEY, JSON.stringify(channels));
+    } catch {
+        // ignore quota / private mode
+    }
+};
 
 const formatWhen = (iso: string | null | undefined, neverLabel: string) => {
     if (!iso) return neverLabel;
@@ -135,6 +172,7 @@ type StatusPayload = {
         vapidReady?: boolean;
         usersWithSubscriptions?: number;
         deviceCount?: number;
+        thisUserDeviceCount?: number;
         updatedAt?: string | null;
     };
     email?: { smtpReady?: boolean; requestAvailableAllowed?: boolean };
@@ -350,14 +388,7 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
     const [loading, setLoading] = useState(true);
     const [testing, setTesting] = useState(false);
     const [summaryBusy, setSummaryBusy] = useState(false);
-    const [testChannels, setTestChannels] = useState({
-        inApp: true,
-        webPush: false,
-        email: false,
-        discord: false,
-        ntfy: false,
-        webhook: false,
-    });
+    const [testChannels, setTestChannels] = useState(readStoredTestChannels);
 
     const eventLabels: Record<string, string> = useMemo(() => ({
         available: t('settings.notifications.events.available'),
@@ -411,6 +442,16 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
         }
         setTesting(true);
         try {
+            let subscribeError = '';
+            if (channels.includes('webPush')) {
+                try {
+                    await subscribeWebPush();
+                } catch (error) {
+                    subscribeError = error instanceof Error
+                        ? error.message
+                        : tRef.current('settings.notifications.test.subscribeFailed');
+                }
+            }
             const result = await apiFetch('/api/admin/notifications/test', {
                 method: 'POST',
                 body: JSON.stringify({
@@ -426,11 +467,15 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                 result?.results?.email ? tRef.current('settings.notifications.test.results.email') : null,
                 result?.results?.discord ? tRef.current('settings.notifications.test.results.discord') : null,
             ].filter(Boolean);
-            if (ok) {
+            if (result?.results?.inApp) {
+                notifyInAppNotificationsChanged();
+            }
+            if (channels.includes('webPush') && !result?.results?.webPush) {
+                const webErr = (Array.isArray(result?.results?.errors) ? result.results.errors : [])
+                    .find((entry: string) => String(entry).toLowerCase().includes('webpush'));
+                addToast(webErr || subscribeError || tRef.current('settings.notifications.test.webPushFailed'), 'error');
+            } else if (ok) {
                 addToast(tRef.current('settings.notifications.test.successToast', { channels: bits.join(', ') || tRef.current('settings.notifications.test.results.ok') }), 'success');
-                if (result?.results?.inApp) {
-                    notifyInAppNotificationsChanged();
-                }
             } else {
                 const errors = Array.isArray(result?.results?.errors) ? result.results.errors.join('; ') : tRef.current('settings.notifications.test.noChannelSucceeded');
                 addToast(errors, 'error');
@@ -492,7 +537,11 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                         <Pill
                             ok={!!status?.webPush?.enabled && !!status?.webPush?.vapidReady}
                             label={t('settings.notifications.common.webPush')}
-                            detail={t('settings.notifications.health.webPushDetail', { devices: status?.webPush?.deviceCount ?? 0, users: status?.webPush?.usersWithSubscriptions ?? 0 })}
+                            detail={t('settings.notifications.health.webPushDetail', {
+                                devices: status?.webPush?.deviceCount ?? 0,
+                                users: status?.webPush?.usersWithSubscriptions ?? 0,
+                                mine: status?.webPush?.thisUserDeviceCount ?? 0,
+                            })}
                             t={t}
                         />
                         <Pill
@@ -979,6 +1028,12 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                 getSettingsSectionElementId={getSettingsSectionElementId}
             />
 
+            <div className="rounded-lg border border-border bg-background/40 p-4">
+                <SettingFieldLabel hint={<SettingHint>{t('settings.notifications.saveReminder.hint')}</SettingHint>}>
+                    {t('settings.notifications.saveReminder.title')}
+                </SettingFieldLabel>
+            </div>
+
             <div id={getSettingsSectionElementId('notifications-test')} className="scroll-mt-24 space-y-3">
                 <h4 className="text-sm font-bold text-text uppercase tracking-wider">{t('settings.notifications.test.title')}</h4>
                 <p className="text-xs text-muted max-w-2xl">
@@ -997,7 +1052,11 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                             <input
                                 type="checkbox"
                                 checked={!!testChannels[key]}
-                                onChange={(e) => setTestChannels((prev) => ({ ...prev, [key]: e.target.checked }))}
+                                onChange={(e) => setTestChannels((prev) => {
+                                    const next = { ...prev, [key]: e.target.checked };
+                                    persistTestChannels(next);
+                                    return next;
+                                })}
                                 className="rounded border-border"
                             />
                             {label}
@@ -1027,12 +1086,6 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                 ) : (
                     <RecentNotificationsHistory items={recent} t={t} />
                 )}
-            </div>
-
-            <div className="rounded-lg border border-border bg-background/40 p-4">
-                <SettingFieldLabel hint={<SettingHint>{t('settings.notifications.saveReminder.hint')}</SettingHint>}>
-                    {t('settings.notifications.saveReminder.title')}
-                </SettingFieldLabel>
             </div>
         </div>
     );
