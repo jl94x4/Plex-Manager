@@ -859,7 +859,7 @@ export const MainApp: React.FC = () => {
                 />
             )}
             {!isPublicView && <Navigation currentRoute={currentRoute} onNavigate={setRoute as any} onLogout={handleLogout} isAdmin={isAdmin} serverName={sessionInfo?.serverName || 'Server Portal'} adminThumb={sessionInfo?.adminThumb} customLogoUrl={publicConfig?.customLogoUrl} requestUrl={sessionInfo?.requestUrl || 'https://yourdomain.com'} navOrder={sessionInfo?.navOrder || [...DEFAULT_NAV_ORDER]} navHiddenKeys={sessionInfo?.navHiddenKeys} memberNavOrder={sessionInfo?.memberNavOrder} memberNavHiddenKeys={sessionInfo?.memberNavHiddenKeys} navFeatures={sessionInfo?.navFeatures} appVersion={publicConfig.appVersion} activeTheme={activeTheme} setActiveTheme={setActiveTheme} pendingRequestCount={queueBadgeCount} supportUnreadCount={supportUnreadCount} chatUnreadCount={chatUnreadCount} watchingCount={watchingCount} downloadCount={downloadCount} mediaAutomationActiveCount={mediaAutomationActiveCount} showDashboardWatchingBadge={showDashboardWatchingBadge} sessionInfo={sessionInfo} mediaServerType={sessionInfo?.mediaServerType || publicConfig?.mediaServerType || 'plex'} sidebarIdentityPosition={publicConfig?.sidebarIdentityPosition || 'bottom'} externalTabId={externalTabId} />}
-            <div id="main-scroll-container" className={`relative z-10 flex-1 min-w-0 min-h-0 flex flex-col items-center px-4 pb-[calc(5rem+env(safe-area-inset-bottom,0px))] md:px-8 md:pb-8 overflow-x-visible custom-scrollbar ${currentRoute === 'external' || currentRoute === 'spotify-sync' ? 'md:overflow-hidden md:pb-4' : 'md:overflow-y-auto'} ${isPublicView ? '!pb-8' : ''}`}>
+            <div id="main-scroll-container" className={`relative z-10 flex-1 min-w-0 min-h-0 flex flex-col items-center px-4 pb-[calc(5rem+env(safe-area-inset-bottom,0px))] md:px-8 md:pb-8 overflow-x-visible custom-scrollbar ${currentRoute === 'external' ? 'md:overflow-hidden md:pb-4' : 'md:overflow-y-auto'} ${isPublicView ? '!pb-8' : ''}`}>
                 {isImpersonating && (
                     <div className="w-full max-w-[100%] pt-[calc(5rem+env(safe-area-inset-top,0px))] md:pt-0 md:sticky md:top-0 md:z-30">
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-4 py-3 rounded-xl border border-amber-500/40 bg-amber-500/10 text-amber-100 shadow-lg backdrop-blur-md">
@@ -876,7 +876,7 @@ export const MainApp: React.FC = () => {
                         </div>
                     </div>
                 )}
-                <div className={`w-full min-w-0 max-w-[100%] flex flex-col min-h-0 ${isImpersonating ? 'pt-3 md:pt-4' : currentRoute === 'external' || currentRoute === 'spotify-sync' ? 'flex-1 pt-[calc(5rem+env(safe-area-inset-top,0px))] md:pt-4' : 'pt-[calc(5rem+env(safe-area-inset-top,0px))] md:pt-8'}`}>
+                <div className={`w-full min-w-0 max-w-[100%] flex flex-col min-h-0 ${isImpersonating ? 'pt-3 md:pt-4' : currentRoute === 'external' ? 'flex-1 pt-[calc(5rem+env(safe-area-inset-top,0px))] md:pt-4' : 'pt-[calc(5rem+env(safe-area-inset-top,0px))] md:pt-8'}`}>
                     <Suspense fallback={<div className="flex w-full items-center justify-center pt-20"><Loader isLoading={true} isCinematic={false} /></div>}>
                         {renderView()}
                     </Suspense>

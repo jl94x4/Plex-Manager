@@ -116,6 +116,7 @@ import {
     applySpotifyToPlexDefaults,
     createSpotifyToPlexCallbackHandler,
     createSpotifyToPlexEmbedProxyHandler,
+    createSpotifyToPlexWorkerProxyHandler,
     isLeakedSpotifyToPlexEmbedAssetPath,
     isSpotifyToPlexEnabled,
     parseSpotifyToPlexEmbedFromReferer,
@@ -7305,6 +7306,13 @@ const handleSpotifyToPlexEmbedProxy = createSpotifyToPlexEmbedProxyHandler({
     effectiveViewerIsAdmin,
     withBasePath,
     fetchWithTimeout: embedProxyFetch,
+    allowPrivateIntegrationUrls: ALLOW_PRIVATE_INTEGRATION_URLS,
+    log,
+});
+
+const handleSpotifyToPlexWorkerProxy = createSpotifyToPlexWorkerProxyHandler({
+    loadConfig: () => loadFile(CONFIG_PATH, {}),
+    fetchWithTimeout,
     allowPrivateIntegrationUrls: ALLOW_PRIVATE_INTEGRATION_URLS,
     log,
 });
@@ -25940,14 +25948,22 @@ app.get('/api/spotify-to-plex/portal-defaults', requireAdmin, async (req, res) =
 app.get('/api/spotify-to-plex/status', requireAdmin, requireSpotifyToPlex, async (req, res) => {
     try {
         const config = req.spotifyToPlexConfig || await loadFile(CONFIG_PATH, {});
-        const logs = await fetchSpotifyToPlexJson({
-            config,
-            path: '/api/logs',
-            fetchWithTimeout,
-            allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS,
-        });
+        let logs = {};
+        let workerReachable = false;
+        try {
+            logs = await fetchSpotifyToPlexJson({
+                config,
+                path: '/api/logs',
+                fetchWithTimeout,
+                allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS,
+            });
+            workerReachable = true;
+        } catch {
+            logs = {};
+        }
         const summary = summarizeSpotifyToPlexLogs(logs);
         let plexLoggedIn = false;
+        let plexUri = '';
         try {
             const plexSettings = await fetchSpotifyToPlexJson({
                 config,
@@ -25955,13 +25971,19 @@ app.get('/api/spotify-to-plex/status', requireAdmin, requireSpotifyToPlex, async
                 fetchWithTimeout,
                 allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS,
             });
+            workerReachable = true;
             plexLoggedIn = !!plexSettings?.loggedin;
+            plexUri = String(plexSettings?.uri || '');
         } catch {
-            // sidecar may be warming up
+            // worker may be warming up
         }
         return res.json({
-            ok: true,
+            ok: workerReachable,
+            workerReachable,
             plexLoggedIn,
+            plexUri,
+            bundled: isSpotifyToPlexBundledAvailable(),
+            embedded: getSpotifyToPlexEmbeddedStatus(),
             ...summary,
         });
     } catch (e) {
@@ -25999,6 +26021,31 @@ app.post('/api/spotify-to-plex/apply-portal-defaults', requireAdmin, requireSpot
         return res.status(e?.status || 502).json({ error: e.message || 'Failed to apply portal defaults to Spotify Sync.' });
     }
 });
+
+app.get('/api/spotify-to-plex/spotify-login', requireAuth, requireAdmin, requireSpotifyToPlex, async (req, res) => {
+    try {
+        const config = req.spotifyToPlexConfig || await loadFile(CONFIG_PATH, {});
+        const clientId = String(config.spotifyToPlexClientId || '').trim();
+        const callbackUrl = resolveSpotifyToPlexCallbackUrl(config, withBasePath, resolvePublicBaseUrlFromConfig);
+        if (!clientId || !callbackUrl) {
+            return res.status(503).send('Set Spotify credentials and Public Base URL in Settings first.');
+        }
+        const scopes = [
+            'user-read-recently-played',
+            'user-library-read',
+            'playlist-read-private',
+            'playlist-read-collaborative',
+            'user-read-playback-state',
+        ].join(' ');
+        const state = Buffer.from(JSON.stringify({ return_url: callbackUrl })).toString('base64');
+        const authUrl = `https://accounts.spotify.com/authorize?response_type=code&client_id=${encodeURIComponent(clientId)}&scope=${encodeURIComponent(scopes)}&redirect_uri=${encodeURIComponent(callbackUrl)}&state=${encodeURIComponent(state)}`;
+        return res.redirect(302, authUrl);
+    } catch (e) {
+        return res.status(500).send(e.message || 'Failed to start Spotify login.');
+    }
+});
+
+app.all('/api/spotify-to-plex/worker/*', requireAuth, requireAdmin, requireSpotifyToPlex, handleSpotifyToPlexWorkerProxy);
 
 /** Portal-side Collexions health (works even when worker is down). Before catch-all proxy. */
 app.get('/api/collexions/health', requireAdmin, async (req, res) => {

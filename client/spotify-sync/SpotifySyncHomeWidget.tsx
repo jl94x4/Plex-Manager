@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Clock3, Music, RefreshCw } from 'lucide-react';
+import { Clock3, RefreshCw } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { usePoll } from '../shared/usePoll';
 import { BetaBadge } from '../shared/BetaBadge';
 import { useDiscoverI18n } from '../discovery/i18n';
+import { SpotifySyncMark } from './SpotifySyncMark';
 
 type SpotifySyncStatus = {
     ok?: boolean;
@@ -61,15 +62,15 @@ export const SpotifySyncHomeWidget: React.FC<Props> = ({ onOpen }) => {
             <div className="flex flex-col gap-4">
                 <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-400/30 flex items-center justify-center shrink-0">
-                            <Music className="w-5 h-5 text-emerald-300" />
+                        <div className="w-10 h-10 rounded-xl bg-plex/15 border border-plex/30 flex items-center justify-center shrink-0 overflow-hidden">
+                            <SpotifySyncMark className="w-10 h-10" />
                         </div>
                         <div className="min-w-0">
                             <p className="text-muted text-[10px] uppercase tracking-widest font-bold flex items-center gap-1.5 flex-wrap">
                                 <span>Spotify Sync</span>
                                 <BetaBadge title={betaNotice} className="scale-90" />
                             </p>
-                            <p className="text-text font-bold text-base truncate">spotify-to-plex service</p>
+                            <p className="text-text font-bold text-base truncate">Playlists from Spotify to Plex</p>
                         </div>
                     </div>
                     <button

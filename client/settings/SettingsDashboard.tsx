@@ -4958,8 +4958,8 @@ export const SettingsDashboard: React.FC = () => {
                                     title="Enable Spotify Sync"
                                     hint={<SettingHint>
                                         {initialSettings.spotifyToPlexBundled
-                                            ? 'Embeds the spotify-to-plex UI and starts the bundled container processes when enabled. OFF by default.'
-                                            : 'Shows the Spotify Sync admin nav and embeds spotify-to-plex from your configured internal URL. OFF by default.'}
+                                            ? 'Starts the bundled worker inside the portal image and shows Spotify Sync in admin nav. OFF by default.'
+                                            : 'Shows the Spotify Sync admin nav and uses the bundled or external worker APIs. OFF by default.'}
                                     </SettingHint>}
                                     checked={spotifyToPlexEnabled}
                                     onChange={(next) => {
@@ -5101,7 +5101,7 @@ export const SettingsDashboard: React.FC = () => {
                                     border={false}
                                 />
                                 <p className="text-[11px] text-muted mt-2">
-                                    Plex URL and token from Settings → Plex (Media Player) are pushed into spotify-to-plex automatically on save and when you open Spotify Sync — no separate Plex login in the embedded UI.
+                                    Plex URL and token from Settings → Plex (Media Player) are pushed into the worker automatically on save and when you open Spotify Sync.
                                 </p>
                                 <div className="flex flex-wrap gap-2 mt-3">
                                     <button
@@ -5146,14 +5146,13 @@ export const SettingsDashboard: React.FC = () => {
                                     >
                                         {spotifySyncStarting ? 'Starting…' : 'Sync now'}
                                     </button>
-                                    <a
-                                        href={portalUrl('/api/spotify-to-plex-embed/app/advanced/logs')}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
+                                    <button
+                                        type="button"
                                         className="px-3 py-2 rounded-md text-xs font-bold border border-border hover:border-plex hover:text-plex"
+                                        onClick={() => window.location.assign(portalUrl('/spotify-sync'))}
                                     >
-                                        Sidecar logs
-                                    </a>
+                                        Open logs
+                                    </button>
                                 </div>
                                 {spotifyPortalImportMessage ? (
                                     <p className="text-[11px] text-muted mt-2">{spotifyPortalImportMessage}</p>
