@@ -56,8 +56,13 @@ const HERO_CORNER_GLOW: Record<DashboardAccent, string> = {
     rose: 'bg-[radial-gradient(circle_at_100%_0%,rgb(251_113_133_/_0.18),transparent_58%)]',
 };
 
+/** Decorative card chrome. Keep overflow-hidden here for media/cards that clip. */
 export const dashboardPanelClass =
     'relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.035] to-black/25 shadow-xl';
+
+/** DashboardPanel host: no overflow-hidden — iOS zooms inputs inside clipped ancestors. */
+const dashboardPanelHostClass =
+    'relative rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.035] to-black/25 shadow-xl';
 
 export const dashboardGlowClass = (accent: DashboardAccent | string) => {
     const map: Record<string, string> = {
@@ -219,8 +224,8 @@ export const DashboardPanel: React.FC<{
     const toggle = () => setCollapsed(!collapsed);
 
     return (
-        <section className={`${dashboardPanelClass} p-4 md:p-5 ${className}`.trim()}>
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/15 to-transparent" />
+        <section className={`${dashboardPanelHostClass} p-4 md:p-5 ${className}`.trim()}>
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-px overflow-hidden rounded-t-2xl bg-gradient-to-r from-transparent via-white/15 to-transparent" />
             <div className={`${collapsible && collapsed ? 'mb-0' : 'mb-4'} flex flex-wrap items-start justify-between gap-3`}>
                 <div className="min-w-0 flex-1">
                     {collapsible ? (

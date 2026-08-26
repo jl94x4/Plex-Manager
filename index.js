@@ -19462,18 +19462,22 @@ const buildSocialMetaTags = async (req) => {
 };
 
 /**
- * iOS Safari only respects maximum-scale=1 (which suppresses focus auto-zoom) when
- * it is present at HTML parse time — setting it from bundled JS is too late for the
- * first focus, and Safari only re-evaluates after a user gesture. Inject it
- * server-side for iPhone/iPad/iPod UAs. Do NOT match Macintosh: that string is
- * also real Mac Safari/Chrome, where maximum-scale=1 disables pinch-zoom.
- * iPadOS "desktop website" mode is handled client-side via maxTouchPoints.
+ * index.html already includes maximum-scale=1 so iOS Safari sees it at parse
+ * time (JS is too late for the first focus). Keep that lock for iPhone/iPad/iPod
+ * and for unknown/empty UAs. Strip it for known desktop/Android clients so they
+ * keep pinch-zoom without waiting for bundled JS.
+ * Do NOT treat Macintosh as iOS: that string is also real Mac Safari/Chrome.
+ * iPadOS "desktop website" mode keeps the HTML lock; client JS confirms via maxTouchPoints.
  */
 const lockViewportForAppleClients = (html, userAgent = '') => {
-    if (!/iPhone|iPad|iPod/i.test(String(userAgent || ''))) return html;
+    const ua = String(userAgent || '');
+    const keepLock = /iPhone|iPad|iPod/i.test(ua) || !/Android|Windows|Linux|Macintosh|CrOS/i.test(ua);
+    const content = keepLock
+        ? 'width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover'
+        : 'width=device-width, initial-scale=1, viewport-fit=cover';
     return html.replace(
         /<meta\s+name="viewport"\s+content="[^"]*"\s*\/?>/i,
-        '<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />',
+        `<meta name="viewport" content="${content}" />`,
     );
 };
 

@@ -4751,39 +4751,36 @@ return (
                         <DashboardPanel
                             title="Find user"
                             subtitle="Search by username or email to open their stats and watch history."
-                            controls={(
-                                <div className="relative w-full sm:max-w-sm">
-                                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-                                    <input
-                                        ref={userSearchInputRef}
-                                        type="text"
-                                        value={userSearchQuery}
-                                        onChange={(event) => {
-                                            setUserSearchQuery(event.target.value);
-                                            setUserSearchOpen(true);
-                                        }}
-                                        onFocus={() => setUserSearchOpen(true)}
-                                        onBlur={() => window.setTimeout(() => setUserSearchOpen(false), 150)}
-                                        onKeyDown={(event) => {
-                                            if (event.key === 'Enter') {
-                                                event.preventDefault();
-                                                const first = userSearchMatches[0];
-                                                if (first) openUserAnalytics(first);
-                                            }
-                                            if (event.key === 'Escape') {
-                                                setUserSearchOpen(false);
-                                                setUserSearchQuery('');
-                                            }
-                                        }}
-                                        placeholder="e.g. username or email…"
-                                        className="w-full appearance-none rounded-xl border border-white/10 bg-black/20 py-3 pl-10 pr-3 text-[16px] leading-5 text-text outline-none transition focus:border-plex/40 focus:ring-1 focus:ring-plex/20"
-                                        autoComplete="off"
-                                        autoCorrect="off"
-                                        autoCapitalize="none"
-                                        spellCheck={false}
-                                    />
-                                    {userSearchOpen && userSearchQuery.trim() && userSearchMenuBox && typeof document !== 'undefined'
-                                        ? ReactDOM.createPortal(
+                        >
+                            <div className="relative w-full">
+                                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                                <input
+                                    ref={userSearchInputRef}
+                                    type="text"
+                                    value={userSearchQuery}
+                                    onChange={(event) => {
+                                        setUserSearchQuery(event.target.value);
+                                        setUserSearchOpen(true);
+                                    }}
+                                    onFocus={() => setUserSearchOpen(true)}
+                                    onBlur={() => window.setTimeout(() => setUserSearchOpen(false), 150)}
+                                    onKeyDown={(event) => {
+                                        if (event.key === 'Enter') {
+                                            event.preventDefault();
+                                            const first = userSearchMatches[0];
+                                            if (first) openUserAnalytics(first);
+                                        }
+                                        if (event.key === 'Escape') {
+                                            setUserSearchOpen(false);
+                                            setUserSearchQuery('');
+                                        }
+                                    }}
+                                    placeholder="e.g. username or email…"
+                                    className="w-full appearance-none rounded-xl border border-white/10 bg-black/20 py-3 pr-10 pl-10 text-[16px] leading-5 text-text outline-none transition focus:border-plex/40 focus:ring-1 focus:ring-plex/20"
+                                    style={{ fontSize: 16 }}
+                                />
+                                {userSearchOpen && userSearchQuery.trim() && userSearchMenuBox && typeof document !== 'undefined'
+                                    ? ReactDOM.createPortal(
                                             <div
                                                 className="fixed z-[500] overflow-y-auto rounded-xl border border-border shadow-2xl custom-scrollbar"
                                                 style={{
@@ -4826,9 +4823,8 @@ return (
                                             document.body,
                                         )
                                         : null}
-                                </div>
-                            )}
-                        />
+                            </div>
+                        </DashboardPanel>
                     ) : null}
 
                     <div className="w-full">

@@ -1441,6 +1441,7 @@ select,
 textarea {
   font-size: 16px !important;
   line-height: 1.25 !important;
+  touch-action: manipulation;
 }
 
 input:not([type]),
