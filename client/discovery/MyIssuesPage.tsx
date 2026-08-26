@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle, Film, LifeBuoy, Loader2, MessageSquare, RotateCcw, Trash2, Tv } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { portalUrl } from '../shared/basePath';
@@ -14,6 +14,8 @@ import { discoveryTheme } from './discoveryThemeClasses';
 import { translateDiscoverStatus, useDiscoverI18n } from './i18n';
 
 type IssueFilter = 'open' | 'resolved' | 'all';
+
+const PAGE_SIZE = 40;
 
 type Props = {
     navigate: (path: string) => void;
@@ -38,49 +40,78 @@ export const MyIssuesPage: React.FC<Props> = ({ navigate, pushToast, onCountsCha
         userMapped: true,
     });
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [actionId, setActionId] = useState<number | null>(null);
     const [commentTarget, setCommentTarget] = useState<PortalIssueItem | null>(null);
     const [commentText, setCommentText] = useState('');
     const [deleteTarget, setDeleteTarget] = useState<PortalIssueItem | null>(null);
+    const [filterTotal, setFilterTotal] = useState(0);
+    const [gotFullPage, setGotFullPage] = useState(false);
+    const issuesRef = useRef<PortalIssueItem[]>([]);
+    const loadingMoreRef = useRef(false);
+    const sentinelRef = useRef<HTMLDivElement>(null);
+    issuesRef.current = issues;
 
-    const loadData = useCallback(async (opts?: { silent?: boolean }) => {
-        if (!opts?.silent) setLoading(true);
-        else setRefreshing(true);
+    const loadData = useCallback(async (opts?: { silent?: boolean; append?: boolean }) => {
+        const append = !!opts?.append;
+        if (append) {
+            if (loadingMoreRef.current) return;
+            loadingMoreRef.current = true;
+            setLoadingMore(true);
+        } else if (!opts?.silent) {
+            setLoading(true);
+        } else {
+            setRefreshing(true);
+        }
         setError(null);
         try {
+            const skip = append ? issuesRef.current.length : 0;
+            const listUrl = `/api/discovery/my-issues?filter=${encodeURIComponent(filter)}&take=${PAGE_SIZE}&skip=${skip}`;
             const [countData, listData] = await Promise.all([
-                apiFetch('/api/discovery/my-issues/count'),
-                apiFetch(`/api/discovery/my-issues?filter=${encodeURIComponent(filter)}&take=40`),
+                append ? Promise.resolve(null) : apiFetch('/api/discovery/my-issues/count'),
+                apiFetch(listUrl),
             ]);
 
-            setCounts({
-                open: Number(countData?.open) || 0,
-                resolved: Number(countData?.resolved) || 0,
-                total: Number(countData?.total) || 0,
-                userMapped: countData?.userMapped !== false,
-            });
+            if (countData) {
+                setCounts({
+                    open: Number(countData?.open) || 0,
+                    resolved: Number(countData?.resolved) || 0,
+                    total: Number(countData?.total) || 0,
+                    userMapped: countData?.userMapped !== false,
+                });
+            }
 
-            if (countData?.userMapped === false) {
+            if (countData?.userMapped === false || listData?.userMapped === false) {
                 setIssues([]);
-                setError(t('issues.accountNotLinked'));
+                setFilterTotal(0);
+                setGotFullPage(false);
+                setError(countData?.error || listData?.error || t('issues.accountNotLinked'));
                 return;
             }
 
-            if (listData?.userMapped === false) {
-                setIssues([]);
-                setError(listData?.error || t('issues.accountNotLinked'));
-                return;
-            }
+            const incoming = Array.isArray(listData?.results) ? listData.results : [];
+            const pageTotal = Number(listData?.pageInfo?.total);
+            if (Number.isFinite(pageTotal) && pageTotal >= 0) setFilterTotal(pageTotal);
+            setGotFullPage(incoming.length >= PAGE_SIZE);
 
-            setIssues(Array.isArray(listData?.results) ? listData.results : []);
+            if (append) {
+                setIssues((prev) => {
+                    const seen = new Set(prev.map((row) => row.id));
+                    return [...prev, ...incoming.filter((row) => !seen.has(row.id))];
+                });
+            } else {
+                setIssues(incoming);
+            }
         } catch (e: any) {
             setError(e?.message || t('issues.loadFailed'));
-            setIssues([]);
+            if (!append) setIssues([]);
         } finally {
             setLoading(false);
             setRefreshing(false);
+            setLoadingMore(false);
+            loadingMoreRef.current = false;
         }
     }, [filter, t]);
 
@@ -93,6 +124,27 @@ export const MyIssuesPage: React.FC<Props> = ({ navigate, pushToast, onCountsCha
         { id: 'resolved' as const, label: t('status.resolved'), count: counts.resolved },
         { id: 'all' as const, label: t('status.all'), count: counts.total },
     ]), [counts, t]);
+
+    const knownTotal = Math.max(
+        filterTotal,
+        Number(filter === 'open' ? counts.open : filter === 'resolved' ? counts.resolved : counts.total) || 0,
+    );
+    const hasMore = knownTotal > 0
+        ? issues.length < knownTotal
+        : gotFullPage;
+
+    useEffect(() => {
+        if (loading || loadingMore || !hasMore || issues.length === 0) return;
+        const node = sentinelRef.current;
+        if (!node) return;
+        const observer = new IntersectionObserver((entries) => {
+            if (entries.some((entry) => entry.isIntersecting)) {
+                void loadData({ append: true, silent: true });
+            }
+        }, { rootMargin: '240px' });
+        observer.observe(node);
+        return () => observer.disconnect();
+    }, [hasMore, issues.length, loadData, loading, loadingMore]);
 
     const openMedia = (item: PortalIssueItem) => {
         if (!item.tmdbId) return;
@@ -324,6 +376,32 @@ export const MyIssuesPage: React.FC<Props> = ({ navigate, pushToast, onCountsCha
                             </RequestCardShell>
                         );
                     })}
+                </div>
+            )}
+
+            {issues.length > 0 && !loading && (
+                <div className="flex flex-col items-center justify-center min-h-[72px] mt-2 mb-8 gap-3 px-2">
+                    <div ref={sentinelRef} className="h-4 w-full" aria-hidden />
+                    {loadingMore && (
+                        <div className="inline-flex items-center gap-2 text-xs text-muted">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            {t('common.loadingMore')}
+                        </div>
+                    )}
+                    {hasMore && !loadingMore && (
+                        <button
+                            type="button"
+                            onClick={() => void loadData({ append: true, silent: true })}
+                            className="text-xs font-semibold text-plex hover:underline"
+                        >
+                            {t('requestsPage.loadMore')}
+                        </button>
+                    )}
+                    {!hasMore && !loadingMore && knownTotal > PAGE_SIZE && (
+                        <p className="text-xs font-semibold uppercase tracking-wider text-muted/70">
+                            {t('common.endOfResults')}
+                        </p>
+                    )}
                 </div>
             )}
 
