@@ -19,10 +19,11 @@ import {
     Square,
     Heart,
     CalendarClock,
+    Eye,
 } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { portalUrl } from '../shared/basePath';
-import { pushToast } from '../shared/toast';
+import { pushToast as queueToast, ToastContainer, type ToastMessage } from '../shared/toast';
 import {
     DashboardHero,
     DashboardPageShell,
@@ -35,7 +36,8 @@ import { BetaBadge, SpotifySyncBetaBanner } from '../shared/BetaBadge';
 import { useDiscoverI18n } from '../discovery/i18n';
 import { CustomSelect } from '../shared/ui';
 import { SpotifySyncMark } from './SpotifySyncMark';
-import { formatWhen, workerFetch, workerImageUrl } from './spotifySyncApi';
+import { formatWhen, workerFetch, workerImageUrl, workerJson } from './spotifySyncApi';
+import { syncSpotifyPlaylistsToPlex } from '../../lib/spotify-to-plex-playlist-sync.js';
 import {
     asItemArray,
     buildSavedItemAddBody,
@@ -46,6 +48,11 @@ import {
 
 const buttonClass = 'inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-muted hover:border-plex hover:text-plex disabled:opacity-50';
 const primaryButtonClass = 'inline-flex items-center gap-2 rounded-lg bg-plex px-3 py-1.5 text-xs font-bold text-background hover:brightness-110 disabled:opacity-50';
+
+const toastListeners = new Set<(message: string, type: 'success' | 'error') => void>();
+const toast = (message: string, type: 'success' | 'error') => {
+    toastListeners.forEach((fn) => fn(message, type));
+};
 
 type TabId = 'playlists' | 'users' | 'sync' | 'matching' | 'integrations' | 'logs';
 
@@ -120,6 +127,16 @@ export const SpotifySyncPage: React.FC = () => {
     const [status, setStatus] = useState<SyncStatus | null>(null);
     const [statusError, setStatusError] = useState('');
     const [busy, setBusy] = useState(false);
+    const [toasts, setToasts] = useState<ToastMessage[]>([]);
+    const [syncProgress, setSyncProgress] = useState<{ message: string; done?: number; total?: number } | null>(null);
+
+    useEffect(() => {
+        const fn = (message: string, type: 'success' | 'error') => {
+            setToasts((prev) => queueToast(prev, message, type));
+        };
+        toastListeners.add(fn);
+        return () => { toastListeners.delete(fn); };
+    }, []);
 
     const loadStatus = useCallback(async () => {
         try {
@@ -148,7 +165,7 @@ export const SpotifySyncPage: React.FC = () => {
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         if (params.get('spotify') === 'connected') {
-            pushToast('Spotify account connected', 'success');
+            toast('Spotify account connected', 'success');
             setTab('users');
             void loadStatus();
         }
@@ -161,10 +178,10 @@ export const SpotifySyncPage: React.FC = () => {
                 method: 'POST',
                 body: JSON.stringify({ type }),
             });
-            pushToast(data?.message || `${type} sync started`, 'success');
+            toast(data?.message || `${type} sync started`, 'success');
             void loadStatus();
         } catch (e: any) {
-            pushToast(e?.message || 'Failed to start sync', 'error');
+            toast(e?.message || 'Failed to start sync', 'error');
         } finally {
             setBusy(false);
         }
@@ -172,19 +189,29 @@ export const SpotifySyncPage: React.FC = () => {
 
     const syncPlaylistsToPlex = async (ids?: string[]) => {
         setBusy(true);
+        setSyncProgress({ message: 'Starting Plex sync…', done: 0, total: 0 });
         try {
-            const data = await apiFetch('/api/spotify-to-plex/sync-playlist', {
-                method: 'POST',
-                body: JSON.stringify(ids?.length ? { ids } : { all: true }),
+            const summary = await syncSpotifyPlaylistsToPlex({
+                ids,
+                all: !ids?.length,
+                fetchJson: workerJson,
+                onProgress: (progress: { message?: string; done?: number; total?: number }) => {
+                    setSyncProgress({
+                        message: progress?.message || 'Syncing…',
+                        done: progress?.done,
+                        total: progress?.total,
+                    });
+                },
             });
-            pushToast(data?.message || 'Synced playlists to Plex', data?.ok === false ? 'error' : 'success');
+            toast(summary?.message || 'Synced playlists to Plex', summary?.ok === false ? 'error' : 'success');
             void loadStatus();
-            return data;
+            return summary;
         } catch (e: any) {
-            pushToast(e?.message || 'Failed to sync playlists to Plex', 'error');
+            toast(e?.message || 'Failed to sync playlists to Plex', 'error');
             throw e;
         } finally {
             setBusy(false);
+            setSyncProgress(null);
         }
     };
 
@@ -192,10 +219,10 @@ export const SpotifySyncPage: React.FC = () => {
         setBusy(true);
         try {
             const data = await apiFetch('/api/spotify-to-plex/start-worker', { method: 'POST' });
-            pushToast(data?.message || 'Worker start requested', 'success');
+            toast(data?.message || 'Worker start requested', 'success');
             await loadStatus();
         } catch (e: any) {
-            pushToast(e?.message || 'Could not start worker', 'error');
+            toast(e?.message || 'Could not start worker', 'error');
             await loadStatus();
         } finally {
             setBusy(false);
@@ -206,10 +233,10 @@ export const SpotifySyncPage: React.FC = () => {
         setBusy(true);
         try {
             const data = await apiFetch('/api/spotify-to-plex/apply-portal-defaults', { method: 'POST' });
-            pushToast(data?.message || 'Portal Plex settings applied', 'success');
+            toast(data?.message || 'Portal Plex settings applied', 'success');
             await loadStatus();
         } catch (e: any) {
-            pushToast(e?.message || 'Could not apply Plex settings', 'error');
+            toast(e?.message || 'Could not apply Plex settings', 'error');
         } finally {
             setBusy(false);
         }
@@ -239,7 +266,8 @@ export const SpotifySyncPage: React.FC = () => {
                             <RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin' : ''}`} /> Refresh
                         </button>
                         <button type="button" className={primaryButtonClass} onClick={() => void syncPlaylistsToPlex()} disabled={busy || !workerOk}>
-                            <Play className="h-4 w-4" /> Sync playlists to Plex
+                            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                            {busy ? 'Syncing…' : 'Sync playlists to Plex'}
                         </button>
                     </div>
                 )}
@@ -283,6 +311,21 @@ export const SpotifySyncPage: React.FC = () => {
                     ))}
                 </div>
             </div>
+
+            {syncProgress ? (
+                <div className="flex items-center gap-3 rounded-xl border border-plex/40 bg-plex/10 px-4 py-3 text-sm text-text">
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-plex" />
+                    <div className="min-w-0">
+                        <p className="font-semibold">Syncing to Plex</p>
+                        <p className="truncate text-xs text-muted">{syncProgress.message}</p>
+                    </div>
+                    {syncProgress.total ? (
+                        <span className="ml-auto shrink-0 text-xs font-semibold text-plex">
+                            {syncProgress.done || 0}/{syncProgress.total}
+                        </span>
+                    ) : null}
+                </div>
+            ) : null}
 
             {statusError || !workerOk ? (
                 <div className="rounded-xl border border-rose-400/25 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
@@ -334,6 +377,7 @@ export const SpotifySyncPage: React.FC = () => {
             {tab === 'matching' && <MatchingPanel />}
             {tab === 'integrations' && <IntegrationsPanel />}
             {tab === 'logs' && <LogsPanel />}
+            <ToastContainer toasts={toasts} setToasts={setToasts} />
         </DashboardPageShell>
     );
 };
@@ -382,7 +426,7 @@ const PlaylistsPanel: React.FC<{
     const [search, setSearch] = useState('');
     const [adding, setAdding] = useState(false);
     const [editing, setEditing] = useState<SavedItem | null>(null);
-    const [preview, setPreview] = useState<{ title: string; tracks: any[] } | null>(null);
+    const [preview, setPreview] = useState<{ id: string; title: string; tracks: any[] } | null>(null);
     const [previewing, setPreviewing] = useState(false);
     const [users, setUsers] = useState<SpotifyUser[]>([]);
     const [userId, setUserId] = useState('');
@@ -402,7 +446,7 @@ const PlaylistsPanel: React.FC<{
             const data = await workerFetch('saved-items');
             setItems(asItemArray(data));
         } catch (e: any) {
-            pushToast(e?.message || 'Failed to load playlists', 'error');
+            toast(e?.message || 'Failed to load playlists', 'error');
             setItems([]);
         } finally {
             setLoading(false);
@@ -509,12 +553,12 @@ const PlaylistsPanel: React.FC<{
 
     const reportImport = (result: { added: number; skipped: number; failed: number; errors: string[] }) => {
         if (result.failed) {
-            pushToast(result.errors[0] || `Failed to add ${result.failed} playlist${result.failed === 1 ? '' : 's'}`, 'error');
+            toast(result.errors[0] || `Failed to add ${result.failed} playlist${result.failed === 1 ? '' : 's'}`, 'error');
         } else if (result.added || result.skipped) {
             const parts = [];
             if (result.added) parts.push(`added ${result.added}`);
             if (result.skipped) parts.push(`${result.skipped} already saved`);
-            pushToast(parts.join(', '), 'success');
+            toast(parts.join(', '), 'success');
         }
     };
 
@@ -523,13 +567,13 @@ const PlaylistsPanel: React.FC<{
         setBusyAction(mode);
         try {
             const result = await addAccountPlaylists(playlists);
-            reportImport(result);
+            if (mode === 'add' || result.failed) reportImport(result);
             const saved = asItemArray(await workerFetch('saved-items'));
             setItems(saved);
             const savedIds = savedItemIdSet(saved);
             const ids = playlists.map((item) => item.id).filter((id) => savedIds.has(id));
             if ((mode === 'schedule' || mode === 'sync') && !ids.length) {
-                pushToast('None of those playlists could be saved', 'error');
+                toast('None of those playlists could be saved', 'error');
                 return;
             }
             if (mode === 'schedule') {
@@ -546,7 +590,7 @@ const PlaylistsPanel: React.FC<{
             await loadAccountPlaylists(userId);
             setSelectedIds(new Set());
         } catch (e: any) {
-            pushToast(e?.message || 'Could not update playlists', 'error');
+            toast(e?.message || 'Could not update playlists', 'error');
         } finally {
             setBusyAction('');
         }
@@ -559,7 +603,7 @@ const PlaylistsPanel: React.FC<{
             if (mode === 'schedule') {
                 await applyPlaylistSchedule(ids, intervalDays);
                 setItems(asItemArray(await workerFetch('saved-items')));
-                pushToast(`Scheduled ${ids.length} playlist${ids.length === 1 ? '' : 's'}`, 'success');
+                toast(`Scheduled ${ids.length} playlist${ids.length === 1 ? '' : 's'}`, 'success');
             } else {
                 try {
                     await onSyncToPlex(ids);
@@ -569,7 +613,7 @@ const PlaylistsPanel: React.FC<{
             }
             setSavedSelectedIds(new Set());
         } catch (e: any) {
-            pushToast(e?.message || 'Could not update saved playlists', 'error');
+            toast(e?.message || 'Could not update saved playlists', 'error');
         } finally {
             setBusyAction('');
         }
@@ -601,9 +645,9 @@ const PlaylistsPanel: React.FC<{
             const tracks = Array.isArray(data?.tracks)
                 ? data.tracks
                 : (Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : []));
-            setPreview({ title: data?.title || item.title || item.id, tracks });
+            setPreview({ id: item.id, title: data?.title || item.title || item.id, tracks });
         } catch (e: any) {
-            pushToast(e?.message || 'Could not load Spotify tracks', 'error');
+            toast(e?.message || 'Could not load Spotify tracks', 'error');
         } finally {
             setPreviewing(false);
         }
@@ -613,15 +657,25 @@ const PlaylistsPanel: React.FC<{
         if (!search.trim()) return;
         setAdding(true);
         try {
+            const previous = savedItemIdSet(items);
             const data = await workerFetch('saved-items', {
                 method: 'POST',
                 body: JSON.stringify({ search: search.trim() }),
             });
-            setItems(Array.isArray(data) ? data : []);
+            const next = asItemArray(data) as SavedItem[];
+            setItems(next);
             setSearch('');
-            pushToast('Playlist added', 'success');
+            toast('Playlist added — matching tracks in Plex…', 'success');
+            const addedIds = next.map((item) => String(item.id || '')).filter((id) => id && !previous.has(id));
+            if (addedIds.length) {
+                try {
+                    await onSyncToPlex(addedIds);
+                } catch {
+                    return;
+                }
+            }
         } catch (e: any) {
-            pushToast(e?.message || 'Could not add playlist', 'error');
+            toast(e?.message || 'Could not add playlist', 'error');
         } finally {
             setAdding(false);
         }
@@ -631,9 +685,9 @@ const PlaylistsPanel: React.FC<{
         try {
             const data = await workerFetch(`saved-items?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
             setItems(Array.isArray(data) ? data : items.filter((item) => item.id !== id));
-            pushToast('Removed', 'success');
+            toast('Removed', 'success');
         } catch (e: any) {
-            pushToast(e?.message || 'Delete failed', 'error');
+            toast(e?.message || 'Delete failed', 'error');
         }
     };
 
@@ -704,7 +758,18 @@ const PlaylistsPanel: React.FC<{
                                     {busyAction === 'schedule' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarClock className="h-3.5 w-3.5" />}
                                     Schedule selected
                                 </button>
-                                <button type="button" className={primaryButtonClass} onClick={() => void runOnPlaylists(selectedPlaylists, 'sync')} disabled={!selectedPlaylists.length || locked}>
+                                <button
+                                    type="button"
+                                    className={primaryButtonClass}
+                                    onClick={() => {
+                                        if (!selectedPlaylists.length) {
+                                            toast('Select one or more playlists first.', 'error');
+                                            return;
+                                        }
+                                        void runOnPlaylists(selectedPlaylists, 'sync');
+                                    }}
+                                    disabled={locked}
+                                >
                                     {busyAction === 'sync' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
                                     Sync to Plex
                                 </button>
@@ -752,6 +817,7 @@ const PlaylistsPanel: React.FC<{
                                                 Schedule
                                             </button>
                                             <button type="button" className={primaryButtonClass} onClick={() => void runOnPlaylists([playlist], 'sync')} disabled={locked}>
+                                                {busyAction === 'sync' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
                                                 Sync to Plex
                                             </button>
                                         </div>
@@ -763,7 +829,7 @@ const PlaylistsPanel: React.FC<{
                 )}
             </DashboardPanel>
 
-            <DashboardPanel title="Add playlist or album" subtitle="Spotify URL, URI, or username:liked for Liked Songs.">
+            <DashboardPanel title="Add playlist or album" subtitle="Paste a Spotify URL or URI. That saves it, then matches tracks and creates or updates the Plex playlist.">
                 <div className="flex flex-col gap-2 sm:flex-row">
                     <input
                         className="appearance-none text-[16px] leading-5 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-[16px] text-text"
@@ -774,14 +840,14 @@ const PlaylistsPanel: React.FC<{
                     />
                     <button type="button" className={primaryButtonClass} onClick={() => void addItem()} disabled={adding || !search.trim()}>
                         {adding ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-                        Add
+                        {adding ? 'Adding…' : 'Add and sync'}
                     </button>
                 </div>
             </DashboardPanel>
 
             <DashboardPanel
                 title="Saved items"
-                subtitle={`${items.length} playlist${items.length === 1 ? '' : 's'} and albums. Automatic sync uses the interval on each item plus Settings → Spotify Sync.`}
+                subtitle={`${items.length} playlist${items.length === 1 ? '' : 's'} and albums. Sync to Plex creates or updates the Plex playlist. Auto-sync uses each item’s interval plus Settings → Spotify Sync.`}
                 controls={items.length ? (
                     <div className="flex flex-wrap gap-2">
                         <button
@@ -797,7 +863,19 @@ const PlaylistsPanel: React.FC<{
                         <button type="button" className={buttonClass} onClick={() => void runOnSaved([...savedSelectedIds], 'schedule')} disabled={!savedSelectedIds.size || locked}>
                             Schedule selected
                         </button>
-                        <button type="button" className={primaryButtonClass} onClick={() => void runOnSaved([...savedSelectedIds], 'sync')} disabled={!savedSelectedIds.size || locked}>
+                        <button
+                            type="button"
+                            className={primaryButtonClass}
+                            onClick={() => {
+                                if (!savedSelectedIds.size) {
+                                    toast('Select one or more saved playlists first.', 'error');
+                                    return;
+                                }
+                                void runOnSaved([...savedSelectedIds], 'sync');
+                            }}
+                            disabled={locked}
+                        >
+                            {busyAction === 'saved-sync' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
                             Sync to Plex
                         </button>
                     </div>
@@ -831,17 +909,18 @@ const PlaylistsPanel: React.FC<{
                                                     {item.sync ? `Auto-sync every ${item.sync_interval || 1}d` : 'Manual only'}
                                                 </p>
                                             </div>
-                                            <button type="button" className="rounded-lg p-1.5 text-muted hover:text-plex" onClick={() => void inspectItem(item)} title="Preview tracks">
-                                                <Play className="h-3.5 w-3.5" />
-                                            </button>
-                                            <button type="button" className="rounded-lg p-1.5 text-muted hover:text-plex" onClick={() => void runOnSaved([item.id], 'sync')} title="Sync to Plex" disabled={locked}>
-                                                <RefreshCw className="h-3.5 w-3.5" />
+                                            <button type="button" className="rounded-lg p-1.5 text-muted hover:text-plex" onClick={() => void inspectItem(item)} title="Preview Spotify tracks">
+                                                <Eye className="h-3.5 w-3.5" />
                                             </button>
                                             <button type="button" className="rounded-lg p-1.5 text-muted hover:text-plex" onClick={() => setEditing(item)} title="Settings">
                                                 <Pencil className="h-3.5 w-3.5" />
                                             </button>
                                             <button type="button" className="rounded-lg p-1.5 text-muted hover:text-rose-300" onClick={() => void removeItem(item.id)} title="Remove">
                                                 <Trash2 className="h-3.5 w-3.5" />
+                                            </button>
+                                            <button type="button" className={primaryButtonClass} onClick={() => void runOnSaved([item.id], 'sync')} disabled={locked} title="Match tracks and create or update this playlist on Plex">
+                                                {busyAction === 'saved-sync' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+                                                Sync to Plex
                                             </button>
                                         </div>
                                     ))}
@@ -857,17 +936,33 @@ const PlaylistsPanel: React.FC<{
                     <div className="max-h-[80vh] w-full max-w-lg overflow-hidden rounded-2xl border border-white/10 bg-card shadow-2xl" onClick={(e) => e.stopPropagation()}>
                         <div className="border-b border-white/10 px-5 py-3">
                             <h3 className="font-bold text-text">{preview.title}</h3>
-                            <p className="text-xs text-muted">{preview.tracks.length} tracks</p>
+                            <p className="text-xs text-muted">{preview.tracks.length} tracks on Spotify — this list is a preview, not a Plex sync.</p>
                         </div>
-                        <div className="max-h-[60vh] overflow-y-auto p-3">
+                        <div className="max-h-[50vh] overflow-y-auto p-3">
                             {preview.tracks.length === 0 ? (
                                 <p className="px-2 py-4 text-sm text-muted">No track list returned for this item.</p>
                             ) : preview.tracks.map((track: any, index: number) => (
                                 <div key={track.id || index} className="flex items-center justify-between gap-3 rounded-lg px-2 py-2 text-sm">
                                     <span className="min-w-0 truncate text-text">{track.title || track.name || 'Track'}</span>
-                                    <span className="shrink-0 text-xs text-muted">{track.artist || track.artists || ''}</span>
+                                    <span className="shrink-0 text-xs text-muted">{Array.isArray(track.artists) ? track.artists.join(', ') : (track.artist || track.artists || '')}</span>
                                 </div>
                             ))}
+                        </div>
+                        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-white/10 px-5 py-3">
+                            <button type="button" className={buttonClass} onClick={() => setPreview(null)}>Close</button>
+                            <button
+                                type="button"
+                                className={primaryButtonClass}
+                                onClick={() => {
+                                    const id = preview.id;
+                                    setPreview(null);
+                                    void runOnSaved([id], 'sync');
+                                }}
+                                disabled={locked}
+                            >
+                                <Play className="h-3.5 w-3.5" />
+                                Sync to Plex
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -910,10 +1005,10 @@ const SavedItemEditor: React.FC<{
                     sync_interval: interval,
                 }),
             });
-            pushToast('Saved', 'success');
+            toast('Saved', 'success');
             onSaved(Array.isArray(data) ? data : []);
         } catch (e: any) {
-            pushToast(e?.message || 'Save failed', 'error');
+            toast(e?.message || 'Save failed', 'error');
         } finally {
             setSaving(false);
         }
@@ -987,7 +1082,7 @@ const UsersPanel: React.FC = () => {
             });
             setUsers(Array.isArray(data) ? data : []);
         } catch (e: any) {
-            pushToast(e?.message || 'Update failed', 'error');
+            toast(e?.message || 'Update failed', 'error');
         }
     };
 
@@ -995,9 +1090,9 @@ const UsersPanel: React.FC = () => {
         try {
             await workerFetch(`spotify/users?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
             await load();
-            pushToast('Spotify user removed', 'success');
+            toast('Spotify user removed', 'success');
         } catch (e: any) {
-            pushToast(e?.message || 'Remove failed', 'error');
+            toast(e?.message || 'Remove failed', 'error');
         }
     };
 
@@ -1104,7 +1199,7 @@ const MatchingPanel: React.FC = () => {
             setApproaches(JSON.stringify(search, null, 2));
             setText(JSON.stringify(processing, null, 2));
         } catch (e: any) {
-            pushToast(e?.message || 'Could not load matching config', 'error');
+            toast(e?.message || 'Could not load matching config', 'error');
         } finally {
             setLoading(false);
         }
@@ -1116,19 +1211,19 @@ const MatchingPanel: React.FC = () => {
         try {
             const parsed = JSON.parse(raw);
             await workerFetch(path, { method: 'POST', body: JSON.stringify(parsed) });
-            pushToast(`${label} saved`, 'success');
+            toast(`${label} saved`, 'success');
         } catch (e: any) {
-            pushToast(e?.message || `Invalid JSON for ${label}`, 'error');
+            toast(e?.message || `Invalid JSON for ${label}`, 'error');
         }
     };
 
     const reset = async () => {
         try {
             await workerFetch('plex/music-search-config/reset', { method: 'POST', body: JSON.stringify({}) });
-            pushToast('Matching config reset', 'success');
+            toast('Matching config reset', 'success');
             await load();
         } catch (e: any) {
-            pushToast(e?.message || 'Reset failed', 'error');
+            toast(e?.message || 'Reset failed', 'error');
         }
     };
 
@@ -1187,9 +1282,9 @@ const IntegrationsPanel: React.FC = () => {
     const save = async (path: string, raw: string, label: string) => {
         try {
             await workerFetch(path, { method: 'PUT', body: JSON.stringify(JSON.parse(raw)) });
-            pushToast(`${label} saved`, 'success');
+            toast(`${label} saved`, 'success');
         } catch (e: any) {
-            pushToast(e?.message || `Could not save ${label}`, 'error');
+            toast(e?.message || `Could not save ${label}`, 'error');
         }
     };
 
@@ -1228,7 +1323,7 @@ const LogsPanel: React.FC = () => {
         try {
             setLogs(await workerFetch('logs'));
         } catch (e: any) {
-            pushToast(e?.message || 'Could not load logs', 'error');
+            toast(e?.message || 'Could not load logs', 'error');
             setLogs(null);
         } finally {
             setLoading(false);
@@ -1240,10 +1335,10 @@ const LogsPanel: React.FC = () => {
     const clear = async () => {
         try {
             await workerFetch('logs', { method: 'DELETE' });
-            pushToast('Logs cleared', 'success');
+            toast('Logs cleared', 'success');
             await load();
         } catch (e: any) {
-            pushToast(e?.message || 'Clear failed', 'error');
+            toast(e?.message || 'Clear failed', 'error');
         }
     };
 

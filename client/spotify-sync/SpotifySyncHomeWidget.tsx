@@ -5,6 +5,7 @@ import { usePoll } from '../shared/usePoll';
 import { BetaBadge } from '../shared/BetaBadge';
 import { useDiscoverI18n } from '../discovery/i18n';
 import { SpotifySyncMark } from './SpotifySyncMark';
+import { formatWhen } from './spotifySyncApi';
 
 type SpotifySyncStatus = {
     ok?: boolean;
@@ -15,13 +16,6 @@ type SpotifySyncStatus = {
 
 type Props = {
     onOpen?: () => void;
-};
-
-const formatWhen = (value?: string | null) => {
-    if (!value) return '—';
-    const parsed = Date.parse(value);
-    if (!Number.isFinite(parsed)) return String(value);
-    return new Date(parsed).toLocaleString();
 };
 
 export const SpotifySyncHomeWidget: React.FC<Props> = ({ onOpen }) => {
