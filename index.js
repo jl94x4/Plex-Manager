@@ -688,7 +688,7 @@ app.use((req, res, next) => {
         'Content-Security-Policy',
         portalContentSecurityPolicy(req.hostname, embedProxy),
     );
-    if (req.secure || FORCE_SECURE_COOKIES) {
+    if (requestIsHttps(req) || FORCE_SECURE_COOKIES) {
         res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     }
     if (req.path.startsWith('/api/')) {
@@ -736,7 +736,7 @@ const authRateLimit = createRateLimiter(15 * 60 * 1000, 10); // Reduced from 20 
 const authCallbackRateLimit = createRateLimiter(15 * 60 * 1000, 40);
 const jellyfinQuickConnectPollRateLimit = createRateLimiter(5 * 60 * 1000, 140);
 const publicReadRateLimit = createRateLimiter(60 * 1000, 120);
-const speedtestRateLimit = createRateLimiter(60 * 1000, 80); // parallel duration streams need headroom
+const speedtestRateLimit = createRateLimiter(60 * 1000, 20);
 const setupRateLimit = createRateLimiter(15 * 60 * 1000, 30);
 const scannerTriggerRateLimit = createRateLimiter(15 * 60 * 1000, 60);
 const mediaAutomationTriggerRateLimit = createRateLimiter(15 * 60 * 1000, 60);
@@ -986,11 +986,23 @@ const resolveRequestAppFetchUrl = (config = {}) => {
     return resolveIntegrationUrlForFetch(config.requestAppUrl || '');
 };
 
-// Mark cookies Secure on HTTPS requests or when FORCE_SECURE_COOKIES=true.
-// Plain HTTP LAN setups remain usable when the request is not secure.
+const requestIsHttps = (req) => {
+    if (FORCE_SECURE_COOKIES) return true;
+    if (req && req.secure) return true;
+    const forwarded = String(req?.headers?.['x-forwarded-proto'] || '')
+        .split(',')[0]
+        .trim()
+        .toLowerCase();
+    if (forwarded === 'https') return true;
+    if (/^https:\/\//i.test(getEnvPublicBaseUrl() || runtimePublicBaseUrl || '')) return true;
+    return false;
+};
+
+// Mark cookies Secure on HTTPS requests, HTTPS public URL, or FORCE_SECURE_COOKIES=true.
+// Plain HTTP LAN setups remain usable when none of those apply.
 const sessionCookieBase = (req) => ({
     httpOnly: true,
-    secure: FORCE_SECURE_COOKIES || !!(req && req.secure),
+    secure: requestIsHttps(req),
     sameSite: 'lax',
     path: BASE_PATH || '/',
 });
@@ -1651,12 +1663,15 @@ let healthData = {};
 const SPEED_TEST_CHUNK_SIZE = 4 * 1024 * 1024;
 /** Incompressible chunk so transfer size ≈ measured bytes (also gzip-excluded above). */
 const SPEED_TEST_BUFFER = randomBytes(SPEED_TEST_CHUNK_SIZE);
-const SPEED_TEST_MAX_DOWNLOAD_BYTES = 512 * 1024 * 1024;
-/** Cap endless stream=1 downloads so members cannot hold open forever-streams. */
-const SPEED_TEST_STREAM_MAX_MS = 30_000;
-const SPEED_TEST_STREAM_MAX_BYTES = 2 * 1024 * 1024 * 1024;
-/** Per-request upload cap for duration tests (client aborts sooner; needs room for multi-gig). */
-const SPEED_TEST_MAX_UPLOAD_BYTES = 4 * 1024 * 1024 * 1024;
+const SPEED_TEST_MAX_DOWNLOAD_BYTES = 256 * 1024 * 1024;
+/** Cap stream=1 downloads so members cannot saturate the host. */
+const SPEED_TEST_STREAM_MAX_MS = 12_000;
+const SPEED_TEST_STREAM_MAX_BYTES = 256 * 1024 * 1024;
+/** Per-request upload cap. */
+const SPEED_TEST_MAX_UPLOAD_BYTES = 256 * 1024 * 1024;
+const SPEEDTEST_USER_WINDOW_MS = 60_000;
+const SPEEDTEST_USER_MAX_BYTES = 512 * 1024 * 1024;
+const SPEEDTEST_USER_MAX_CONCURRENT = 8;
 
 const normalizeJellyfinAnalyticsProvider = (value, config = {}) => {
     const raw = String(value || '').toLowerCase();
@@ -19071,14 +19086,62 @@ app.get('/api/plex/analytics/user/:id', requireAdmin, async (req, res) => {
     }
 });
 
+const speedtestUserQuota = (() => {
+    const store = new Map();
+    setInterval(() => {
+        const now = Date.now();
+        store.forEach((record, key) => {
+            if (now > record.resetAt && record.inflight <= 0) store.delete(key);
+        });
+    }, SPEEDTEST_USER_WINDOW_MS).unref();
+    const keyFor = (req) => String(
+        req.user?.id || req.user?.plexId || req.user?.jellyfinId || getClientIp(req),
+    );
+    const take = (req, res, next) => {
+        const key = keyFor(req);
+        const now = Date.now();
+        const record = store.get(key) || { bytes: 0, inflight: 0, resetAt: now + SPEEDTEST_USER_WINDOW_MS };
+        if (now > record.resetAt) {
+            record.bytes = 0;
+            record.resetAt = now + SPEEDTEST_USER_WINDOW_MS;
+        }
+        if (record.inflight >= SPEEDTEST_USER_MAX_CONCURRENT) {
+            return res.status(429).json({ error: 'Speed test is limited to 8 concurrent transfers.' });
+        }
+        if (record.bytes >= SPEEDTEST_USER_MAX_BYTES) {
+            return res.status(429).json({ error: 'Speed test quota exceeded. Try again in a minute.' });
+        }
+        record.inflight += 1;
+        store.set(key, record);
+        let released = false;
+        const release = () => {
+            if (released) return;
+            released = true;
+            record.inflight = Math.max(0, record.inflight - 1);
+        };
+        res.on('close', release);
+        req.speedtestAccount = (n) => {
+            record.bytes += Math.max(0, Number(n) || 0);
+        };
+        req.speedtestRemaining = () => Math.max(0, SPEEDTEST_USER_MAX_BYTES - record.bytes);
+        next();
+    };
+    return take;
+})();
+
 app.get('/api/speedtest/ping', requireAuth, requireMember, speedtestRateLimit, (req, res) => { res.set('Cache-Control', 'no-store'); res.send('pong'); });
-app.get('/api/speedtest/download', requireAuth, requireMember, speedtestRateLimit, (req, res) => {
+app.get('/api/speedtest/download', requireAuth, requireMember, speedtestRateLimit, speedtestUserQuota, (req, res) => {
     const streamForever = String(req.query.stream || '') === '1';
     const parsedBytes = parseInt(req.query.bytes, 10);
+    const quotaLeft = typeof req.speedtestRemaining === 'function' ? req.speedtestRemaining() : SPEEDTEST_USER_MAX_BYTES;
     // Even stream=1 is bounded — client aborts after ~10.5s; hard caps stop bandwidth DoS.
+    const cap = Math.min(
+        streamForever ? SPEED_TEST_STREAM_MAX_BYTES : SPEED_TEST_MAX_DOWNLOAD_BYTES,
+        quotaLeft || 1,
+    );
     const bytes = streamForever
-        ? SPEED_TEST_STREAM_MAX_BYTES
-        : Math.max(1, Math.min(Number.isFinite(parsedBytes) ? parsedBytes : SPEED_TEST_CHUNK_SIZE, SPEED_TEST_MAX_DOWNLOAD_BYTES));
+        ? cap
+        : Math.max(1, Math.min(Number.isFinite(parsedBytes) ? parsedBytes : SPEED_TEST_CHUNK_SIZE, cap));
     const maxMs = streamForever ? SPEED_TEST_STREAM_MAX_MS : 0;
 
     res.set('Content-Type', 'application/octet-stream');
@@ -19118,6 +19181,11 @@ app.get('/api/speedtest/download', requireAuth, requireMember, speedtestRateLimi
                 : SPEED_TEST_BUFFER;
             ok = res.write(chunk);
             sent += chunk.length;
+            req.speedtestAccount?.(chunk.length);
+            if (typeof req.speedtestRemaining === 'function' && req.speedtestRemaining() <= 0) {
+                res.end();
+                return;
+            }
         }
         if (!destroyed && !res.writableEnded) res.once('drain', pump);
     };
@@ -19125,12 +19193,16 @@ app.get('/api/speedtest/download', requireAuth, requireMember, speedtestRateLimi
     pump();
 });
 /** Streaming upload sink — discard body without buffering (supports long duration tests). */
-app.post('/api/speedtest/upload', requireAuth, requireMember, speedtestRateLimit, (req, res) => {
+app.post('/api/speedtest/upload', requireAuth, requireMember, speedtestRateLimit, speedtestUserQuota, (req, res) => {
     res.set('Cache-Control', 'no-store');
     let received = 0;
-    const maxBytes = SPEED_TEST_MAX_UPLOAD_BYTES;
+    const maxBytes = Math.min(
+        SPEED_TEST_MAX_UPLOAD_BYTES,
+        typeof req.speedtestRemaining === 'function' ? req.speedtestRemaining() : SPEED_TEST_MAX_UPLOAD_BYTES,
+    );
     req.on('data', (chunk) => {
         received += chunk.length;
+        req.speedtestAccount?.(chunk.length);
         if (received > maxBytes) {
             req.destroy();
             if (!res.headersSent) res.status(413).end();

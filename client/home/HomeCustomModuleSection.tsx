@@ -70,13 +70,16 @@ export const HomeCustomModuleSection: React.FC<Props> = ({ module, isAdmin = fal
     );
 
     if (module.mode === 'html') {
+        const srcDoc = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;padding:12px;background:transparent;color:#e8e8e8;font-family:Inter,system-ui,sans-serif;}</style>${module.css ? `<style>${String(module.css).replace(/<\/style/gi, '<\\/style')}</style>` : ''}</head><body>${module.html || ''}</body></html>`;
         return (
             <div className="glass-card p-4 md:p-5 shadow-xl w-full min-w-0">
                 {header}
-                {module.css ? <style dangerouslySetInnerHTML={{ __html: module.css }} /> : null}
-                <div
-                    className="home-custom-module-html min-w-0 overflow-x-auto"
-                    dangerouslySetInnerHTML={{ __html: module.html || '' }}
+                <iframe
+                    title={module.title}
+                    srcDoc={srcDoc}
+                    className="min-h-[16rem] w-full rounded-xl border border-white/10 bg-black/20"
+                    sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
+                    referrerPolicy="no-referrer"
                 />
             </div>
         );

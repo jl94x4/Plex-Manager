@@ -26,6 +26,7 @@ export type EditionsConfig = {
         hideWhenEnglish: boolean;
     };
     webhookEnabled: boolean;
+    webhookToken?: string;
     scheduleHours: number;
     lastFullRunAt?: string | null;
 };
@@ -63,9 +64,9 @@ export const fetchEditionsConfig = () => apiFetch('/api/editions/config') as Pro
     workerReady: boolean;
 }>;
 
-export const saveEditionsConfig = (config: EditionsConfig) => apiFetch('/api/editions/config', {
+export const saveEditionsConfig = (config: EditionsConfig, extra: { rotateWebhookToken?: boolean } = {}) => apiFetch('/api/editions/config', {
     method: 'PUT',
-    body: JSON.stringify({ config }),
+    body: JSON.stringify({ config, rotateWebhookToken: !!extra.rotateWebhookToken }),
 }) as Promise<{ config: EditionsConfig; modulesCatalog: string[] }>;
 
 export const testEditionsConnection = () => apiFetch('/api/editions/test', { method: 'POST' });

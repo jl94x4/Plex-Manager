@@ -70,6 +70,7 @@ const emptyConfig = (): EditionsConfig => ({
     template: { format: 'auto', separator: ' • ', maxLength: 0 },
     tmdbLanguage: { hideWhenEnglish: true },
     webhookEnabled: false,
+    webhookToken: '',
     scheduleHours: 6,
     lastFullRunAt: null,
 });
@@ -146,8 +147,10 @@ export const EditionsDashboard: React.FC = () => {
 
     const webhookUrl = useMemo(() => {
         if (typeof window === 'undefined') return '/api/editions/webhook';
-        return `${window.location.origin}${portalUrl('/api/editions/webhook')}`;
-    }, []);
+        const base = `${window.location.origin}${portalUrl('/api/editions/webhook')}`;
+        const token = String(config.webhookToken || '').trim();
+        return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+    }, [config.webhookToken]);
 
     const handleSave = async () => {
         setSaving(true);
@@ -566,10 +569,38 @@ export const EditionsDashboard: React.FC = () => {
                     />
                     <div className="mt-3 rounded-lg border border-border bg-background/40 p-3">
                         <p className="text-[10px] font-bold uppercase tracking-wider text-muted mb-1">Plex webhook URL</p>
-                        <code className="text-xs break-all text-plex">{webhookUrl}</code>
-                        <p className="text-[11px] text-muted mt-2">
-                            Paste this into Plex Settings → Network → Webhooks (Plex Pass). Plex POSTs <code>library.new</code> here with a thumbnail, so opening the URL in a browser only returns a health check — it does not stamp a movie.
-                        </p>
+                        {config.webhookEnabled && !config.webhookToken ? (
+                            <p className="text-xs text-muted">Save webhook & schedule to generate a secret URL for Plex.</p>
+                        ) : (
+                            <>
+                                <code className="text-xs break-all text-plex">{webhookUrl}</code>
+                                <p className="text-[11px] text-muted mt-2">
+                                    Paste this into Plex Settings → Network → Webhooks (Plex Pass). The URL includes a secret token — treat it like a password. Opening it in a browser only returns a health check; POSTs without the token are rejected.
+                                </p>
+                                {config.webhookToken ? (
+                                    <button
+                                        type="button"
+                                        disabled={saving}
+                                        onClick={async () => {
+                                            setSaving(true);
+                                            try {
+                                                const data = await saveEditionsConfig(config, { rotateWebhookToken: true });
+                                                setConfig(data.config);
+                                                setCatalog(data.modulesCatalog || catalog);
+                                                toast('Webhook token rotated — update the URL in Plex', 'success');
+                                            } catch (error: any) {
+                                                toast(error?.message || 'Failed to rotate token', 'error');
+                                            } finally {
+                                                setSaving(false);
+                                            }
+                                        }}
+                                        className="mt-3 text-xs font-bold text-plex hover:underline disabled:opacity-50"
+                                    >
+                                        Rotate webhook token
+                                    </button>
+                                ) : null}
+                            </>
+                        )}
                     </div>
                     <div className="mt-4">
                         <p className="text-xs font-bold uppercase tracking-wider text-muted mb-2">Scheduled full run</p>
