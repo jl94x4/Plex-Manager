@@ -11,9 +11,13 @@ export const BetaBadge: React.FC<{ className?: string; title?: string }> = ({ cl
     </span>
 );
 
-export const SpotifySyncBetaBanner: React.FC<{ className?: string }> = ({ className = '' }) => {
+export const BetaFeatureBanner: React.FC<{
+    titleKey: string;
+    noticeKey: string;
+    className?: string;
+}> = ({ titleKey, noticeKey, className = '' }) => {
     const { t } = useDiscoverI18n();
-    const notice = t('spotifySyncPage.betaNotice');
+    const notice = t(noticeKey);
     return (
         <div
             className={`flex items-start gap-2 rounded-xl border border-amber-400/25 bg-amber-500/10 px-3 py-2.5 text-xs leading-relaxed text-amber-100/90 ${className}`.trim()}
@@ -23,10 +27,26 @@ export const SpotifySyncBetaBanner: React.FC<{ className?: string }> = ({ classN
             <div className="min-w-0">
                 <p className="flex flex-wrap items-center gap-1.5 font-bold uppercase tracking-wide text-amber-200">
                     <BetaBadge title={notice} />
-                    <span>{t('spotifySyncPage.betaTitle')}</span>
+                    <span>{t(titleKey)}</span>
                 </p>
                 <p className="mt-1 text-amber-100/85">{notice}</p>
             </div>
         </div>
     );
 };
+
+export const SpotifySyncBetaBanner: React.FC<{ className?: string }> = ({ className = '' }) => (
+    <BetaFeatureBanner
+        titleKey="spotifySyncPage.betaTitle"
+        noticeKey="spotifySyncPage.betaNotice"
+        className={className}
+    />
+);
+
+export const PosterSetsBetaBanner: React.FC<{ className?: string }> = ({ className = '' }) => (
+    <BetaFeatureBanner
+        titleKey="posterSetsPage.betaTitle"
+        noticeKey="posterSetsPage.betaNotice"
+        className={className}
+    />
+);

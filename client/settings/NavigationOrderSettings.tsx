@@ -13,6 +13,7 @@ import type { CustomNavTab } from '../shared/types';
 import { useDiscoverI18n } from '../discovery/i18n';
 import { SettingsToggleRow } from '../shared/ui';
 import { SettingHint } from './SettingHint';
+import { BetaBadge } from '../shared/BetaBadge';
 
 type NavFeatureStatus = {
     upgrader?: boolean;
@@ -323,11 +324,16 @@ const NavOrderColumn: React.FC<ColumnProps> = ({
                                 </button>
 
                                 <div className="min-w-0 flex-1">
-                                    <div className="font-medium text-text">
-                                        {labelForKey(key, {
+                                    <div className="flex flex-wrap items-center gap-1.5 font-medium text-text">
+                                        <span>{labelForKey(key, {
                                             adminSuffix: showAdminSuffix,
                                             downloadsMembersVisible: downloadsVisibleToMembers,
-                                        })}
+                                        })}</span>
+                                        {key === 'poster-sets' ? (
+                                            <BetaBadge title={translate('posterSetsPage.betaNotice')} className="scale-90" />
+                                        ) : key === 'spotify-sync' ? (
+                                            <BetaBadge title={translate('spotifySyncPage.betaNotice')} className="scale-90" />
+                                        ) : null}
                                     </div>
                                     {isHidden ? (
                                         <p className="mt-0.5 text-[11px] text-yellow-300/90">{translate('settings.navigation.order.hidden')}</p>

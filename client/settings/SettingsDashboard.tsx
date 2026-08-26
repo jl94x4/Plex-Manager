@@ -79,7 +79,12 @@ import {
     type MediaAutomationSettingsConfig,
 } from '../media-automation/types';
 import { useDiscoverI18n } from '../discovery/i18n';
-import { BetaBadge, SpotifySyncBetaBanner } from '../shared/BetaBadge';
+import { BetaBadge, PosterSetsBetaBanner, SpotifySyncBetaBanner } from '../shared/BetaBadge';
+
+const SETTINGS_TAB_BETA_NOTICE: Record<string, string> = {
+    'spotify-sync': 'spotifySyncPage.betaNotice',
+    'poster-sets': 'posterSetsPage.betaNotice',
+};
 
 const normalizeArrInstancesFromSettings = (settings: Record<string, any> = {}): ArrInstance[] => {
     if (Array.isArray(settings.arrInstances) && settings.arrInstances.length > 0) {
@@ -2546,8 +2551,8 @@ export const SettingsDashboard: React.FC = () => {
                                                     <SettingsTabIcon id={tab.id} />
                                                     <span className="flex items-center gap-1.5 min-w-0 flex-1">
                                                         <span className="truncate">{t(SETTINGS_TAB_TRANSLATION_KEYS[tab.id] || tab.label)}</span>
-                                                        {tab.id === 'spotify-sync' ? (
-                                                            <BetaBadge title={t('spotifySyncPage.betaNotice')} className="shrink-0 scale-90" />
+                                                        {SETTINGS_TAB_BETA_NOTICE[tab.id] ? (
+                                                            <BetaBadge title={t(SETTINGS_TAB_BETA_NOTICE[tab.id])} className="shrink-0 scale-90" />
                                                         ) : null}
                                                     </span>
                                                 </button>
@@ -5201,8 +5206,12 @@ export const SettingsDashboard: React.FC = () => {
                     )}
                     {activeTab === 'poster-sets' && (
                         <div className="mb-8 animate-fade-in space-y-6">
-                            <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">Poster Sets</h3>
+                            <h3 className="mb-4 flex flex-wrap items-center gap-2 border-b border-border pb-2 text-xl font-bold text-plex">
+                                <span>Poster Sets</span>
+                                <BetaBadge title={t('posterSetsPage.betaNotice')} />
+                            </h3>
                             <section id={getSettingsSectionElementId('poster-sets')} className="space-y-3 scroll-mt-24">
+                                <PosterSetsBetaBanner />
                                 <SettingsToggleRow
                                     title="Enable Poster Sets"
                                     hint={<SettingHint>Admin nav for applying MediUX / ThePosterDB artwork sets to Plex. Connection settings live inside the Poster Sets page — separate from ColleXions and portal Plex settings.</SettingHint>}

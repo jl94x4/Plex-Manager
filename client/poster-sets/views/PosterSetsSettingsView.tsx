@@ -24,6 +24,7 @@ import {
     X,
 } from 'lucide-react';
 import { CustomSelect, SettingsToggleRow } from '../../shared/ui';
+import { BetaBadge, PosterSetsBetaBanner } from '../../shared/BetaBadge';
 import { askConfirm } from '../../shared/confirm';
 import { normalizeUpgraderGridSize } from '../../shared/portalLayout';
 import { posterSetsApi } from '../api';
@@ -466,12 +467,16 @@ export const PosterSetsSettingsView: React.FC = () => {
 
         <section className={`${cardClass} w-full min-w-0 overflow-visible space-y-5 p-5 [overflow-wrap:anywhere]`}>
                     <div>
-                        <h2 className={sectionTitleClass}>Poster Sets config</h2>
+                        <h2 className={`${sectionTitleClass} flex flex-wrap items-center gap-2`}>
+                            <span>Poster Sets config</span>
+                            <BetaBadge title="Poster Sets is in BETA and still heavily in development. Expect rough edges, missing features, and breaking changes." />
+                        </h2>
                         <p className={sectionBodyClass}>
                             Same layout as the original helper config.json — used only by this feature.
                             You can pull URL, token, and libraries from Settings â†’ Media Player.
                         </p>
                     </div>
+                    <PosterSetsBetaBanner />
                     <div className="flex flex-wrap gap-2">
                         <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void importFromPortal()}>
                             {busy === 'import' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
