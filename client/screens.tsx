@@ -12094,14 +12094,11 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     const navCompressStepRef = useRef(0);
     const navCompressSignatureRef = useRef('');
     const [navCompressStep, setNavCompressStep] = useState(0);
+    const [navCompressEpoch, setNavCompressEpoch] = useState(0);
 
     const desktopNavKeySignature = useMemo(() => (
         normalizedNavOrder.filter((key) => key !== 'logs').join('|')
     ), [normalizedNavOrder]);
-
-    const desktopNavKeys = useMemo(() => (
-        normalizedNavOrder.filter((key) => key !== 'logs' && navItemsConfig[key])
-    ), [normalizedNavOrder, navItemsConfig]);
 
     /** Nav link styles — stay readable; only 3 steps. */
     const DESKTOP_NAV_STYLES = [
@@ -12157,55 +12154,37 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     const IDENTITY_STYLE_BY_STEP = [0, 1, 2, 3];
     const MAX_NAV_COMPRESS_STEP = NAV_STYLE_BY_STEP.length - 1;
 
-    const settleNavCompressStep = useCallback((nav: HTMLDivElement) => {
-        let step = 0;
-        let cancelled = false;
-
-        const settle = () => {
-            if (cancelled) return;
-            const overflow = nav.scrollHeight - nav.clientHeight;
-            if (overflow > 1 && step < MAX_NAV_COMPRESS_STEP) {
-                step += 1;
-                navCompressStepRef.current = step;
-                setNavCompressStep(step);
-                requestAnimationFrame(settle);
-                return;
-            }
-            navCompressStepRef.current = step;
-            setNavCompressStep(step);
-        };
-
-        navCompressStepRef.current = 0;
-        setNavCompressStep(0);
-        requestAnimationFrame(() => requestAnimationFrame(settle));
-
-        return () => {
-            cancelled = true;
-        };
-    }, [MAX_NAV_COMPRESS_STEP]);
-
+    // Climb one density step per committed layout. Measuring in rAF before React
+    // paints the smaller styles always raced to max compression (tiny labels).
+    // Skip re-compress on active-link clicks — only item list / identity / resize.
     useLayoutEffect(() => {
         const nav = navListRef.current;
         if (!nav) return;
 
-        const layoutSignature = `${desktopNavKeySignature}|${sidebarIdentityPosition}`;
-        if (layoutSignature === navCompressSignatureRef.current) {
-            setNavCompressStep(navCompressStepRef.current);
-            return;
+        const layoutSignature = `${desktopNavKeySignature}|${sidebarIdentityPosition}|${navCompressEpoch}`;
+        if (layoutSignature !== navCompressSignatureRef.current) {
+            navCompressSignatureRef.current = layoutSignature;
+            if (navCompressStep !== 0) {
+                navCompressStepRef.current = 0;
+                setNavCompressStep(0);
+                return;
+            }
         }
-        navCompressSignatureRef.current = layoutSignature;
-        return settleNavCompressStep(nav);
-    }, [desktopNavKeySignature, sidebarIdentityPosition, settleNavCompressStep]);
+
+        const overflow = nav.scrollHeight - nav.clientHeight;
+        if (overflow > 1 && navCompressStep < MAX_NAV_COMPRESS_STEP) {
+            const next = navCompressStep + 1;
+            navCompressStepRef.current = next;
+            setNavCompressStep(next);
+        }
+    }, [desktopNavKeySignature, sidebarIdentityPosition, navCompressEpoch, navCompressStep, MAX_NAV_COMPRESS_STEP]);
 
     useEffect(() => {
         let timer: ReturnType<typeof setTimeout> | undefined;
         const onResize = () => {
             if (timer) clearTimeout(timer);
             timer = setTimeout(() => {
-                const nav = navListRef.current;
-                if (!nav) return;
-                navCompressSignatureRef.current = `${desktopNavKeySignature}|${sidebarIdentityPosition}`;
-                settleNavCompressStep(nav);
+                setNavCompressEpoch((epoch) => epoch + 1);
             }, 200);
         };
         window.addEventListener('resize', onResize);
@@ -12213,7 +12192,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             if (timer) clearTimeout(timer);
             window.removeEventListener('resize', onResize);
         };
-    }, [settleNavCompressStep, desktopNavKeySignature, sidebarIdentityPosition]);
+    }, []);
 
     const compressStep = Math.min(Math.max(navCompressStep, 0), MAX_NAV_COMPRESS_STEP);
     const desktopNavDensity = DESKTOP_NAV_STYLES[NAV_STYLE_BY_STEP[compressStep]];
@@ -12827,10 +12806,19 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                         else if (item.route) onNavigate(item.route as any);
                                     };
                                     const badgeCount = getNavBadgeCount(key);
+                                    const betaTitle = item.beta
+                                        ? t(NAV_BETA_NOTICE_KEYS[item.route] || 'spotifySyncPage.betaNotice')
+                                        : '';
                                     return (
                                         <button key={key} onClick={handleActivate} className="flex flex-col items-center gap-2 relative bg-transparent border-0">
-                                            <div className={`w-[3.25rem] h-[3.25rem] rounded-full flex items-center justify-center transition-colors ${isCurrent ? 'bg-plex text-background shadow-[0_0_15px_rgba(229,160,13,0.35)]' : 'bg-background/50 text-text hover:bg-white/10 border border-white/5'}`}>
+                                            <div className={`relative w-[3.25rem] h-[3.25rem] rounded-full flex items-center justify-center transition-colors ${isCurrent ? 'bg-plex text-background shadow-[0_0_15px_rgba(229,160,13,0.35)]' : 'bg-background/50 text-text hover:bg-white/10 border border-white/5'}`}>
                                                 <item.icon className="w-6 h-6" />
+                                                {item.beta ? (
+                                                    <BetaBadge
+                                                        title={betaTitle}
+                                                        className="absolute -bottom-1.5 left-1/2 z-[1] -translate-x-1/2 px-1 py-0 text-[7px] leading-none"
+                                                    />
+                                                ) : null}
                                             </div>
                                             {badgeCount > 0 && (
                                                 <span className="absolute -top-1 -right-1 w-[18px] h-[18px] rounded-full bg-plex text-background text-[10px] font-bold flex items-center justify-center leading-none">
