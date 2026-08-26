@@ -1094,13 +1094,13 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                                     ) : null}
                                 </div>
                                 <div className="relative w-full sm:w-64">
-                                    <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted" />
+                                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
                                     <input
                                         type="text"
                                         placeholder={t('userAnalytics.history.searchPlaceholder')}
                                         value={historySearch}
                                         onChange={handleSearch}
-                                        className="w-full bg-black/40 border border-border text-white appearance-none text-[16px] leading-5 rounded-lg focus:ring-plex focus:border-plex block pl-10 p-2 transition-colors"
+                                        className="w-full appearance-none rounded-xl border border-white/10 bg-black/20 py-3 pl-10 pr-3 text-[16px] leading-5 text-text outline-none transition focus:border-plex/40 focus:ring-1 focus:ring-plex/20"
                                     />
                                 </div>
                             </div>
@@ -3421,7 +3421,7 @@ const ServerInsightsWidget: React.FC<{
                             value={peakDate} 
                             onChange={(e) => setPeakDate(e.target.value)} 
                             max={new Date().toISOString().split('T')[0]}
-                            className="bg-black/40 border border-white/5 rounded-md px-2 py-1 text-xs text-white outline-none focus:border-plex transition-colors"
+                            className="appearance-none rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-[16px] leading-5 text-text outline-none transition focus:border-plex/40"
                         />
                     </div>
                 </div>
@@ -4757,8 +4757,6 @@ return (
                                     <input
                                         ref={userSearchInputRef}
                                         type="text"
-                                        inputMode="search"
-                                        enterKeyHint="search"
                                         value={userSearchQuery}
                                         onChange={(event) => {
                                             setUserSearchQuery(event.target.value);
@@ -4778,7 +4776,7 @@ return (
                                             }
                                         }}
                                         placeholder="e.g. username or email…"
-                                        className="w-full appearance-none rounded-lg border border-border bg-background py-2.5 pl-10 pr-3 text-[16px] leading-5 text-text outline-none transition focus:border-plex"
+                                        className="w-full appearance-none rounded-xl border border-white/10 bg-black/20 py-3 pl-10 pr-3 text-[16px] leading-5 text-text outline-none transition focus:border-plex/40 focus:ring-1 focus:ring-plex/20"
                                         autoComplete="off"
                                         autoCorrect="off"
                                         autoCapitalize="none"

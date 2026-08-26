@@ -23,7 +23,6 @@ if (/Android/i.test(navigator.userAgent)) {
     resetAndroidZoom();
     window.addEventListener('pageshow', resetAndroidZoom);
 }
-// Stop iOS shoving the page up when the keyboard opens on an already-visible field.
 installIosKeyboardScrollLock();
 
 const container = document.getElementById('root');
