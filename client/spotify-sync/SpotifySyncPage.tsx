@@ -194,6 +194,7 @@ export const SpotifySyncPage: React.FC = () => {
             const summary = await syncSpotifyPlaylistsToPlex({
                 ids,
                 all: !ids?.length,
+                fast: true,
                 fetchJson: workerJson,
                 onProgress: (progress: { message?: string; done?: number; total?: number }) => {
                     setSyncProgress({
