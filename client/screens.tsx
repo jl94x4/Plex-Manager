@@ -1094,13 +1094,20 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                                     ) : null}
                                 </div>
                                 <div className="relative w-full sm:w-64">
-                                    <Search className="w-4 h-4 absolute left-3 top-2.5 text-muted" />
+                                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
                                     <input
                                         type="text"
+                                        inputMode="search"
+                                        enterKeyHint="search"
+                                        autoComplete="off"
+                                        autoCorrect="off"
+                                        autoCapitalize="none"
+                                        spellCheck={false}
                                         placeholder={t('userAnalytics.history.searchPlaceholder')}
                                         value={historySearch}
                                         onChange={handleSearch}
-                                        className="w-full bg-black/40 border border-border text-white appearance-none text-[16px] leading-5 rounded-lg focus:ring-plex focus:border-plex block pl-10 p-2 transition-colors"
+                                        className="w-full appearance-none rounded-xl border border-white/10 bg-black/20 py-3 pl-10 pr-3 text-[16px] leading-5 text-text outline-none transition focus:border-plex/40 focus:ring-1 focus:ring-plex/20"
+                                        style={{ fontSize: 16 }}
                                     />
                                 </div>
                             </div>
@@ -4778,7 +4785,8 @@ return (
                                         }
                                     }}
                                     placeholder="e.g. username or email…"
-                                    className="w-full appearance-none rounded-lg border border-border bg-background py-2.5 pl-10 pr-3 text-[16px] leading-5 text-text outline-none transition focus:border-plex"
+                                    className="w-full appearance-none rounded-xl border border-white/10 bg-black/20 py-3 pr-10 pl-10 text-[16px] leading-5 text-text outline-none transition focus:border-plex/40 focus:ring-1 focus:ring-plex/20"
+                                    style={{ fontSize: 16 }}
                                     autoComplete="off"
                                     autoCorrect="off"
                                     autoCapitalize="none"
@@ -5999,10 +6007,17 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
                                 <input
                                     type="text"
+                                    inputMode="search"
+                                    enterKeyHint="search"
+                                    autoComplete="off"
+                                    autoCorrect="off"
+                                    autoCapitalize="none"
+                                    spellCheck={false}
                                     placeholder={t('usersAdmin.filters.searchPlaceholder')}
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                     className="w-full appearance-none rounded-xl border border-white/10 bg-black/20 py-3 pr-10 pl-10 text-[16px] leading-5 text-text outline-none transition focus:border-plex/40 focus:ring-1 focus:ring-plex/20"
+                                    style={{ fontSize: 16 }}
                                 />
                                 {searchQuery && (
                                     <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-text text-xl" onClick={() => setSearchQuery('')}>×</button>
