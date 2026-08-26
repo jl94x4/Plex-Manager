@@ -15,6 +15,10 @@ import {
     Trash2,
     Pencil,
     Plug,
+    CheckSquare,
+    Square,
+    Heart,
+    CalendarClock,
 } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { portalUrl } from '../shared/basePath';
@@ -32,6 +36,13 @@ import { useDiscoverI18n } from '../discovery/i18n';
 import { CustomSelect } from '../shared/ui';
 import { SpotifySyncMark } from './SpotifySyncMark';
 import { formatWhen, workerFetch, workerImageUrl } from './spotifySyncApi';
+import {
+    asItemArray,
+    buildSavedItemAddBody,
+    isAlreadyAddedError,
+    normalizeSpotifyAccountPlaylists,
+    savedItemIdSet,
+} from '../../lib/spotify-to-plex-playlist-import.js';
 
 const buttonClass = 'inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-muted hover:border-plex hover:text-plex disabled:opacity-50';
 const primaryButtonClass = 'inline-flex items-center gap-2 rounded-lg bg-plex px-3 py-1.5 text-xs font-bold text-background hover:brightness-110 disabled:opacity-50';
@@ -69,6 +80,18 @@ type SpotifyUser = {
     label?: string;
     sync?: boolean;
     recentContext?: boolean;
+};
+
+type AccountPlaylist = {
+    id: string;
+    title: string;
+    liked: boolean;
+    private: boolean;
+    owner: string;
+    userId: string;
+    image: string;
+    search: string;
+    added: boolean;
 };
 
 const TABS: { id: TabId; label: string; icon: React.FC<{ className?: string }> }[] = [
@@ -147,6 +170,24 @@ export const SpotifySyncPage: React.FC = () => {
         }
     };
 
+    const syncPlaylistsToPlex = async (ids?: string[]) => {
+        setBusy(true);
+        try {
+            const data = await apiFetch('/api/spotify-to-plex/sync-playlist', {
+                method: 'POST',
+                body: JSON.stringify(ids?.length ? { ids } : { all: true }),
+            });
+            pushToast(data?.message || 'Synced playlists to Plex', data?.ok === false ? 'error' : 'success');
+            void loadStatus();
+            return data;
+        } catch (e: any) {
+            pushToast(e?.message || 'Failed to sync playlists to Plex', 'error');
+            throw e;
+        } finally {
+            setBusy(false);
+        }
+    };
+
     const startWorker = async () => {
         setBusy(true);
         try {
@@ -189,7 +230,7 @@ export const SpotifySyncPage: React.FC = () => {
                     </span>
                 }
                 title="Playlists from Spotify to Plex"
-                description="Native portal controls for the same worker features: saved playlists, Spotify users, matching, Lidarr/SLSKD, and scheduled sync. Plex URL and token come from Settings → Plex."
+                description="Match Spotify playlists against your Plex music library and create or update the Plex playlist. Plex URL and token come from Settings → Plex."
                 icon={<SpotifySyncMark className="h-5 w-5" />}
                 secondaryBlob
                 actions={(
@@ -197,8 +238,8 @@ export const SpotifySyncPage: React.FC = () => {
                         <button type="button" className={buttonClass} onClick={() => void loadStatus()} disabled={busy}>
                             <RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin' : ''}`} /> Refresh
                         </button>
-                        <button type="button" className={primaryButtonClass} onClick={() => void runSync('all')} disabled={busy || !workerOk}>
-                            <Play className="h-4 w-4" /> Sync now
+                        <button type="button" className={primaryButtonClass} onClick={() => void syncPlaylistsToPlex()} disabled={busy || !workerOk}>
+                            <Play className="h-4 w-4" /> Sync playlists to Plex
                         </button>
                     </div>
                 )}
@@ -287,9 +328,9 @@ export const SpotifySyncPage: React.FC = () => {
                 })}
             </DashboardSubnav>
 
-            {tab === 'playlists' && <PlaylistsPanel />}
+            {tab === 'playlists' && <PlaylistsPanel onSyncToPlex={syncPlaylistsToPlex} busy={busy} />}
             {tab === 'users' && <UsersPanel />}
-            {tab === 'sync' && <SyncPanel status={status} busy={busy} onSync={runSync} onApplyPlex={applyPlex} />}
+            {tab === 'sync' && <SyncPanel status={status} busy={busy} onSync={runSync} onSyncPlaylistsToPlex={() => void syncPlaylistsToPlex()} onApplyPlex={applyPlex} />}
             {tab === 'matching' && <MatchingPanel />}
             {tab === 'integrations' && <IntegrationsPanel />}
             {tab === 'logs' && <LogsPanel />}
@@ -297,7 +338,45 @@ export const SpotifySyncPage: React.FC = () => {
     );
 };
 
-const PlaylistsPanel: React.FC = () => {
+const addAccountPlaylists = async (playlists: AccountPlaylist[]) => {
+    let added = 0;
+    let skipped = 0;
+    let failed = 0;
+    const errors: string[] = [];
+    for (const playlist of playlists) {
+        try {
+            await workerFetch('saved-items', {
+                method: 'POST',
+                body: JSON.stringify(buildSavedItemAddBody(playlist)),
+            });
+            added += 1;
+        } catch (e: any) {
+            if (isAlreadyAddedError(e?.message)) skipped += 1;
+            else {
+                failed += 1;
+                errors.push(`${playlist.title}: ${e?.message || 'failed'}`);
+            }
+        }
+    }
+    return { added, skipped, failed, errors };
+};
+
+const applyPlaylistSchedule = async (ids: string[], intervalDays: string) => {
+    if (!ids.length) return;
+    await workerFetch('saved-items', {
+        method: 'PUT',
+        body: JSON.stringify({
+            ids,
+            sync: true,
+            sync_interval: String(intervalDays || '2'),
+        }),
+    });
+};
+
+const PlaylistsPanel: React.FC<{
+    onSyncToPlex: (ids: string[]) => Promise<unknown>;
+    busy?: boolean;
+}> = ({ onSyncToPlex, busy }) => {
     const [items, setItems] = useState<SavedItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -305,12 +384,23 @@ const PlaylistsPanel: React.FC = () => {
     const [editing, setEditing] = useState<SavedItem | null>(null);
     const [preview, setPreview] = useState<{ title: string; tracks: any[] } | null>(null);
     const [previewing, setPreviewing] = useState(false);
+    const [users, setUsers] = useState<SpotifyUser[]>([]);
+    const [userId, setUserId] = useState('');
+    const [accountPlaylists, setAccountPlaylists] = useState<AccountPlaylist[]>([]);
+    const [accountLoading, setAccountLoading] = useState(false);
+    const [accountError, setAccountError] = useState('');
+    const [accountFilter, setAccountFilter] = useState('');
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [savedSelectedIds, setSavedSelectedIds] = useState<Set<string>>(new Set());
+    const [intervalDays, setIntervalDays] = useState('2');
+    const [busyAction, setBusyAction] = useState('');
+    const locked = !!busyAction || !!busy;
 
     const load = useCallback(async () => {
         setLoading(true);
         try {
             const data = await workerFetch('saved-items');
-            setItems(Array.isArray(data) ? data : []);
+            setItems(asItemArray(data));
         } catch (e: any) {
             pushToast(e?.message || 'Failed to load playlists', 'error');
             setItems([]);
@@ -320,6 +410,170 @@ const PlaylistsPanel: React.FC = () => {
     }, []);
 
     useEffect(() => { void load(); }, [load]);
+
+    const loadUsers = useCallback(async () => {
+        try {
+            const data = asItemArray(await workerFetch('spotify/users')) as SpotifyUser[];
+            setUsers(data);
+            setUserId((current) => current && data.some((user) => user.id === current) ? current : (data[0]?.id || ''));
+        } catch {
+            setUsers([]);
+            setUserId('');
+        }
+    }, []);
+
+    const loadAccountPlaylists = useCallback(async (id = '') => {
+        if (!id) {
+            setAccountPlaylists([]);
+            setAccountError('Connect a Spotify account on the Users tab to pull playlists.');
+            return;
+        }
+        setAccountLoading(true);
+        setAccountError('');
+        try {
+            const [userList, saved, raw] = await Promise.all([
+                workerFetch('spotify/users').then((data) => asItemArray(data) as SpotifyUser[]),
+                workerFetch('saved-items').then(asItemArray).catch(() => []),
+                workerFetch(`spotify/users/${encodeURIComponent(id)}/items?type=playlists`),
+            ]);
+            const user = userList.find((entry) => entry.id === id) || { id };
+            const next = normalizeSpotifyAccountPlaylists(raw, {
+                user,
+                savedIds: savedItemIdSet(saved),
+            }) as AccountPlaylist[];
+            setAccountPlaylists(next);
+            setSelectedIds(new Set());
+        } catch (e: any) {
+            setAccountPlaylists([]);
+            setAccountError(e?.message || 'Could not load playlists from Spotify.');
+        } finally {
+            setAccountLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        void (async () => {
+            await loadUsers();
+        })();
+    }, [loadUsers]);
+
+    useEffect(() => {
+        if (userId) void loadAccountPlaylists(userId);
+    }, [userId, loadAccountPlaylists]);
+
+    const filteredAccount = useMemo(() => {
+        const q = accountFilter.trim().toLowerCase();
+        if (!q) return accountPlaylists;
+        return accountPlaylists.filter((item) => (
+            item.title.toLowerCase().includes(q)
+            || item.owner.toLowerCase().includes(q)
+        ));
+    }, [accountPlaylists, accountFilter]);
+
+    const selectedPlaylists = useMemo(
+        () => accountPlaylists.filter((item) => selectedIds.has(item.id)),
+        [accountPlaylists, selectedIds],
+    );
+
+    const allFilteredSelected = filteredAccount.length > 0 && filteredAccount.every((item) => selectedIds.has(item.id));
+
+    const toggleSelected = (id: string) => {
+        setSelectedIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const toggleSelectAllFiltered = () => {
+        setSelectedIds((prev) => {
+            const next = new Set(prev);
+            if (allFilteredSelected) {
+                for (const item of filteredAccount) next.delete(item.id);
+            } else {
+                for (const item of filteredAccount) next.add(item.id);
+            }
+            return next;
+        });
+    };
+
+    const toggleSavedSelected = (id: string) => {
+        setSavedSelectedIds((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
+    const reportImport = (result: { added: number; skipped: number; failed: number; errors: string[] }) => {
+        if (result.failed) {
+            pushToast(result.errors[0] || `Failed to add ${result.failed} playlist${result.failed === 1 ? '' : 's'}`, 'error');
+        } else if (result.added || result.skipped) {
+            const parts = [];
+            if (result.added) parts.push(`added ${result.added}`);
+            if (result.skipped) parts.push(`${result.skipped} already saved`);
+            pushToast(parts.join(', '), 'success');
+        }
+    };
+
+    const runOnPlaylists = async (playlists: AccountPlaylist[], mode: 'add' | 'schedule' | 'sync') => {
+        if (!playlists.length) return;
+        setBusyAction(mode);
+        try {
+            const result = await addAccountPlaylists(playlists);
+            reportImport(result);
+            const saved = asItemArray(await workerFetch('saved-items'));
+            setItems(saved);
+            const savedIds = savedItemIdSet(saved);
+            const ids = playlists.map((item) => item.id).filter((id) => savedIds.has(id));
+            if ((mode === 'schedule' || mode === 'sync') && !ids.length) {
+                pushToast('None of those playlists could be saved', 'error');
+                return;
+            }
+            if (mode === 'schedule') {
+                await applyPlaylistSchedule(ids, intervalDays);
+                setItems(asItemArray(await workerFetch('saved-items')));
+            }
+            if (mode === 'sync') {
+                try {
+                    await onSyncToPlex(ids);
+                } catch {
+                    return;
+                }
+            }
+            await loadAccountPlaylists(userId);
+            setSelectedIds(new Set());
+        } catch (e: any) {
+            pushToast(e?.message || 'Could not update playlists', 'error');
+        } finally {
+            setBusyAction('');
+        }
+    };
+
+    const runOnSaved = async (ids: string[], mode: 'schedule' | 'sync') => {
+        if (!ids.length) return;
+        setBusyAction(`saved-${mode}`);
+        try {
+            if (mode === 'schedule') {
+                await applyPlaylistSchedule(ids, intervalDays);
+                setItems(asItemArray(await workerFetch('saved-items')));
+                pushToast(`Scheduled ${ids.length} playlist${ids.length === 1 ? '' : 's'}`, 'success');
+            } else {
+                try {
+                    await onSyncToPlex(ids);
+                } catch {
+                    return;
+                }
+            }
+            setSavedSelectedIds(new Set());
+        } catch (e: any) {
+            pushToast(e?.message || 'Could not update saved playlists', 'error');
+        } finally {
+            setBusyAction('');
+        }
+    };
 
     const groups = useMemo(() => {
         const map = new Map<string, SavedItem[]>();
@@ -385,6 +639,130 @@ const PlaylistsPanel: React.FC = () => {
 
     return (
         <>
+            <DashboardPanel
+                title="From your Spotify account"
+                subtitle="Pull every playlist on the connected account, then add, schedule, or match tracks and write the playlist into Plex. Matching can take a few minutes on large playlists."
+                controls={(
+                    <div className="flex flex-wrap items-center gap-2">
+                        {users.length > 1 ? (
+                            <select
+                                className="appearance-none rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-[16px] leading-5 text-text"
+                                value={userId}
+                                onChange={(e) => setUserId(e.target.value)}
+                            >
+                                {users.map((user) => (
+                                    <option key={user.id} value={user.id}>{user.name || user.id}</option>
+                                ))}
+                            </select>
+                        ) : null}
+                        <button
+                            type="button"
+                            className={buttonClass}
+                            onClick={() => void loadAccountPlaylists(userId)}
+                            disabled={accountLoading || !userId}
+                        >
+                            <RefreshCw className={`h-3.5 w-3.5 ${accountLoading ? 'animate-spin' : ''}`} /> Refresh
+                        </button>
+                    </div>
+                )}
+            >
+                {users.length === 0 ? (
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-sm text-muted">Connect a Spotify account on the Users tab, then refresh here to import playlists.</p>
+                        <a href={portalUrl('/api/spotify-to-plex/spotify-login')} className={primaryButtonClass}>Connect Spotify</a>
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+                            <input
+                                className="appearance-none w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-[16px] leading-5 text-text"
+                                placeholder="Filter playlists…"
+                                value={accountFilter}
+                                onChange={(e) => setAccountFilter(e.target.value)}
+                            />
+                            <div className="flex flex-wrap items-center gap-2">
+                                <label className="flex items-center gap-1.5 text-xs text-muted whitespace-nowrap">
+                                    Every
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        className="appearance-none w-16 rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-[16px] leading-5 text-text"
+                                        value={intervalDays}
+                                        onChange={(e) => setIntervalDays(e.target.value)}
+                                    />
+                                    days
+                                </label>
+                                <button type="button" className={buttonClass} onClick={toggleSelectAllFiltered} disabled={!filteredAccount.length}>
+                                    {allFilteredSelected ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+                                    {allFilteredSelected ? 'Clear' : 'Select all'}
+                                </button>
+                                <button type="button" className={buttonClass} onClick={() => void runOnPlaylists(selectedPlaylists, 'add')} disabled={!selectedPlaylists.length || locked}>
+                                    {busyAction === 'add' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                                    Add selected
+                                </button>
+                                <button type="button" className={buttonClass} onClick={() => void runOnPlaylists(selectedPlaylists, 'schedule')} disabled={!selectedPlaylists.length || locked}>
+                                    {busyAction === 'schedule' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarClock className="h-3.5 w-3.5" />}
+                                    Schedule selected
+                                </button>
+                                <button type="button" className={primaryButtonClass} onClick={() => void runOnPlaylists(selectedPlaylists, 'sync')} disabled={!selectedPlaylists.length || locked}>
+                                    {busyAction === 'sync' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+                                    Sync to Plex
+                                </button>
+                            </div>
+                        </div>
+                        <p className="text-[11px] text-muted">
+                            {selectedPlaylists.length} selected · {filteredAccount.length} shown
+                            {accountError ? ` · ${accountError}` : ''}
+                        </p>
+                        {accountLoading ? (
+                            <p className="text-sm text-muted">Loading playlists from Spotify…</p>
+                        ) : filteredAccount.length === 0 ? (
+                            <p className="text-sm text-muted">{accountError || 'No playlists found on this account.'}</p>
+                        ) : (
+                            <div className="max-h-[28rem] space-y-2 overflow-y-auto pr-1">
+                                {filteredAccount.map((playlist) => {
+                                    const selected = selectedIds.has(playlist.id);
+                                    return (
+                                        <div
+                                            key={playlist.id}
+                                            className={`flex flex-wrap items-center gap-3 rounded-xl border p-3 ${selected ? 'border-plex/50 bg-plex/10' : 'border-white/10 bg-black/25'}`}
+                                        >
+                                            <button type="button" className="shrink-0 text-muted hover:text-plex" onClick={() => toggleSelected(playlist.id)} title={selected ? 'Deselect' : 'Select'}>
+                                                {selected ? <CheckSquare className="h-4 w-4 text-plex" /> : <Square className="h-4 w-4" />}
+                                            </button>
+                                            {playlist.image ? (
+                                                <img src={workerImageUrl(playlist.image)} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
+                                            ) : (
+                                                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-plex/15 text-plex">
+                                                    {playlist.liked ? <Heart className="h-5 w-5" /> : <ListMusic className="h-5 w-5" />}
+                                                </div>
+                                            )}
+                                            <div className="min-w-0 flex-1">
+                                                <p className="truncate text-sm font-semibold text-text">{playlist.title}</p>
+                                                <p className="truncate text-[11px] text-muted">
+                                                    {playlist.owner || 'Spotify'}
+                                                    {playlist.private ? ' · Private' : ''}
+                                                    {playlist.added ? ' · Saved' : ''}
+                                                </p>
+                                            </div>
+                                            <button type="button" className={buttonClass} onClick={() => void runOnPlaylists([playlist], 'add')} disabled={locked || playlist.added}>
+                                                {playlist.added ? 'Saved' : 'Add'}
+                                            </button>
+                                            <button type="button" className={buttonClass} onClick={() => void runOnPlaylists([playlist], 'schedule')} disabled={locked}>
+                                                Schedule
+                                            </button>
+                                            <button type="button" className={primaryButtonClass} onClick={() => void runOnPlaylists([playlist], 'sync')} disabled={locked}>
+                                                Sync to Plex
+                                            </button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                )}
+            </DashboardPanel>
+
             <DashboardPanel title="Add playlist or album" subtitle="Spotify URL, URI, or username:liked for Liked Songs.">
                 <div className="flex flex-col gap-2 sm:flex-row">
                     <input
@@ -401,11 +779,34 @@ const PlaylistsPanel: React.FC = () => {
                 </div>
             </DashboardPanel>
 
-            <DashboardPanel title="Saved items" subtitle={`${items.length} playlist${items.length === 1 ? '' : 's'} and albums`}>
+            <DashboardPanel
+                title="Saved items"
+                subtitle={`${items.length} playlist${items.length === 1 ? '' : 's'} and albums. Automatic sync uses the interval on each item plus Settings → Spotify Sync.`}
+                controls={items.length ? (
+                    <div className="flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            className={buttonClass}
+                            onClick={() => {
+                                const ids = items.map((item) => item.id);
+                                setSavedSelectedIds((prev) => prev.size === ids.length ? new Set() : new Set(ids));
+                            }}
+                        >
+                            {savedSelectedIds.size === items.length ? 'Clear saved' : 'Select all saved'}
+                        </button>
+                        <button type="button" className={buttonClass} onClick={() => void runOnSaved([...savedSelectedIds], 'schedule')} disabled={!savedSelectedIds.size || locked}>
+                            Schedule selected
+                        </button>
+                        <button type="button" className={primaryButtonClass} onClick={() => void runOnSaved([...savedSelectedIds], 'sync')} disabled={!savedSelectedIds.size || locked}>
+                            Sync to Plex
+                        </button>
+                    </div>
+                ) : undefined}
+            >
                 {loading ? (
                     <p className="text-sm text-muted">Loading…</p>
                 ) : items.length === 0 ? (
-                    <p className="text-sm text-muted">Nothing saved yet. Add a Spotify playlist URL above.</p>
+                    <p className="text-sm text-muted">Nothing saved yet. Import from your Spotify account above, or paste a playlist URL.</p>
                 ) : (
                     <div className="space-y-6">
                         {groups.map(([label, groupItems]) => (
@@ -413,7 +814,10 @@ const PlaylistsPanel: React.FC = () => {
                                 <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">{label}</h3>
                                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                                     {groupItems.map((item) => (
-                                        <div key={item.id} className="flex items-center gap-3 rounded-xl border border-white/10 bg-black/25 p-3">
+                                        <div key={item.id} className={`flex flex-wrap items-center gap-3 rounded-xl border p-3 ${savedSelectedIds.has(item.id) ? 'border-plex/50 bg-plex/10' : 'border-white/10 bg-black/25'}`}>
+                                            <button type="button" className="shrink-0 text-muted hover:text-plex" onClick={() => toggleSavedSelected(item.id)}>
+                                                {savedSelectedIds.has(item.id) ? <CheckSquare className="h-4 w-4 text-plex" /> : <Square className="h-4 w-4" />}
+                                            </button>
                                             {item.image ? (
                                                 <img src={workerImageUrl(item.image)} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
                                             ) : (
@@ -429,6 +833,9 @@ const PlaylistsPanel: React.FC = () => {
                                             </div>
                                             <button type="button" className="rounded-lg p-1.5 text-muted hover:text-plex" onClick={() => void inspectItem(item)} title="Preview tracks">
                                                 <Play className="h-3.5 w-3.5" />
+                                            </button>
+                                            <button type="button" className="rounded-lg p-1.5 text-muted hover:text-plex" onClick={() => void runOnSaved([item.id], 'sync')} title="Sync to Plex" disabled={locked}>
+                                                <RefreshCw className="h-3.5 w-3.5" />
                                             </button>
                                             <button type="button" className="rounded-lg p-1.5 text-muted hover:text-plex" onClick={() => setEditing(item)} title="Settings">
                                                 <Pencil className="h-3.5 w-3.5" />
@@ -531,13 +938,16 @@ const SavedItemEditor: React.FC<{
                     Automatic sync
                 </label>
                 {sync ? (
-                    <input
-                        type="number"
-                        min={0}
-                        className="appearance-none text-[16px] leading-5 mt-2 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-[16px]"
-                        value={interval}
-                        onChange={(e) => setIntervalDays(e.target.value)}
-                    />
+                    <>
+                        <input
+                            type="number"
+                            min={0}
+                            className="appearance-none text-[16px] leading-5 mt-2 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-[16px]"
+                            value={interval}
+                            onChange={(e) => setIntervalDays(e.target.value)}
+                        />
+                        <p className="mt-2 text-[11px] text-muted">0 includes this playlist on every scheduled run.</p>
+                    </>
                 ) : null}
                 <div className="mt-5 flex justify-end gap-2">
                     <button type="button" className={buttonClass} onClick={onClose}>Cancel</button>
@@ -594,7 +1004,7 @@ const UsersPanel: React.FC = () => {
     return (
         <DashboardPanel
             title="Spotify accounts"
-            subtitle="Connect accounts used for private playlists and Liked Songs."
+            subtitle="Connect accounts used for private playlists and Liked Songs. After connecting, open Playlists to import them."
             controls={(
                 <a href={portalUrl('/api/spotify-to-plex/spotify-login')} className={primaryButtonClass}>
                     Connect Spotify
@@ -636,8 +1046,9 @@ const SyncPanel: React.FC<{
     status: SyncStatus | null;
     busy: boolean;
     onSync: (type: string) => void;
+    onSyncPlaylistsToPlex: () => void;
     onApplyPlex: () => void;
-}> = ({ status, busy, onSync, onApplyPlex }) => {
+}> = ({ status, busy, onSync, onSyncPlaylistsToPlex, onApplyPlex }) => {
     const [availability, setAvailability] = useState<Record<string, boolean>>({});
 
     useEffect(() => {
@@ -655,18 +1066,18 @@ const SyncPanel: React.FC<{
                     <Settings2 className="h-3.5 w-3.5" /> Apply portal Plex settings
                 </button>
             </DashboardPanel>
-            <DashboardPanel title="Manual sync" subtitle="Same worker jobs as the original app: playlists, albums, users, Lidarr, SLSKD, MQTT.">
+            <DashboardPanel title="Manual sync" subtitle="Playlists matches Spotify tracks against your Plex library and creates or updates the Plex playlist. Other buttons start background worker jobs.">
                 <div className="flex flex-wrap gap-2">
                     {SYNC_TYPES.map((entry) => (
                         <button
                             key={entry.id}
                             type="button"
-                            className={entry.id === 'all' ? primaryButtonClass : buttonClass}
-                            disabled={busy || (entry.id !== 'all' && availability[entry.id] === false)}
-                            onClick={() => onSync(entry.id)}
+                            className={entry.id === 'playlists' || entry.id === 'all' ? primaryButtonClass : buttonClass}
+                            disabled={busy || (entry.id !== 'all' && entry.id !== 'playlists' && availability[entry.id] === false)}
+                            onClick={() => (entry.id === 'playlists' ? onSyncPlaylistsToPlex() : onSync(entry.id))}
                             title={availability[entry.id] === false ? 'Not configured' : undefined}
                         >
-                            {entry.label}
+                            {entry.id === 'playlists' ? 'Playlists to Plex' : entry.label}
                         </button>
                     ))}
                 </div>

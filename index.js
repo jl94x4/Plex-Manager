@@ -151,6 +151,9 @@ import {
     SPOTIFY_TO_PLEX_SYNC_TYPES,
 } from './lib/spotify-to-plex-api.js';
 import {
+    syncSpotifyPlaylistsToPlex,
+} from './lib/spotify-to-plex-playlist-sync.js';
+import {
     applySpotifyToPlexPortalDefaults,
     syncSpotifyToPlexPlexConfigFile,
 } from './lib/spotify-to-plex-portal-defaults.js';
@@ -26130,6 +26133,40 @@ app.post('/api/spotify-to-plex/sync', requireAdmin, requireSpotifyToPlex, async 
         return res.json(data || { ok: true, message: `Sync ${type} started` });
     } catch (e) {
         return res.status(e?.status || 502).json({ error: e.message || 'Failed to start Spotify Sync.' });
+    }
+});
+
+app.post('/api/spotify-to-plex/sync-playlist', requireAdmin, requireSpotifyToPlex, async (req, res) => {
+    try {
+        req.setTimeout?.(15 * 60 * 1000);
+        res.setTimeout?.(15 * 60 * 1000);
+        const config = req.spotifyToPlexConfig || await loadFile(CONFIG_PATH, {});
+        try {
+            await applySpotifyToPlexPortalDefaults(config, spotifyToPlexPortalDefaultsDeps());
+        } catch (error) {
+            log(`[spotify-sync] Plex defaults before playlist sync: ${error?.message || error}`);
+        }
+        const hasIds = Array.isArray(req.body?.ids);
+        const idValue = req.body?.id != null ? String(req.body.id).trim() : '';
+        const ids = hasIds ? req.body.ids : (idValue ? [idValue] : []);
+        const summary = await syncSpotifyPlaylistsToPlex({
+            ids,
+            all: req.body?.all === true || (!hasIds && !idValue),
+            fast: req.body?.fast === true,
+            fetchJson: (opts) => fetchSpotifyToPlexJson({
+                config,
+                fetchWithTimeout,
+                allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS,
+                ...opts,
+            }),
+        });
+        const status = summary.ok || summary.results.some((item) => item?.ok) ? 200 : (summary.results.length ? 502 : 400);
+        return res.status(status).json({
+            ...summary,
+            ...(summary.ok ? {} : { error: summary.message }),
+        });
+    } catch (e) {
+        return res.status(e?.status || 502).json({ error: e.message || 'Failed to sync playlist to Plex.' });
     }
 });
 

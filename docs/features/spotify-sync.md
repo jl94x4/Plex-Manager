@@ -29,9 +29,9 @@ You do **not** need Spotify variables in the host `.env` when using Settings —
 
 Tabs cover the worker feature set:
 
-- **Playlists** — add Spotify URLs/URIs or `username:liked`, categories, auto-sync interval
+- **Playlists** — pull playlists from a connected Spotify account, then add, schedule, or **sync to Plex** (match tracks in your library and create/update the Plex playlist).
 - **Users** — connect Spotify accounts (OAuth via the portal callback)
-- **Sync** — apply portal Plex settings; trigger playlists / albums / users / Lidarr / SLSKD / MQTT
+- **Sync** — **Playlists to Plex** writes saved playlists into Plex. Other buttons start background worker jobs (albums, users, Lidarr, SLSKD, MQTT).
 - **Matching** — match filters, search approaches, text processing
 - **Integrations** — Lidarr, SLSKD, Tidal status and settings
 - **Logs** — sync history and missing-file dumps
@@ -40,7 +40,7 @@ Tabs cover the worker feature set:
 
 - **Plex from portal** — portal Plex URL/token (Settings → Plex) are written into the worker automatically on save, boot, and when you open Spotify Sync.
 - **Apply Plex/Lidarr from portal** — manual re-push (`POST /api/spotify-to-plex/apply-portal-defaults`).
-- **Sync now** — `POST /api/spotify-to-plex/sync` with `type: all`.
+- **Sync playlists to Plex** — `POST /api/spotify-to-plex/sync-playlist` matches Spotify tracks against the Plex library and creates or updates the Plex playlist. Body: `{ id }`, `{ ids: [...] }`, or `{ all: true }`.
 
 ## Home widget
 
