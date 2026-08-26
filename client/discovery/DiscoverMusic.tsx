@@ -385,7 +385,8 @@ export const DiscoverMusic: React.FC<{
                 <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
                 <input
                     ref={inputRef}
-                    type="search"
+                    type="text"
+                    inputMode="search"
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder={t('music.searchPlaceholder')}

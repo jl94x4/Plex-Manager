@@ -392,7 +392,8 @@ export const AchievementsSettings: React.FC<Props> = ({
                                     {t('settings.achievements.badgesInSeason', { count: seasonDraft.badgeIds.length })}
                                 </p>
                                 <input
-                                    type="search"
+                                    type="text"
+                                    inputMode="search"
                                     value={seasonBadgeQuery}
                                     onChange={(e) => setSeasonBadgeQuery(e.target.value)}
                                     placeholder={t('settings.achievements.searchBadgesToInclude')}
@@ -580,7 +581,8 @@ export const AchievementsSettings: React.FC<Props> = ({
                     </div>
                     <div className="flex flex-col sm:flex-row gap-2">
                         <input
-                            type="search"
+                            type="text"
+                            inputMode="search"
                             value={badgeQuery}
                             onChange={(e) => setBadgeQuery(e.target.value)}
                             placeholder={t('settings.achievements.searchBadges')}

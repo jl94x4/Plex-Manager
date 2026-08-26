@@ -11,6 +11,7 @@ export {
     buttonClass,
     cardClass,
     fieldClass,
+    nativeSearchCancelHiddenClass,
     normalizeLibraryDetailLayout,
     posterMediaRadiusClass,
     previewStripClass,

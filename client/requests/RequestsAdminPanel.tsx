@@ -404,7 +404,8 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                     <div className="relative sm:col-span-2 xl:col-span-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
                         <input
-                            type="search"
+                            type="text"
+                            inputMode="search"
                             value={listFilters.search}
                             onChange={(e) => setListFilters((prev) => ({ ...prev, search: e.target.value }))}
                             placeholder={t('requestsAdmin.filters.search')}

@@ -20,6 +20,7 @@ import {
     bulkEntryFromSet,
     cardClass,
     fieldClass,
+    nativeSearchCancelHiddenClass,
     isTitleCardSet,
     listToText,
     sectionBodyClass,
@@ -163,11 +164,13 @@ export const PosterSetsCollectionsView: React.FC = () => {
                     <div className="relative min-w-0">
                         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
                         <input
-                            type="search"
+                            type="text"
+                            inputMode="search"
+                            enterKeyHint="search"
                             value={query}
                             onChange={(event) => setQuery(event.target.value)}
                             placeholder="Filter collections by title or creator…"
-                            className={`${fieldClass} w-full pl-10 ${query.trim() ? 'pr-11' : ''}`}
+                            className={`${fieldClass} ${nativeSearchCancelHiddenClass} w-full pl-10 ${query.trim() ? 'pr-11' : ''}`}
                         />
                         {query.trim() ? (
                             <button

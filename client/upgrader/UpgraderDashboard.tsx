@@ -927,7 +927,8 @@ export const UpgraderDashboard: React.FC = () => {
                                 <div className="relative flex-1 w-full sm:w-auto min-w-[140px]">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
                                     <input
-                                        type="search"
+                                        type="text"
+                                        inputMode="search"
                                         value={searchInput}
                                         onChange={(e) => setSearchInput(e.target.value)}
                                         placeholder="Search titles…"

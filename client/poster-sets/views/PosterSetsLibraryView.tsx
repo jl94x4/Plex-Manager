@@ -52,6 +52,7 @@ import {
     buttonClass,
     cardClass,
     fieldClass,
+    nativeSearchCancelHiddenClass,
     formatSetLabel,
     formatTime,
     isTitleCardRail,
@@ -359,7 +360,9 @@ export const PosterSetsLibraryView: React.FC = () => {
                                 <div className="relative min-w-0">
                                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
                                     <input
-                                        type="search"
+                                        type="text"
+                                        inputMode="search"
+                                        enterKeyHint="search"
                                         value={librarySearchQuery}
                                         onChange={(e) => setLibrarySearchQuery(e.target.value)}
                                         onKeyDown={(e) => {
@@ -367,7 +370,7 @@ export const PosterSetsLibraryView: React.FC = () => {
                                         }}
                                         placeholder={`Search ${status?.mediaServerLabel || 'media server'} for a movie or show…`}
                                         aria-label={`Search ${status?.mediaServerLabel || 'media server'} library`}
-                                        className={`${fieldClass} w-full pl-10 ${librarySearchQuery.trim() ? 'pr-[4.75rem]' : 'pr-11'}`}
+                                        className={`${fieldClass} ${nativeSearchCancelHiddenClass} w-full pl-10 ${librarySearchQuery.trim() ? 'pr-[4.75rem]' : 'pr-11'}`}
                                     />
                                     <div className="absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
                                         {librarySearchQuery.trim() ? (

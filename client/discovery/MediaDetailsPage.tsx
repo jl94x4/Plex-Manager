@@ -585,7 +585,6 @@ export const MediaDetailsPage: React.FC<{
         || requestBlockReason.includes('already available');
     const requestOptionsSaysRequested = requestOptionsStatus === 2
         || requestOptionsStatus === 3
-        || requestBlockReason.includes('already requested')
         || requestBlockReason.includes('pending request');
     const availabilitySaysAvailable = availability?.kind === 'available';
     const notifyCta = requestNotify?.canNotify || requestNotify?.isWatching
