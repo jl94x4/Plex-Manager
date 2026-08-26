@@ -128,7 +128,7 @@ export const HomeCustomModulesSettings: React.FC<Props> = ({
                                 <label className="block text-sm">
                                     <span className="mb-1 block font-semibold text-text">{t('settings.homeModules.titleLabel')}</span>
                                     <input
-                                        className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-text outline-none focus:border-plex"
+                                        className="appearance-none text-[16px] leading-5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[16px] text-text outline-none focus:border-plex"
                                         value={module.title}
                                         onChange={(event) => updateModule(module.id, { title: event.target.value })}
                                         placeholder={t('settings.homeModules.titlePlaceholder')}
@@ -153,7 +153,7 @@ export const HomeCustomModulesSettings: React.FC<Props> = ({
                                 <label className="block text-sm md:col-span-2">
                                     <span className="mb-1 block font-semibold text-text">{t('settings.homeModules.descriptionLabel')}</span>
                                     <input
-                                        className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-text outline-none focus:border-plex"
+                                        className="appearance-none text-[16px] leading-5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[16px] text-text outline-none focus:border-plex"
                                         value={module.description || ''}
                                         onChange={(event) => updateModule(module.id, { description: event.target.value })}
                                         placeholder={t('settings.homeModules.descriptionPlaceholder')}
@@ -163,7 +163,7 @@ export const HomeCustomModulesSettings: React.FC<Props> = ({
                                     <label className="block text-sm md:col-span-2">
                                         <span className="mb-1 block font-semibold text-text">{t('settings.homeModules.url')}</span>
                                         <input
-                                            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-text outline-none focus:border-plex"
+                                            className="appearance-none text-[16px] leading-5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[16px] text-text outline-none focus:border-plex"
                                             value={module.url || ''}
                                             onChange={(event) => updateModule(module.id, { url: event.target.value })}
                                             placeholder="https://sonarr.example.com"
@@ -187,7 +187,7 @@ export const HomeCustomModulesSettings: React.FC<Props> = ({
                                         <label className="block text-sm md:col-span-2">
                                             <span className="mb-1 block font-semibold text-text">{t('settings.homeModules.html')}</span>
                                             <textarea
-                                                className="min-h-[10rem] w-full rounded-xl border border-border bg-background px-3 py-2 font-mono text-xs text-text outline-none focus:border-plex"
+                                                className="appearance-none text-[16px] leading-5 min-h-[10rem] w-full rounded-xl border border-border bg-background px-3 py-2 font-mono text-[16px] text-text outline-none focus:border-plex"
                                                 value={module.html || ''}
                                                 onChange={(event) => updateModule(module.id, { html: event.target.value })}
                                                 placeholder="<div>Your HTML here</div>"
@@ -197,7 +197,7 @@ export const HomeCustomModulesSettings: React.FC<Props> = ({
                                         <label className="block text-sm md:col-span-2">
                                             <span className="mb-1 block font-semibold text-text">{t('settings.homeModules.css')}</span>
                                             <textarea
-                                                className="min-h-[8rem] w-full rounded-xl border border-border bg-background px-3 py-2 font-mono text-xs text-text outline-none focus:border-plex"
+                                                className="appearance-none text-[16px] leading-5 min-h-[8rem] w-full rounded-xl border border-border bg-background px-3 py-2 font-mono text-[16px] text-text outline-none focus:border-plex"
                                                 value={module.css || ''}
                                                 onChange={(event) => updateModule(module.id, { css: event.target.value })}
                                                 placeholder=".home-custom-module-html { ... }"

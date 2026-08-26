@@ -558,15 +558,15 @@ export const LibraryMaintenancePanel: React.FC<{ addToast: (m: string, t?: 'succ
                         </div>
                         <div>
                             <label className="text-xs text-muted font-bold uppercase" title={t('maintenance.labels.graceHint')}>{t('maintenance.labels.graceDays')}</label>
-                            <input type="number" min={0} className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-card text-text" value={selectedRule?.graceDays || 0} onChange={(e) => updateRule(selectedRule.id, { graceDays: Number(e.target.value) })} />
+                            <input type="number" min={0} className="appearance-none text-[16px] leading-5 w-full px-3 py-2 text-[16px] rounded-lg border border-border bg-card text-text" value={selectedRule?.graceDays || 0} onChange={(e) => updateRule(selectedRule.id, { graceDays: Number(e.target.value) })} />
                         </div>
                         <div>
                             <label className="text-xs text-muted font-bold uppercase">{t('maintenance.labels.maxActions')}</label>
-                            <input type="number" min={1} className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-card text-text" value={selectedRule?.settings?.maxActionsPerRun || 25} onChange={(e) => updateRule(selectedRule.id, { settings: { ...(selectedRule.settings || {}), maxActionsPerRun: Number(e.target.value) } })} />
+                            <input type="number" min={1} className="appearance-none text-[16px] leading-5 w-full px-3 py-2 text-[16px] rounded-lg border border-border bg-card text-text" value={selectedRule?.settings?.maxActionsPerRun || 25} onChange={(e) => updateRule(selectedRule.id, { settings: { ...(selectedRule.settings || {}), maxActionsPerRun: Number(e.target.value) } })} />
                         </div>
                         <div>
                             <label className="text-xs text-muted font-bold uppercase">{t('maintenance.labels.collectionName')}</label>
-                            <input type="text" className="w-full px-3 py-2 text-xs rounded-lg border border-border bg-card text-text" value={selectedRule?.collection?.nameTemplate || 'Leaving Soon - {{ruleName}}'} onChange={(e) => updateRule(selectedRule.id, { collection: { ...(selectedRule.collection || {}), nameTemplate: e.target.value } })} />
+                            <input type="text" className="appearance-none text-[16px] leading-5 w-full px-3 py-2 text-[16px] rounded-lg border border-border bg-card text-text" value={selectedRule?.collection?.nameTemplate || 'Leaving Soon - {{ruleName}}'} onChange={(e) => updateRule(selectedRule.id, { collection: { ...(selectedRule.collection || {}), nameTemplate: e.target.value } })} />
                         </div>
                     </div>
 

@@ -11,6 +11,36 @@
 const isIos = () => /iP(ad|hone|od)/.test(navigator.userAgent)
     || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
+/** Match index.html; maximum-scale=1 is appended only on iOS (West Wind). */
+const VIEWPORT_BASE = 'width=device-width, initial-scale=1, viewport-fit=cover';
+const VIEWPORT_NO_AUTOZOOM = `${VIEWPORT_BASE}, maximum-scale=1`;
+
+/**
+ * iOS Safari auto-zooms focused fields under 16px, and often keeps that zoom
+ * after the keyboard closes. Setting maximum-scale=1 from bundled JS at load
+ * is ignored until a user gesture. Lock it on the opening touch/pointer so
+ * Safari re-evaluates before focus. Android is left alone so pinch-zoom stays.
+ * https://weblog.west-wind.com/posts/2023/Apr/17/Preventing-iOS-Textbox-Auto-Zooming-and-ViewPort-Sizing
+ */
+export const installIosTextZoomGuard = () => {
+    if (typeof window === 'undefined' || !isIos()) return;
+    const meta = document.querySelector('meta[name="viewport"]');
+    if (!meta) return;
+
+    const lock = () => {
+        meta.setAttribute('content', VIEWPORT_NO_AUTOZOOM);
+    };
+
+    lock();
+    document.addEventListener('touchstart', lock, { capture: true, passive: true });
+    document.addEventListener('pointerover', (event) => {
+        if (isTextField(event.target)) lock();
+    }, true);
+    document.addEventListener('focusin', (event) => {
+        if (isTextField(event.target)) lock();
+    }, true);
+};
+
 const NON_TEXT_INPUT_TYPES = new Set([
     'button', 'submit', 'reset', 'checkbox', 'radio', 'range',
     'file', 'color', 'hidden', 'image',

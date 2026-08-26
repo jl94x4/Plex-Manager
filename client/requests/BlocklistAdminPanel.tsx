@@ -232,7 +232,7 @@ export const BlocklistAdminPanel: React.FC = () => {
                                 if (e.key === 'Enter') handleSearchAdd();
                             }}
                             placeholder="Search movies or TV shows by title..."
-                            className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex transition-colors"
+                            className="w-full appearance-none pl-10 pr-4 py-2.5 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex transition-colors"
                         />
                     </div>
                     <button

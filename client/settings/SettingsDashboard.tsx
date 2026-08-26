@@ -2607,11 +2607,11 @@ export const SettingsDashboard: React.FC = () => {
                                         <h4 className="font-bold text-text mb-3">{mediaServerLabel} Connection</h4>
                                         <div className="mb-4">
                                             <label htmlFor="jellyfinUrl">{mediaServerLabel} URL</label>
-                                            <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="jellyfinUrl" type="url" value={jellyfinUrl} onChange={(e) => setJellyfinUrl(e.target.value)} placeholder="http://192.168.1.6:8096" />
+                                            <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="jellyfinUrl" type="url" value={jellyfinUrl} onChange={(e) => setJellyfinUrl(e.target.value)} placeholder="http://192.168.1.6:8096" />
                                         </div>
                                         <div className="mb-4">
                                             <label htmlFor="jellyfinApiKey">{mediaServerLabel} API Key</label>
-                                            <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="jellyfinApiKey" type="password" value={jellyfinApiKey} onChange={(e) => setJellyfinApiKey(e.target.value)} placeholder="API key from media server dashboard" />
+                                            <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="jellyfinApiKey" type="password" value={jellyfinApiKey} onChange={(e) => setJellyfinApiKey(e.target.value)} placeholder="API key from media server dashboard" />
                                         </div>
                                         <IntegrationTestButton
                                             type={mediaServerType === 'emby' ? 'emby' : 'jellyfin'}
@@ -2635,7 +2635,7 @@ export const SettingsDashboard: React.FC = () => {
                                     >
                                         Plex Token
                                     </SettingFieldLabel>
-                                    <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="plexToken" type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Enter your X-Plex-Token" />
+                                    <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="plexToken" type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="Enter your X-Plex-Token" />
                                 </div>
                                 <div className="flex flex-wrap items-start gap-3">
                                     <button className="px-4 py-2 bg-border text-text rounded-md font-medium hover:bg-opacity-80 transition-colors flex items-center justify-center gap-2" onClick={handleFetchServers} disabled={!token}>Fetch Servers</button>
@@ -2684,7 +2684,7 @@ export const SettingsDashboard: React.FC = () => {
                                         <span className="text-muted font-normal normal-case">(required in Docker)</span>
                                     </SettingFieldLabel>
                                     <input
-                                        className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all"
+                                        className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all"
                                         id="plexServerUrl"
                                         type="url"
                                         value={plexServerUrl}
@@ -2699,7 +2699,7 @@ export const SettingsDashboard: React.FC = () => {
                                     >
                                         Check Interval (minutes)
                                     </SettingFieldLabel>
-                                    <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="checkInterval" type="number" value={checkInterval} onChange={e => setCheckInterval(Number(e.target.value))} min="1" />
+                                    <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="checkInterval" type="number" value={checkInterval} onChange={e => setCheckInterval(Number(e.target.value))} min="1" />
                                 </div>
 
                                 {libraries.length > 0 && (
@@ -2764,7 +2764,7 @@ export const SettingsDashboard: React.FC = () => {
                                     >
                                         Request URL
                                     </SettingFieldLabel>
-                                    <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="requestUrl" type="text" value={requestUrl} onChange={e => setRequestUrl(e.target.value)} placeholder="https://yourdomain.com" />
+                                    <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="requestUrl" type="text" value={requestUrl} onChange={e => setRequestUrl(e.target.value)} placeholder="https://yourdomain.com" />
                                 </div>
                                 <div className="mb-4" style={{ marginTop: '1rem' }}>
                                     <SettingFieldLabel
@@ -2773,7 +2773,7 @@ export const SettingsDashboard: React.FC = () => {
                                     >
                                         Contact URL / Email
                                     </SettingFieldLabel>
-                                    <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="contactUrl" type="text" value={contactUrl} onChange={e => setContactUrl(e.target.value)} placeholder="mailto:youremail@example.com OR https://wa.me/123456" />
+                                    <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="contactUrl" type="text" value={contactUrl} onChange={e => setContactUrl(e.target.value)} placeholder="mailto:youremail@example.com OR https://wa.me/123456" />
                                 </div>
                             </div>
                         )}
@@ -2785,27 +2785,27 @@ export const SettingsDashboard: React.FC = () => {
                                 <div className="flex flex-col md:flex-row gap-4 mb-4">
                                     <div className="flex-2">
                                         <label htmlFor="smtpHost">SMTP Host</label>
-                                        <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="smtpHost" type="text" value={smtpHost} onChange={e => setSmtpHost(e.target.value)} placeholder="smtp.mailgun.org" />
+                                        <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="smtpHost" type="text" value={smtpHost} onChange={e => setSmtpHost(e.target.value)} placeholder="smtp.mailgun.org" />
                                     </div>
                                     <div className="flex-1">
                                         <label htmlFor="smtpPort">Port</label>
-                                        <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="smtpPort" type="number" value={smtpPort} onChange={e => setSmtpPort(Number(e.target.value))} placeholder="587" />
+                                        <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="smtpPort" type="number" value={smtpPort} onChange={e => setSmtpPort(Number(e.target.value))} placeholder="587" />
                                     </div>
                                 </div>
                                 <div className="flex flex-col md:flex-row gap-4 mb-4">
                                     <div className="flex-1">
                                         <label htmlFor="smtpUser">SMTP Username</label>
-                                        <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="smtpUser" type="text" value={smtpUser} onChange={e => setSmtpUser(e.target.value)} placeholder="postmaster@yourdomain.com" />
+                                        <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="smtpUser" type="text" value={smtpUser} onChange={e => setSmtpUser(e.target.value)} placeholder="postmaster@yourdomain.com" />
                                     </div>
                                     <div className="flex-1">
                                         <label htmlFor="smtpPass">SMTP Password</label>
-                                        <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="smtpPass" type="password" value={smtpPass} onChange={e => setSmtpPass(e.target.value)} placeholder="••••••••••••" />
+                                        <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="smtpPass" type="password" value={smtpPass} onChange={e => setSmtpPass(e.target.value)} placeholder="••••••••••••" />
                                     </div>
                                 </div>
                                 <div className="flex flex-col md:flex-row gap-4 mb-4 md:items-center">
                                     <div className="flex-[2]">
                                         <label htmlFor="smtpFrom">Sender Address (From)</label>
-                                        <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="smtpFrom" type="text" value={smtpFrom} onChange={e => setSmtpFrom(e.target.value)} placeholder="Server Manager Portal <noreply@yourdomain.com>" />
+                                        <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="smtpFrom" type="text" value={smtpFrom} onChange={e => setSmtpFrom(e.target.value)} placeholder="Server Manager Portal <noreply@yourdomain.com>" />
                                     </div>
                                     <div className="flex-1">
                                         <SettingsToggleRow
@@ -2824,7 +2824,7 @@ export const SettingsDashboard: React.FC = () => {
                                     >
                                         Warning Alert Threshold (Days Before Expiry)
                                     </SettingFieldLabel>
-                                    <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="emailDaysBefore" type="number" value={emailDaysBefore} onChange={e => setEmailDaysBefore(Number(e.target.value))} min="0" />
+                                    <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="emailDaysBefore" type="number" value={emailDaysBefore} onChange={e => setEmailDaysBefore(Number(e.target.value))} min="0" />
                                 </div>
 
                                 <div className="mt-6 space-y-3">
@@ -2944,7 +2944,7 @@ export const SettingsDashboard: React.FC = () => {
                                     <div className="flex-[2]">
                                         <label htmlFor="gotifyUrl">Gotify Server URL</label>
                                         <input
-                                            className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all"
+                                            className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all"
                                             id="gotifyUrl"
                                             type="url"
                                             value={gotifyUrl}
@@ -2955,7 +2955,7 @@ export const SettingsDashboard: React.FC = () => {
                                     <div className="flex-1">
                                         <label htmlFor="gotifyPriority">Priority</label>
                                         <input
-                                            className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all"
+                                            className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all"
                                             id="gotifyPriority"
                                             type="number"
                                             min={0}
@@ -2968,7 +2968,7 @@ export const SettingsDashboard: React.FC = () => {
                                 <div className="mb-4">
                                     <label htmlFor="gotifyToken">Application Token</label>
                                     <input
-                                        className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all"
+                                        className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all"
                                         id="gotifyToken"
                                         type="password"
                                         value={gotifyToken}
@@ -3057,7 +3057,7 @@ export const SettingsDashboard: React.FC = () => {
                                                 ]}
                                             />
                                         ) : (
-                                            <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="newsletterDay" type="number" min="1" max="28" value={newsletterDay} onChange={e => setNewsletterDay(Number(e.target.value))} placeholder="Day of the month (1-28)" />
+                                            <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="newsletterDay" type="number" min="1" max="28" value={newsletterDay} onChange={e => setNewsletterDay(Number(e.target.value))} placeholder="Day of the month (1-28)" />
                                         )}
                                     </div>
                                 </>
@@ -3129,7 +3129,7 @@ export const SettingsDashboard: React.FC = () => {
                                         Inactivity Threshold (Days)
                                     </SettingFieldLabel>
                                     <input
-                                        className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all"
+                                        className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all"
                                         id="inactiveCleanupDays"
                                         type="number"
                                         min="1"
@@ -3283,22 +3283,22 @@ export const SettingsDashboard: React.FC = () => {
                                             </div>
                                             <div>
                                                 <label className="text-xs text-muted uppercase tracking-wider font-bold mb-1 block">Display Name</label>
-                                                <input className="w-full p-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-sm" value={client.name} onChange={(e) => setDownloadClients(downloadClients.map((entry) => entry.id === client.id ? { ...entry, name: e.target.value } : entry))} />
+                                                <input className="appearance-none text-[16px] leading-5 w-full p-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-[16px]" value={client.name} onChange={(e) => setDownloadClients(downloadClients.map((entry) => entry.id === client.id ? { ...entry, name: e.target.value } : entry))} />
                                             </div>
                                             <div className="md:col-span-2">
                                                 <label className="text-xs text-muted uppercase tracking-wider font-bold mb-1 block">URL</label>
-                                                <input className="w-full p-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-sm" value={client.url} onChange={(e) => setDownloadClients(downloadClients.map((entry) => entry.id === client.id ? { ...entry, url: e.target.value } : entry))} placeholder={downloadClientUrlPlaceholder(client.type)} />
+                                                <input className="appearance-none text-[16px] leading-5 w-full p-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-[16px]" value={client.url} onChange={(e) => setDownloadClients(downloadClients.map((entry) => entry.id === client.id ? { ...entry, url: e.target.value } : entry))} placeholder={downloadClientUrlPlaceholder(client.type)} />
                                                 {client.type === 'rdtclient' && (
                                                     <p className="text-[11px] text-muted mt-1">RDT-Client emulates the qBittorrent API. Default port is 6500.</p>
                                                 )}
                                             </div>
                                             <div>
                                                 <label className="text-xs text-muted uppercase tracking-wider font-bold mb-1 block">{client.type === 'sabnzbd' ? 'Username (Optional)' : 'Username'}</label>
-                                                <input className="w-full p-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-sm" value={client.username || ''} onChange={(e) => setDownloadClients(downloadClients.map((entry) => entry.id === client.id ? { ...entry, username: e.target.value } : entry))} />
+                                                <input className="appearance-none text-[16px] leading-5 w-full p-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-[16px]" value={client.username || ''} onChange={(e) => setDownloadClients(downloadClients.map((entry) => entry.id === client.id ? { ...entry, username: e.target.value } : entry))} />
                                             </div>
                                             <div>
                                                 <label className="text-xs text-muted uppercase tracking-wider font-bold mb-1 block">{client.type === 'sabnzbd' ? 'API Key' : 'Password'}</label>
-                                                <input className="w-full p-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-sm" type="password" value={client.password || ''} onChange={(e) => setDownloadClients(downloadClients.map((entry) => entry.id === client.id ? { ...entry, password: e.target.value } : entry))} />
+                                                <input className="appearance-none text-[16px] leading-5 w-full p-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-[16px]" type="password" value={client.password || ''} onChange={(e) => setDownloadClients(downloadClients.map((entry) => entry.id === client.id ? { ...entry, password: e.target.value } : entry))} />
                                             </div>
                                             <div className="md:col-span-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                                                 <label className="text-sm text-muted flex items-center gap-2">
@@ -3339,7 +3339,7 @@ export const SettingsDashboard: React.FC = () => {
                                 >
                                     TMDB API Key
                                 </SettingFieldLabel>
-                                <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="tmdbApiKey" type="password" value={tmdbApiKey} onChange={(e) => setTmdbApiKey(e.target.value)} placeholder="Enter TMDB API Key" />
+                                <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="tmdbApiKey" type="password" value={tmdbApiKey} onChange={(e) => setTmdbApiKey(e.target.value)} placeholder="Enter TMDB API Key" />
                             </div>
                             <IntegrationTestButton
                                 type="tmdb"
@@ -3354,11 +3354,11 @@ export const SettingsDashboard: React.FC = () => {
                                 <IntegrationHeading app="tautulli" title="Tautulli Integration" subtitle="Plex activity and analytics" className="mt-8" />
                                 <div className="mb-4">
                                     <label htmlFor="tautulliUrl">Tautulli URL</label>
-                                    <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="tautulliUrl" type="text" value={tautulliUrl} onChange={(e) => setTautulliUrl(e.target.value)} placeholder="http://localhost:8181" />
+                                    <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="tautulliUrl" type="text" value={tautulliUrl} onChange={(e) => setTautulliUrl(e.target.value)} placeholder="http://localhost:8181" />
                                 </div>
                                 <div className="mb-8">
                                     <label htmlFor="tautulliApiKey">Tautulli API Key</label>
-                                    <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="tautulliApiKey" type="password" value={tautulliApiKey} onChange={(e) => setTautulliApiKey(e.target.value)} placeholder="Enter Tautulli API Key" />
+                                    <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="tautulliApiKey" type="password" value={tautulliApiKey} onChange={(e) => setTautulliApiKey(e.target.value)} placeholder="Enter Tautulli API Key" />
                                 </div>
                                 <IntegrationTestButton
                                     type="tautulli"
@@ -3399,11 +3399,11 @@ export const SettingsDashboard: React.FC = () => {
                                             >
                                                 JellyGlance URL
                                             </SettingFieldLabel>
-                                            <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="jellyglanceUrl" type="text" value={jellyglanceUrl} onChange={(e) => setJellyglanceUrl(e.target.value)} placeholder="http://localhost:3000" />
+                                            <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="jellyglanceUrl" type="text" value={jellyglanceUrl} onChange={(e) => setJellyglanceUrl(e.target.value)} placeholder="http://localhost:3000" />
                                         </div>
                                         <div className="mb-8">
                                             <label htmlFor="jellyglanceApiKey">JellyGlance API Key</label>
-                                            <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="jellyglanceApiKey" type="password" value={jellyglanceApiKey} onChange={(e) => setJellyglanceApiKey(e.target.value)} placeholder="API key from JellyGlance Settings" />
+                                            <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="jellyglanceApiKey" type="password" value={jellyglanceApiKey} onChange={(e) => setJellyglanceApiKey(e.target.value)} placeholder="API key from JellyGlance Settings" />
                                         </div>
                                         <IntegrationTestButton
                                             type="jellyglance"
@@ -3422,11 +3422,11 @@ export const SettingsDashboard: React.FC = () => {
                                     >
                                         Jellystat URL
                                     </SettingFieldLabel>
-                                    <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="jellystatUrl" type="text" value={jellystatUrl} onChange={(e) => setJellystatUrl(e.target.value)} placeholder="http://localhost:3000" />
+                                    <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="jellystatUrl" type="text" value={jellystatUrl} onChange={(e) => setJellystatUrl(e.target.value)} placeholder="http://localhost:3000" />
                                 </div>
                                 <div className="mb-8">
                                     <label htmlFor="jellystatApiKey">Jellystat API Key</label>
-                                    <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="jellystatApiKey" type="password" value={jellystatApiKey} onChange={(e) => setJellystatApiKey(e.target.value)} placeholder="API key from Jellystat Settings" />
+                                    <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="jellystatApiKey" type="password" value={jellystatApiKey} onChange={(e) => setJellystatApiKey(e.target.value)} placeholder="API key from Jellystat Settings" />
                                 </div>
                                 <IntegrationTestButton
                                     type="jellystat"
@@ -3476,7 +3476,7 @@ export const SettingsDashboard: React.FC = () => {
                                 >
                                     Seerr URL
                                 </SettingFieldLabel>
-                                <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="requestAppUrl" type="text" value={requestAppUrl} onChange={(e) => setRequestAppUrl(e.target.value)} placeholder="https://requests.yourdomain.com" />
+                                <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="requestAppUrl" type="text" value={requestAppUrl} onChange={(e) => setRequestAppUrl(e.target.value)} placeholder="https://requests.yourdomain.com" />
                             </div>
                             <div className="mb-4">
                                 <SettingFieldLabel
@@ -3489,11 +3489,11 @@ export const SettingsDashboard: React.FC = () => {
                                 >
                                     Internal fetch URL (optional)
                                 </SettingFieldLabel>
-                                <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="requestAppFetchUrl" type="text" value={requestAppFetchUrl} onChange={(e) => setRequestAppFetchUrl(e.target.value)} placeholder="http://jellyseerr:5055" />
+                                <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="requestAppFetchUrl" type="text" value={requestAppFetchUrl} onChange={(e) => setRequestAppFetchUrl(e.target.value)} placeholder="http://jellyseerr:5055" />
                             </div>
                             <div className="mb-8">
                                 <label htmlFor="requestAppApiKey">Seerr API Key</label>
-                                <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="requestAppApiKey" type="password" value={requestAppApiKey} onChange={(e) => setRequestAppApiKey(e.target.value)} placeholder="API key from Seerr / Jellyseerr settings" />
+                                <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="requestAppApiKey" type="password" value={requestAppApiKey} onChange={(e) => setRequestAppApiKey(e.target.value)} placeholder="API key from Seerr / Jellyseerr settings" />
                             </div>
                             <IntegrationTestButton
                                 type="requestApp"
@@ -3655,7 +3655,7 @@ export const SettingsDashboard: React.FC = () => {
                                                     id="tvdbApiKey"
                                                     type="password"
                                                     autoComplete="off"
-                                                    className="flex-1 min-w-[12rem] rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
+                                                    className="appearance-none text-[16px] leading-5 flex-1 min-w-[12rem] rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-[16px]"
                                                     value={tvdbApiKey}
                                                     onChange={(e) => setTvdbApiKey(e.target.value)}
                                                     placeholder={initialSettings.tvdbApiKey ? '•••••••• (unchanged if blank)' : 'Optional'}
@@ -3733,7 +3733,7 @@ export const SettingsDashboard: React.FC = () => {
                                                     id="requestQuotaLimit"
                                                     type="number"
                                                     min={0}
-                                                    className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
+                                                    className="appearance-none text-[16px] leading-5 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-[16px]"
                                                     value={requestQuotaLimit}
                                                     onChange={(e) => setRequestQuotaLimit(Math.max(0, Number(e.target.value) || 0))}
                                                 />
@@ -3743,7 +3743,7 @@ export const SettingsDashboard: React.FC = () => {
                                                 <input
                                                     type="number"
                                                     min={1}
-                                                    className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
+                                                    className="appearance-none text-[16px] leading-5 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-[16px]"
                                                     value={requestQuotaDays}
                                                     onChange={(e) => setRequestQuotaDays(Math.max(1, Number(e.target.value) || 7))}
                                                     aria-label="Quota days"
@@ -3754,7 +3754,7 @@ export const SettingsDashboard: React.FC = () => {
                                                 <input
                                                     type="number"
                                                     min={0}
-                                                    className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
+                                                    className="appearance-none text-[16px] leading-5 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-[16px]"
                                                     value={requestQuotaLimit4k}
                                                     onChange={(e) => setRequestQuotaLimit4k(Math.max(0, Number(e.target.value) || 0))}
                                                     aria-label="4K quota limit"
@@ -3861,7 +3861,7 @@ export const SettingsDashboard: React.FC = () => {
                                                 id="requestAvailableDiscordWebhookUrl"
                                                 type="password"
                                                 autoComplete="off"
-                                                className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
+                                                className="appearance-none text-[16px] leading-5 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-[16px]"
                                                 placeholder="https://discord.com/api/webhooks/..."
                                                 value={requestAvailableDiscordWebhookUrl}
                                                 onChange={(e) => setRequestAvailableDiscordWebhookUrl(e.target.value)}
@@ -4106,7 +4106,7 @@ export const SettingsDashboard: React.FC = () => {
                                 >
                                     WhatsApp Number (Optional)
                                 </SettingFieldLabel>
-                                <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="contactWhatsApp" type="text" value={contactWhatsApp} onChange={(e) => setContactWhatsApp(e.target.value)} placeholder="e.g. 447303647923" />
+                                <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="contactWhatsApp" type="text" value={contactWhatsApp} onChange={(e) => setContactWhatsApp(e.target.value)} placeholder="e.g. 447303647923" />
                             </div>
                             <div id={getSettingsSectionElementId('email')} className="mb-4 scroll-mt-24">
                                 <SettingFieldLabel
@@ -4115,7 +4115,7 @@ export const SettingsDashboard: React.FC = () => {
                                 >
                                     Email Address (Optional)
                                 </SettingFieldLabel>
-                                <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="contactEmail" type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="e.g. admin@example.com" />
+                                <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="contactEmail" type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} placeholder="e.g. admin@example.com" />
                             </div>
                         </div>
                     )}
@@ -4146,7 +4146,7 @@ export const SettingsDashboard: React.FC = () => {
                                                     Public Base URL
                                                 </SettingFieldLabel>
                                                 <input
-                                                    className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all"
+                                                    className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all"
                                                     id="publicDomain"
                                                     type="url"
                                                     value={publicDomain}
@@ -5031,7 +5031,7 @@ export const SettingsDashboard: React.FC = () => {
                                         <input
                                             type="text"
                                             readOnly
-                                            className="w-full p-2 rounded border border-border bg-background/60 text-text text-sm"
+                                            className="appearance-none text-[16px] leading-5 w-full p-2 rounded border border-border bg-background/60 text-text text-[16px]"
                                             value={String(initialSettings.spotifyToPlexCallbackUrl || '')}
                                         />
                                         <p className="text-[11px] text-muted mt-1">Requires Public Base URL in Settings → Portal UI. Saved to <code className="text-xs">config/spotify-to-plex.env</code> when you click Save Settings.</p>

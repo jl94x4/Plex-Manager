@@ -641,7 +641,7 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                                 id="notificationsDiscordWebhookUrl"
                                 type="password"
                                 autoComplete="off"
-                                className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
+                                className="appearance-none text-[16px] leading-5 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-[16px]"
                                 placeholder="https://discord.com/api/webhooks/..."
                                 value={requestAvailableDiscordWebhookUrl}
                                 onChange={(e) => setRequestAvailableDiscordWebhookUrl(e.target.value)}
@@ -755,7 +755,7 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                         <SettingFieldLabel htmlFor="ntfyServerUrl">{t('settings.notifications.ntfy.serverUrl')}</SettingFieldLabel>
                         <input
                             id="ntfyServerUrl"
-                            className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
+                            className="appearance-none text-[16px] leading-5 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-[16px]"
                             placeholder="https://ntfy.sh"
                             value={ntfyServerUrl}
                             onChange={(e) => setNtfyServerUrl(e.target.value)}
@@ -765,7 +765,7 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                         <SettingFieldLabel htmlFor="ntfyTopic">{t('settings.notifications.ntfy.topic')}</SettingFieldLabel>
                         <input
                             id="ntfyTopic"
-                            className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
+                            className="appearance-none text-[16px] leading-5 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-[16px]"
                             placeholder="server-manager-portal"
                             value={ntfyTopic}
                             onChange={(e) => setNtfyTopic(e.target.value)}
@@ -777,7 +777,7 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                             id="ntfyToken"
                             type="password"
                             autoComplete="off"
-                            className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
+                            className="appearance-none text-[16px] leading-5 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-[16px]"
                             value={ntfyToken}
                             onChange={(e) => setNtfyToken(e.target.value)}
                         />
@@ -833,7 +833,7 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                             id="webhookUrl"
                             type="password"
                             autoComplete="off"
-                            className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
+                            className="appearance-none text-[16px] leading-5 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-[16px]"
                             placeholder="https://example.com/hooks/portal"
                             value={webhookUrl}
                             onChange={(e) => setWebhookUrl(e.target.value)}
@@ -843,7 +843,7 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                         <SettingFieldLabel htmlFor="webhookHeadersJson">{t('settings.notifications.webhook.extraHeadersJson')}</SettingFieldLabel>
                         <textarea
                             id="webhookHeadersJson"
-                            className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm min-h-[72px]"
+                            className="appearance-none text-[16px] leading-5 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-[16px] min-h-[72px]"
                             placeholder={'{"Authorization":"Bearer …"}'}
                             value={webhookHeadersJson}
                             onChange={(e) => setWebhookHeadersJson(e.target.value)}
@@ -925,7 +925,7 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                                     type="number"
                                     min={1}
                                     max={28}
-                                    className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
+                                    className="appearance-none text-[16px] leading-5 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-[16px]"
                                     value={summaryNotifyDay}
                                     onChange={(e) => setSummaryNotifyDay(Number(e.target.value) || 1)}
                                 />
@@ -936,7 +936,7 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                             <input
                                 id="summaryNotifyTime"
                                 type="time"
-                                className="w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm"
+                                className="appearance-none text-[16px] leading-5 w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-[16px]"
                                 value={summaryNotifyTime}
                                 onChange={(e) => setSummaryNotifyTime(e.target.value || '23:00')}
                             />

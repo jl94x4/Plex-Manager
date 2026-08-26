@@ -609,17 +609,17 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                     <div>
                         <label>{t('usersAdmin.modal.plexUsername')}</label>
-                        <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" type="text" value={username} disabled />
+                        <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" type="text" value={username} disabled />
                     </div>
                     <div>
                         <label>{t('usersAdmin.modal.joiningDate')}</label>
-                        <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" type="date" value={joiningDate} disabled />
+                        <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" type="date" value={joiningDate} disabled />
                     </div>
                 </div>
                 <div className="mb-4">
                     <label htmlFor="expiryDate">{t('usersAdmin.modal.expiryDate')}</label>
                     <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-end">
-                        <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="expiryDate" type="date" value={expiryDate ?? ''} onChange={(e) => setExpiryDate(e.target.value)} />
+                        <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all" id="expiryDate" type="date" value={expiryDate ?? ''} onChange={(e) => setExpiryDate(e.target.value)} />
                         <div className="grid grid-cols-3 gap-2 md:w-[240px]">
                             <button type="button" className="w-full h-11 px-3 bg-border text-text rounded-md font-medium hover:bg-opacity-80 transition-colors flex items-center justify-center text-sm whitespace-nowrap" onClick={() => handleQuickAction('addMonth')}>{t('usersAdmin.actions.addMonthShort')}</button>
                             <button type="button" className="w-full h-11 px-3 bg-border text-text rounded-md font-medium hover:bg-opacity-80 transition-colors flex items-center justify-center text-sm whitespace-nowrap" onClick={() => handleQuickAction('addYear')}>{t('usersAdmin.actions.addYearShort')}</button>
@@ -709,11 +709,11 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
                                 <div className="grid grid-cols-2 gap-2">
                                     <div>
                                         <label className="text-xs text-muted">{t('usersAdmin.modal.limitUnlimited')}</label>
-                                        <input type="number" min={0} className="w-full p-2 rounded-lg border border-border bg-background text-sm" value={movieQuotaLimit} onChange={(e) => setMovieQuotaLimit(Math.max(0, Number(e.target.value) || 0))} />
+                                        <input type="number" min={0} className="w-full appearance-none p-2 rounded-lg border border-border bg-background text-[16px] leading-5" value={movieQuotaLimit} onChange={(e) => setMovieQuotaLimit(Math.max(0, Number(e.target.value) || 0))} />
                                     </div>
                                     <div>
                                         <label className="text-xs text-muted">{t('usersAdmin.modal.days')}</label>
-                                        <input type="number" min={1} className="w-full p-2 rounded-lg border border-border bg-background text-sm" value={movieQuotaDays} onChange={(e) => setMovieQuotaDays(Math.max(1, Number(e.target.value) || 7))} />
+                                        <input type="number" min={1} className="w-full appearance-none p-2 rounded-lg border border-border bg-background text-[16px] leading-5" value={movieQuotaDays} onChange={(e) => setMovieQuotaDays(Math.max(1, Number(e.target.value) || 7))} />
                                     </div>
                                 </div>
                             )}
@@ -728,11 +728,11 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
                                 <div className="grid grid-cols-2 gap-2">
                                     <div>
                                         <label className="text-xs text-muted">{t('usersAdmin.modal.limitUnlimited')}</label>
-                                        <input type="number" min={0} className="w-full p-2 rounded-lg border border-border bg-background text-sm" value={tvQuotaLimit} onChange={(e) => setTvQuotaLimit(Math.max(0, Number(e.target.value) || 0))} />
+                                        <input type="number" min={0} className="w-full appearance-none p-2 rounded-lg border border-border bg-background text-[16px] leading-5" value={tvQuotaLimit} onChange={(e) => setTvQuotaLimit(Math.max(0, Number(e.target.value) || 0))} />
                                     </div>
                                     <div>
                                         <label className="text-xs text-muted">{t('usersAdmin.modal.days')}</label>
-                                        <input type="number" min={1} className="w-full p-2 rounded-lg border border-border bg-background text-sm" value={tvQuotaDays} onChange={(e) => setTvQuotaDays(Math.max(1, Number(e.target.value) || 7))} />
+                                        <input type="number" min={1} className="w-full appearance-none p-2 rounded-lg border border-border bg-background text-[16px] leading-5" value={tvQuotaDays} onChange={(e) => setTvQuotaDays(Math.max(1, Number(e.target.value) || 7))} />
                                     </div>
                                 </div>
                             )}
@@ -1100,7 +1100,7 @@ const UserAnalyticsModal: React.FC<{ userId: string, username: string, thumb: st
                                         placeholder={t('userAnalytics.history.searchPlaceholder')}
                                         value={historySearch}
                                         onChange={handleSearch}
-                                        className="w-full bg-black/40 border border-border text-white text-sm rounded-lg focus:ring-plex focus:border-plex block pl-10 p-2 transition-colors"
+                                        className="w-full bg-black/40 border border-border text-white appearance-none text-[16px] leading-5 rounded-lg focus:ring-plex focus:border-plex block pl-10 p-2 transition-colors"
                                     />
                                 </div>
                             </div>
@@ -6003,7 +6003,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                                     placeholder={t('usersAdmin.filters.searchPlaceholder')}
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-full rounded-xl border border-white/10 bg-black/20 py-3 pr-10 pl-10 text-sm text-text outline-none transition focus:border-plex/40 focus:ring-1 focus:ring-plex/20"
+                                    className="w-full appearance-none rounded-xl border border-white/10 bg-black/20 py-3 pr-10 pl-10 text-[16px] leading-5 text-text outline-none transition focus:border-plex/40 focus:ring-1 focus:ring-plex/20"
                                 />
                                 {searchQuery && (
                                     <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-text text-xl" onClick={() => setSearchQuery('')}>×</button>
@@ -9997,7 +9997,7 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
                                     value={discoverSearchQuery}
                                     onChange={(e) => setDiscoverSearchQuery(e.target.value)}
                                     placeholder="Search library to check watch history..." 
-                                    className="w-full bg-card border border-border rounded-xl px-4 py-3 text-white focus:border-plex focus:ring-1 focus:ring-plex outline-none transition-all shadow-lg pr-12"
+                                    className="w-full appearance-none bg-card border border-border rounded-xl px-4 py-3 text-[16px] leading-5 text-white focus:border-plex focus:ring-1 focus:ring-plex outline-none transition-all shadow-lg pr-12"
                                 />
                                 {discoverSearchQuery && (
                                     <button 
@@ -11038,7 +11038,7 @@ export const MaintenanceDashboard: React.FC = () => {
                                                         </label>
                                                     </div>
                                                     <input
-                                                        className="mt-2 w-full p-2 rounded border border-border bg-card text-text text-sm"
+                                                        className="appearance-none text-[16px] leading-5 mt-2 w-full p-2 rounded border border-border bg-card text-text text-[16px]"
                                                         value={rule?.collection?.nameTemplate || 'Leaving Soon - {{ruleName}}'}
                                                         onChange={(e) => {
                                                             const next = rules.map((r: any) => r.id === rule.id ? { ...r, collection: { ...(r.collection || {}), nameTemplate: e.target.value } } : r);
@@ -11064,7 +11064,7 @@ export const MaintenanceDashboard: React.FC = () => {
                                             <h3 className="text-xl font-bold text-plex">{t('maintenance.candidates.title')}</h3>
                                             <div className="flex items-center gap-2">
                                                 <input
-                                                    className="p-2 rounded border border-border bg-card text-text text-sm"
+                                                    className="appearance-none text-[16px] leading-5 p-2 rounded border border-border bg-card text-text text-[16px]"
                                                     placeholder={t('maintenance.candidates.searchPlaceholder')}
                                                     value={candidateSearch}
                                                     onChange={(e) => setCandidateSearch(e.target.value)}
@@ -11418,7 +11418,7 @@ export const MaintenanceDashboard: React.FC = () => {
                                             </button>
                                         </div>
                                         <textarea
-                                            className="w-full min-h-[240px] p-3 rounded-lg border border-border bg-card text-text text-xs font-mono"
+                                            className="appearance-none text-[16px] leading-5 w-full min-h-[240px] p-3 rounded-lg border border-border bg-card text-text text-[16px] font-mono"
                                             placeholder={t('maintenance.library.placeholder')}
                                             value={libraryJsonInput}
                                             onChange={(e) => setLibraryJsonInput(e.target.value)}
@@ -11448,7 +11448,7 @@ export const MaintenanceDashboard: React.FC = () => {
                                             </div>
                                             <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2 items-center mt-1">
                                                 <input
-                                                    className="h-9 px-2.5 rounded border border-border bg-card text-text text-xs md:text-sm min-w-0"
+                                                    className="appearance-none text-[16px] leading-5 h-9 px-2.5 rounded border border-border bg-card text-text text-[16px] min-w-0"
                                                     placeholder={t('maintenance.exclusions.searchPlaceholder')}
                                                     value={libraryBrowseSearch}
                                                     onChange={(e) => {
@@ -11651,7 +11651,7 @@ export const MaintenanceDashboard: React.FC = () => {
                                             <div>
                                                 <label className="text-xs text-muted font-bold uppercase">{t('maintenance.exclusions.advancedTitle')}</label>
                                                 <textarea
-                                                    className="w-full min-h-[180px] p-3 rounded-lg border border-border bg-card text-text text-xs"
+                                                    className="appearance-none text-[16px] leading-5 w-full min-h-[180px] p-3 rounded-lg border border-border bg-card text-text text-[16px]"
                                                     value={(preferences?.exclusions?.titles || []).join('\n')}
                                                     onChange={(e) => setPreferences((prev: any) => ({ ...prev, exclusions: { ...(prev.exclusions || {}), titles: e.target.value.split('\n').map(v => v.trim()).filter(Boolean) } }))}
                                                 />
@@ -11659,7 +11659,7 @@ export const MaintenanceDashboard: React.FC = () => {
                                             <div>
                                                 <label className="text-xs text-muted font-bold uppercase">{t('maintenance.exclusions.advancedLibrary')}</label>
                                                 <textarea
-                                                    className="w-full min-h-[180px] p-3 rounded-lg border border-border bg-card text-text text-xs"
+                                                    className="appearance-none text-[16px] leading-5 w-full min-h-[180px] p-3 rounded-lg border border-border bg-card text-text text-[16px]"
                                                     value={(preferences?.exclusions?.libraries || []).join('\n')}
                                                     onChange={(e) => setPreferences((prev: any) => ({ ...prev, exclusions: { ...(prev.exclusions || {}), libraries: e.target.value.split('\n').map(v => v.trim()).filter(Boolean) } }))}
                                                 />
@@ -11667,7 +11667,7 @@ export const MaintenanceDashboard: React.FC = () => {
                                             <div>
                                                 <label className="text-xs text-muted font-bold uppercase">{t('maintenance.exclusions.advancedRating')}</label>
                                                 <textarea
-                                                    className="w-full min-h-[180px] p-3 rounded-lg border border-border bg-card text-text text-xs"
+                                                    className="appearance-none text-[16px] leading-5 w-full min-h-[180px] p-3 rounded-lg border border-border bg-card text-text text-[16px]"
                                                     value={(preferences?.exclusions?.ratingKeys || []).join('\n')}
                                                     onChange={(e) => setPreferences((prev: any) => ({ ...prev, exclusions: { ...(prev.exclusions || {}), ratingKeys: e.target.value.split('\n').map(v => v.trim()).filter(Boolean) } }))}
                                                 />
@@ -11691,7 +11691,7 @@ export const MaintenanceDashboard: React.FC = () => {
                                             </div>
                                             <div className="bg-background/30 border border-white/5 rounded-lg p-3">
                                                 <label className="text-xs text-muted font-bold uppercase block mb-2">{t('maintenance.settings.maxActions')}</label>
-                                                <input type="number" min={1} className="w-full p-2 rounded border border-border bg-card text-text text-sm" value={preferences?.global?.maxActionsPerRun || 25} onChange={(e) => setPreferences((prev: any) => ({ ...prev, global: { ...(prev.global || {}), maxActionsPerRun: Math.max(1, Number(e.target.value) || 1) } }))} />
+                                                <input type="number" min={1} className="appearance-none text-[16px] leading-5 w-full p-2 rounded border border-border bg-card text-text text-[16px]" value={preferences?.global?.maxActionsPerRun || 25} onChange={(e) => setPreferences((prev: any) => ({ ...prev, global: { ...(prev.global || {}), maxActionsPerRun: Math.max(1, Number(e.target.value) || 1) } }))} />
                                             </div>
                                             <div className="bg-background/30 border border-white/5 rounded-lg p-3">
                                                 <label className="text-xs text-muted font-bold uppercase block mb-2">{t('maintenance.settings.requireConfirm')}</label>
@@ -12093,14 +12093,18 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     const navListRef = useRef<HTMLDivElement>(null);
     const navCompressStepRef = useRef(0);
     const navCompressSignatureRef = useRef('');
+    const navMinCompressStepRef = useRef(0);
+    const navTriedExpandRef = useRef(false);
+    const navListBoxRef = useRef({ width: 0, height: 0 });
     const [navCompressStep, setNavCompressStep] = useState(0);
     const [navCompressEpoch, setNavCompressEpoch] = useState(0);
+    const [navListLayoutTick, setNavListLayoutTick] = useState(0);
 
     const desktopNavKeySignature = useMemo(() => (
         normalizedNavOrder.filter((key) => key !== 'logs').join('|')
     ), [normalizedNavOrder]);
 
-    /** Nav link styles — stay readable; only 3 steps. */
+    /** Nav link styles — stay readable; logo steps first, then these three. */
     const DESKTOP_NAV_STYLES = [
         { gap: 'gap-2.5', px: 'px-3', py: 'py-1', text: 'text-[15px]', icon: 'w-5 h-5' },
         { gap: 'gap-2', px: 'px-3', py: 'py-0.5', text: 'text-sm', icon: 'w-[18px] h-[18px]' },
@@ -12149,14 +12153,14 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             sectionBottom: 'pt-1 mt-0.5',
         },
     ];
-    /** 0 = default, then logo shrinks twice before nav text tightens. */
-    const NAV_STYLE_BY_STEP = [0, 0, 1, 2];
-    const IDENTITY_STYLE_BY_STEP = [0, 1, 2, 3];
+    /** Shrink the logo fully before tightening nav labels, so leftover height stays on the items. */
+    const NAV_STYLE_BY_STEP = [0, 0, 0, 0, 1, 2];
+    const IDENTITY_STYLE_BY_STEP = [0, 1, 2, 3, 3, 3];
     const MAX_NAV_COMPRESS_STEP = NAV_STYLE_BY_STEP.length - 1;
 
-    // Climb one density step per committed layout. Measuring in rAF before React
-    // paints the smaller styles always raced to max compression (tiny labels).
-    // Skip re-compress on active-link clicks — only item list / identity / resize.
+    // One density step per committed layout. Measuring in rAF before React paints
+    // the smaller styles raced to max compression (tiny labels + a large gap).
+    // After shrinking, step back up when the larger size actually fits.
     useLayoutEffect(() => {
         const nav = navListRef.current;
         if (!nav) return;
@@ -12164,6 +12168,8 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         const layoutSignature = `${desktopNavKeySignature}|${sidebarIdentityPosition}|${navCompressEpoch}`;
         if (layoutSignature !== navCompressSignatureRef.current) {
             navCompressSignatureRef.current = layoutSignature;
+            navMinCompressStepRef.current = 0;
+            navTriedExpandRef.current = false;
             if (navCompressStep !== 0) {
                 navCompressStepRef.current = 0;
                 setNavCompressStep(0);
@@ -12171,13 +12177,31 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             }
         }
 
+        // Flex child may not have a real height yet; compressing from that always hits max.
+        if (nav.clientHeight < 32) return;
+
         const overflow = nav.scrollHeight - nav.clientHeight;
         if (overflow > 1 && navCompressStep < MAX_NAV_COMPRESS_STEP) {
+            if (navTriedExpandRef.current) {
+                navMinCompressStepRef.current = navCompressStep + 1;
+                navTriedExpandRef.current = false;
+            }
             const next = navCompressStep + 1;
             navCompressStepRef.current = next;
             setNavCompressStep(next);
+            return;
         }
-    }, [desktopNavKeySignature, sidebarIdentityPosition, navCompressEpoch, navCompressStep, MAX_NAV_COMPRESS_STEP]);
+
+        if (overflow <= 1 && navCompressStep > navMinCompressStepRef.current) {
+            navTriedExpandRef.current = true;
+            const next = navCompressStep - 1;
+            navCompressStepRef.current = next;
+            setNavCompressStep(next);
+            return;
+        }
+
+        navTriedExpandRef.current = false;
+    }, [desktopNavKeySignature, sidebarIdentityPosition, navCompressEpoch, navCompressStep, navListLayoutTick, MAX_NAV_COMPRESS_STEP]);
 
     useEffect(() => {
         let timer: ReturnType<typeof setTimeout> | undefined;
@@ -12188,15 +12212,33 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             }, 200);
         };
         window.addEventListener('resize', onResize);
+
+        const nav = navListRef.current;
+        let observer: ResizeObserver | undefined;
+        if (nav && typeof ResizeObserver !== 'undefined') {
+            observer = new ResizeObserver(() => {
+                const width = nav.clientWidth;
+                const height = nav.clientHeight;
+                const prev = navListBoxRef.current;
+                if (Math.abs(width - prev.width) < 2 && Math.abs(height - prev.height) < 2) return;
+                navListBoxRef.current = { width, height };
+                setNavListLayoutTick((tick) => tick + 1);
+            });
+            observer.observe(nav);
+        }
+
         return () => {
             if (timer) clearTimeout(timer);
             window.removeEventListener('resize', onResize);
+            observer?.disconnect();
         };
     }, []);
 
     const compressStep = Math.min(Math.max(navCompressStep, 0), MAX_NAV_COMPRESS_STEP);
-    const desktopNavDensity = DESKTOP_NAV_STYLES[NAV_STYLE_BY_STEP[compressStep]];
-    const identityDensity = IDENTITY_STYLES[IDENTITY_STYLE_BY_STEP[compressStep]];
+    const navStyleIndex = NAV_STYLE_BY_STEP[compressStep];
+    const identityStyleIndex = IDENTITY_STYLE_BY_STEP[compressStep];
+    const desktopNavDensity = DESKTOP_NAV_STYLES[navStyleIndex];
+    const identityDensity = IDENTITY_STYLES[identityStyleIndex];
 
     const NAV_BETA_NOTICE_KEYS: Record<string, string> = {
         'spotify-sync': 'spotifySyncPage.betaNotice',
@@ -12217,11 +12259,11 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         const desktopDensity = options.mobile ? null : desktopNavDensity;
         const baseClass = options.mobile
             ? `relative flex flex-col items-center justify-center gap-0.5 h-full flex-1 min-w-0 px-0.5 text-center text-[0.6rem] sm:text-[0.65rem] transition-colors ${options.isCurrent ? 'text-plex font-bold' : 'text-muted hover:text-text'}`
-            : `flex items-center ${desktopDensity?.gap || 'gap-2.5'} ${desktopDensity?.px || 'px-3'} ${desktopDensity?.py || 'py-1'} no-underline rounded-lg transition-all ${desktopDensity?.text || 'text-[15px]'} font-medium ${options.isCurrent ? 'nav-item-active' : 'text-muted hover:bg-white/5 hover:text-text'}`;
+            : `flex flex-1 w-full max-h-11 items-center ${desktopDensity?.gap || 'gap-2.5'} ${desktopDensity?.px || 'px-3'} ${desktopDensity?.py || 'py-1'} no-underline rounded-lg transition-colors ${desktopDensity?.text || 'text-[15px]'} font-medium ${options.isCurrent ? 'nav-item-active' : 'text-muted hover:bg-white/5 hover:text-text'}`;
 
         if (item.href) {
             return (
-                <a key={key} href={item.href} target="_blank" rel="noreferrer" className={options.mobile ? baseClass.replace('hover:text-text', 'hover:text-text') : `flex items-center ${desktopDensity?.gap || 'gap-2.5'} ${desktopDensity?.px || 'px-3'} ${desktopDensity?.py || 'py-1'} text-muted no-underline rounded-lg transition-all ${desktopDensity?.text || 'text-[15px]'} font-medium hover:bg-white/5 hover:text-text`}>
+                <a key={key} href={item.href} target="_blank" rel="noreferrer" className={options.mobile ? baseClass.replace('hover:text-text', 'hover:text-text') : `flex flex-1 w-full max-h-11 items-center ${desktopDensity?.gap || 'gap-2.5'} ${desktopDensity?.px || 'px-3'} ${desktopDensity?.py || 'py-1'} text-muted no-underline rounded-lg transition-colors ${desktopDensity?.text || 'text-[15px]'} font-medium hover:bg-white/5 hover:text-text`}>
                     <Icon className={`${desktopDensity?.icon || 'w-5 h-5'} flex-shrink-0`} /> {label}
                 </a>
             );
@@ -12426,7 +12468,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
                 <div
                     ref={navListRef}
-                    className={`sidebar-nav-scroll flex flex-col justify-start min-h-0 flex-1 ${compressStep > 1 ? 'gap-0' : 'gap-0.5'} py-0.5`}
+                    className={`sidebar-nav-scroll flex flex-col justify-start min-h-0 flex-1 ${navStyleIndex > 0 ? 'gap-0' : 'gap-0.5'} py-0.5`}
                     data-nav-density={compressStep}
                 >
                     {normalizedNavOrder.map((key) => {
@@ -12443,7 +12485,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
                 {sidebarIdentityPosition !== 'top' && renderServerIdentity('bottom')}
 
-                <div className={`${compressStep >= 3 ? 'mt-1 pt-1' : 'mt-2 pt-2'} border-t border-white/10 shrink-0 w-full min-w-0`}>
+                <div className={`${identityStyleIndex >= 3 ? 'mt-1 pt-1' : 'mt-2 pt-2'} border-t border-white/10 shrink-0 w-full min-w-0`}>
                     <div className="grid grid-cols-[minmax(0,1fr)_2.75rem] gap-1.5 items-stretch w-full min-w-0">
                         <div
                             className={`min-w-0 flex items-center gap-0.5 rounded-xl border bg-white/5 hover:border-plex/40 transition-all overflow-hidden ${currentRoute === 'profile' ? 'border-plex/50 bg-plex/10' : 'border-white/10'}`}

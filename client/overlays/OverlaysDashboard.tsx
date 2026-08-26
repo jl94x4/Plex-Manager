@@ -108,7 +108,7 @@ const overlayResetKindForShow = (row: any) => (
 const buttonClass = 'inline-flex items-center gap-2 rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm font-semibold text-text hover:bg-white/10 disabled:opacity-50';
 const primaryButtonClass = 'inline-flex items-center gap-2 rounded-md bg-plex px-3 py-2 text-sm font-bold text-background hover:bg-plex-hover disabled:opacity-50';
 const ghostButtonClass = 'inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-semibold text-muted hover:bg-white/5 hover:text-text disabled:opacity-50';
-const fieldInputClass = 'mt-1.5 w-full rounded-lg border border-border bg-background p-3 text-sm text-text outline-none transition-all focus:border-plex focus:ring-1 focus:ring-plex';
+const fieldInputClass = 'mt-1.5 w-full appearance-none rounded-lg border border-border bg-background p-3 text-[16px] leading-5 text-text outline-none transition-all focus:border-plex focus:ring-1 focus:ring-plex';
 const fieldLabelClass = 'text-[10px] font-bold uppercase tracking-[0.14em] text-muted';
 
 const DEFAULT_MEDIA_INFO_PARTS = {
@@ -2991,7 +2991,7 @@ export const OverlaysDashboard: React.FC = () => {
                                         <label className="block">
                                             <span className={fieldLabelClass}>{t('overlays.settings.allowKeys')}</span>
                                             <textarea
-                                                className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                                className={`appearance-none text-[16px] leading-5 ${fieldInputClass} min-h-[72px] font-mono text-[16px]`}
                                                 placeholder={t('overlays.settings.allowKeysPlaceholder')}
                                                 value={keysToText(configDraft.mediaInfoAllowKeys)}
                                                 onChange={(e) => setConfigDraft((prev) => ({
@@ -3003,7 +3003,7 @@ export const OverlaysDashboard: React.FC = () => {
                                         <label className="block">
                                             <span className={fieldLabelClass}>{t('overlays.settings.denyKeys')}</span>
                                             <textarea
-                                                className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                                className={`appearance-none text-[16px] leading-5 ${fieldInputClass} min-h-[72px] font-mono text-[16px]`}
                                                 placeholder={t('overlays.settings.denyKeysPlaceholder')}
                                                 value={keysToText(configDraft.mediaInfoDenyKeys)}
                                                 onChange={(e) => setConfigDraft((prev) => ({
@@ -3095,7 +3095,7 @@ export const OverlaysDashboard: React.FC = () => {
                                         <label className="block">
                                             <span className={fieldLabelClass}>{t('overlays.settings.allowKeys')}</span>
                                             <textarea
-                                                className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                                className={`appearance-none text-[16px] leading-5 ${fieldInputClass} min-h-[72px] font-mono text-[16px]`}
                                                 placeholder={t('overlays.settings.allowKeysPlaceholder')}
                                                 value={keysToText(configDraft.statusAllowKeys)}
                                                 onChange={(e) => setConfigDraft((prev) => ({
@@ -3107,7 +3107,7 @@ export const OverlaysDashboard: React.FC = () => {
                                         <label className="block">
                                             <span className={fieldLabelClass}>{t('overlays.settings.denyKeys')}</span>
                                             <textarea
-                                                className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                                className={`appearance-none text-[16px] leading-5 ${fieldInputClass} min-h-[72px] font-mono text-[16px]`}
                                                 placeholder={t('overlays.settings.denyKeysPlaceholder')}
                                                 value={keysToText(configDraft.statusDenyKeys)}
                                                 onChange={(e) => setConfigDraft((prev) => ({
@@ -3130,7 +3130,7 @@ export const OverlaysDashboard: React.FC = () => {
                                     <label className="block">
                                         <span className={fieldLabelClass}>{t('overlays.settings.allowKeys')}</span>
                                         <textarea
-                                            className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                            className={`appearance-none text-[16px] leading-5 ${fieldInputClass} min-h-[72px] font-mono text-[16px]`}
                                             placeholder={t('overlays.settings.allowKeysPlaceholder')}
                                             value={keysToText(configDraft.networkAllowKeys)}
                                             onChange={(e) => setConfigDraft((prev) => ({
@@ -3142,7 +3142,7 @@ export const OverlaysDashboard: React.FC = () => {
                                     <label className="block">
                                         <span className={fieldLabelClass}>{t('overlays.settings.denyKeys')}</span>
                                         <textarea
-                                            className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                            className={`appearance-none text-[16px] leading-5 ${fieldInputClass} min-h-[72px] font-mono text-[16px]`}
                                             placeholder={t('overlays.settings.denyKeysPlaceholder')}
                                             value={keysToText(configDraft.networkDenyKeys)}
                                             onChange={(e) => setConfigDraft((prev) => ({
@@ -3190,7 +3190,7 @@ export const OverlaysDashboard: React.FC = () => {
                                         <label className="block">
                                             <span className={fieldLabelClass}>{t('overlays.settings.allowKeys')}</span>
                                             <textarea
-                                                className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                                className={`appearance-none text-[16px] leading-5 ${fieldInputClass} min-h-[72px] font-mono text-[16px]`}
                                                 placeholder={t('overlays.settings.allowKeysPlaceholder')}
                                                 value={keysToText(configDraft.streamingAllowKeys)}
                                                 onChange={(e) => setConfigDraft((prev) => ({
@@ -3202,7 +3202,7 @@ export const OverlaysDashboard: React.FC = () => {
                                         <label className="block">
                                             <span className={fieldLabelClass}>{t('overlays.settings.denyKeys')}</span>
                                             <textarea
-                                                className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                                className={`appearance-none text-[16px] leading-5 ${fieldInputClass} min-h-[72px] font-mono text-[16px]`}
                                                 placeholder={t('overlays.settings.denyKeysPlaceholder')}
                                                 value={keysToText(configDraft.streamingDenyKeys)}
                                                 onChange={(e) => setConfigDraft((prev) => ({
@@ -3285,7 +3285,7 @@ export const OverlaysDashboard: React.FC = () => {
                                         <label className="block">
                                             <span className={fieldLabelClass}>{t('overlays.settings.allowKeys')}</span>
                                             <textarea
-                                                className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                                className={`appearance-none text-[16px] leading-5 ${fieldInputClass} min-h-[72px] font-mono text-[16px]`}
                                                 placeholder={t('overlays.settings.allowKeysPlaceholder')}
                                                 value={keysToText(configDraft.ratingsAllowKeys)}
                                                 onChange={(e) => setConfigDraft((prev) => ({
@@ -3297,7 +3297,7 @@ export const OverlaysDashboard: React.FC = () => {
                                         <label className="block">
                                             <span className={fieldLabelClass}>{t('overlays.settings.denyKeys')}</span>
                                             <textarea
-                                                className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                                className={`appearance-none text-[16px] leading-5 ${fieldInputClass} min-h-[72px] font-mono text-[16px]`}
                                                 placeholder={t('overlays.settings.denyKeysPlaceholder')}
                                                 value={keysToText(configDraft.ratingsDenyKeys)}
                                                 onChange={(e) => setConfigDraft((prev) => ({
@@ -3378,7 +3378,7 @@ export const OverlaysDashboard: React.FC = () => {
                                         <label className="block">
                                             <span className={fieldLabelClass}>{t('overlays.settings.allowKeys')}</span>
                                             <textarea
-                                                className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                                className={`appearance-none text-[16px] leading-5 ${fieldInputClass} min-h-[72px] font-mono text-[16px]`}
                                                 placeholder={t('overlays.settings.allowKeysPlaceholder')}
                                                 value={keysToText(configDraft.ribbonAllowKeys)}
                                                 onChange={(e) => setConfigDraft((prev) => ({
@@ -3390,7 +3390,7 @@ export const OverlaysDashboard: React.FC = () => {
                                         <label className="block">
                                             <span className={fieldLabelClass}>{t('overlays.settings.denyKeys')}</span>
                                             <textarea
-                                                className={`${fieldInputClass} min-h-[72px] font-mono text-xs`}
+                                                className={`appearance-none text-[16px] leading-5 ${fieldInputClass} min-h-[72px] font-mono text-[16px]`}
                                                 placeholder={t('overlays.settings.denyKeysPlaceholder')}
                                                 value={keysToText(configDraft.ribbonDenyKeys)}
                                                 onChange={(e) => setConfigDraft((prev) => ({
@@ -3468,7 +3468,7 @@ export const OverlaysDashboard: React.FC = () => {
                                     <label className="block">
                                         <span className={fieldLabelClass}>{t('overlays.settings.languagesAllowCodes')}</span>
                                         <textarea
-                                            className={`${fieldInputClass} min-h-[56px] font-mono text-xs`}
+                                            className={`appearance-none text-[16px] leading-5 ${fieldInputClass} min-h-[56px] font-mono text-[16px]`}
                                             placeholder={t('overlays.settings.languagesAllowCodesPlaceholder')}
                                             value={keysToText(configDraft.languagesAllowCodes)}
                                             onChange={(e) => setConfigDraft((prev) => ({
@@ -3833,7 +3833,7 @@ export const OverlaysDashboard: React.FC = () => {
                                     {t('overlays.import.bodyBeforeLog')} <code>overlaid_log.json</code> {t('overlays.import.bodyAfterLog')}
                                 </p>
                                 <textarea
-                                    className="mt-3 min-h-[220px] w-full rounded-lg border border-border bg-background p-3 font-mono text-xs text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex"
+                                    className="appearance-none text-[16px] leading-5 mt-3 min-h-[220px] w-full rounded-lg border border-border bg-background p-3 font-mono text-[16px] text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex"
                                     placeholder='{"12345":{"title":"Example Show","timestamp":"2025-01-15T14:30:00","preview_only":false}}'
                                     value={importText}
                                     onChange={(e) => setImportText(e.target.value)}

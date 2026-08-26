@@ -18,7 +18,7 @@ import { AppConfig } from '../types';
 import { DEFAULT_CONFIG } from '../constants';
 
 const inputClass =
-    'w-full px-4 py-3 rounded-xl border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all';
+    'w-full appearance-none px-4 py-3 rounded-xl border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all';
 
 const Onboarding: React.FC = () => {
     const navigate = useNavigate();

@@ -439,7 +439,7 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             placeholder={t('support.labels.searchPlaceholder')}
-                            className="w-full rounded-xl border border-white/10 bg-black/30 py-2 pl-9 pr-3 text-sm text-text outline-none focus:border-plex/50"
+                            className="w-full rounded-xl border border-white/10 bg-black/30 py-2 pl-9 pr-3 appearance-none text-[16px] leading-5 text-text outline-none focus:border-plex/50"
                         />
                     </label>
                 </div>

@@ -450,7 +450,7 @@ export const EditionsDashboard: React.FC = () => {
                     )}
                     <label className="block text-xs font-bold text-muted mb-1">Excluded languages (comma-separated)</label>
                     <input
-                        className="w-full p-2.5 rounded-lg border border-border bg-background text-sm mb-3"
+                        className="appearance-none text-[16px] leading-5 w-full p-2.5 rounded-lg border border-border bg-background text-[16px] mb-3"
                         value={config.language.excludedLanguages.join(', ')}
                         onChange={(e) => setConfig((prev) => ({
                             ...prev,
@@ -500,7 +500,7 @@ export const EditionsDashboard: React.FC = () => {
                     </div>
                     <label className="block text-xs font-bold text-muted mb-1">TMDb API key (IMDb source)</label>
                     <input
-                        className="w-full p-2.5 rounded-lg border border-border bg-background text-sm mb-3"
+                        className="appearance-none text-[16px] leading-5 w-full p-2.5 rounded-lg border border-border bg-background text-[16px] mb-3"
                         type="password"
                         value={config.rating.tmdbApiKey}
                         onChange={(e) => setConfig((prev) => ({ ...prev, rating: { ...prev.rating, tmdbApiKey: e.target.value } }))}
@@ -517,7 +517,7 @@ export const EditionsDashboard: React.FC = () => {
                                 <input
                                     type="number"
                                     min={1}
-                                    className="w-full p-2 rounded-lg border border-border bg-background text-sm"
+                                    className="appearance-none text-[16px] leading-5 w-full p-2 rounded-lg border border-border bg-background text-[16px]"
                                     value={config.performance[key]}
                                     onChange={(e) => setConfig((prev) => ({
                                         ...prev,

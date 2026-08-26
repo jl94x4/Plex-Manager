@@ -27,7 +27,7 @@ type Props = {
     onConfigChange: (config: MediaAutomationSettingsConfig) => void;
 };
 
-const fieldClass = 'w-full rounded-lg border border-border bg-background px-3 py-2.5 text-sm text-text outline-none transition focus:border-plex focus:ring-1 focus:ring-plex';
+const fieldClass = 'w-full appearance-none rounded-lg border border-border bg-background px-3 py-2.5 text-[16px] leading-5 text-text outline-none transition focus:border-plex focus:ring-1 focus:ring-plex';
 const stepperBtnClass = 'inline-flex h-[42px] w-11 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-text transition hover:border-plex/50 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40';
 
 /** Mobile-friendly concurrency field: +/- steppers + draft text so clearing does not force 0 → 02. */
@@ -288,7 +288,7 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                 <label className="block space-y-2 text-sm font-semibold text-text">
                     Path deny list
                     <textarea
-                        className={`${fieldClass} min-h-28 font-mono text-xs`}
+                        className={`appearance-none text-[16px] leading-5 ${fieldClass} min-h-28 font-mono text-[16px]`}
                         value={(config.pathDenyList || []).join('\n')}
                         placeholder={'/media/keep\n**/sample*'}
                         onChange={(event) => update({
@@ -1009,7 +1009,7 @@ export const MediaAutomationSettings: React.FC<Props> = ({
                     Pipeline <span className="font-semibold text-text">custom-command</span> steps may only run these executable basenames or absolute paths. No shell is used.
                 </p>
                 <textarea
-                    className={`${fieldClass} min-h-28 font-mono text-xs`}
+                    className={`appearance-none text-[16px] leading-5 ${fieldClass} min-h-28 font-mono text-[16px]`}
                     value={(config.customCommandAllowlist || []).join('\n')}
                     placeholder={'ffmpeg\nffprobe'}
                     onChange={(event) => update({

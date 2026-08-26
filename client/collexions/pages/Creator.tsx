@@ -1855,7 +1855,7 @@ const Creator: React.FC = () => {
                             <div className="flex gap-2">
                                 <div className="relative flex-1">
                                     <Search className="absolute left-3 top-2.5 w-4 h-4 text-muted" />
-                                    <input className="w-full bg-background/60 border border-border rounded-lg pl-10 pr-4 py-2 text-sm text-text focus:outline-none focus:border-plex/50" placeholder="Search TMDb..." value={externalQuery} onChange={(e) => setExternalQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleExternalSearch()} />
+                                    <input className="appearance-none text-[16px] leading-5 w-full bg-background/60 border border-border rounded-lg pl-10 pr-4 py-2 text-[16px] text-text focus:outline-none focus:border-plex/50" placeholder="Search TMDb..." value={externalQuery} onChange={(e) => setExternalQuery(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleExternalSearch()} />
                                 </div>
                                 <button onClick={handleExternalSearch} disabled={searchingExternal || !externalQuery} className="bg-card hover:bg-white/10 text-text px-6 py-2 rounded-lg border border-border disabled:opacity-50">Search</button>
                             </div>
@@ -1888,7 +1888,7 @@ const Creator: React.FC = () => {
                                     <div className="relative flex-1">
                                         <Search className="absolute left-3 top-2.5 w-4 h-4 text-muted" />
                                         <input
-                                            className="w-full bg-background/60 border border-border rounded-lg pl-10 pr-4 py-2 text-sm text-text focus:outline-none focus:border-plex/50"
+                                            className="appearance-none text-[16px] leading-5 w-full bg-background/60 border border-border rounded-lg pl-10 pr-4 py-2 text-[16px] text-text focus:outline-none focus:border-plex/50"
                                             placeholder="Search Trakt lists…"
                                             value={traktListQuery}
                                             onChange={(e) => setTraktListQuery(e.target.value)}
@@ -1963,7 +1963,7 @@ const Creator: React.FC = () => {
                             <div className="flex gap-2">
                                 <div className="relative flex-1">
                                     <ExternalLink className="absolute left-3 top-2.5 w-4 h-4 text-muted" />
-                                    <input className="w-full bg-background/60 border border-border rounded-lg pl-10 pr-4 py-2 text-sm text-text focus:outline-none focus:border-plex/50" placeholder="Trakt or MDBList URL..." value={importUrl} onChange={(e) => setImportUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleListImport()} />
+                                    <input className="appearance-none text-[16px] leading-5 w-full bg-background/60 border border-border rounded-lg pl-10 pr-4 py-2 text-[16px] text-text focus:outline-none focus:border-plex/50" placeholder="Trakt or MDBList URL..." value={importUrl} onChange={(e) => setImportUrl(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleListImport()} />
                                 </div>
                                 <button onClick={handleListImport} disabled={importing || !importUrl} className="bg-plex hover:bg-plex-hover text-text px-6 py-2 rounded-lg font-bold disabled:opacity-50">Fetch</button>
                             </div>
@@ -2049,7 +2049,7 @@ const Creator: React.FC = () => {
                                     <div className="relative flex-1">
                                         <Search className="absolute left-3 top-2.5 w-4 h-4 text-muted" />
                                         <input
-                                            className="w-full bg-background/60 border border-border rounded-lg pl-10 pr-4 py-2 text-sm text-text focus:outline-none focus:border-plex/50"
+                                            className="appearance-none text-[16px] leading-5 w-full bg-background/60 border border-border rounded-lg pl-10 pr-4 py-2 text-[16px] text-text focus:outline-none focus:border-plex/50"
                                             placeholder="Search title..."
                                             value={localSearchQuery}
                                             onChange={(e) => setLocalSearchQuery(e.target.value)}
@@ -2071,7 +2071,7 @@ const Creator: React.FC = () => {
                                         <input
                                             type="number"
                                             placeholder="e.g. 2024"
-                                            className="w-full bg-background/60 border border-border rounded-lg px-4 py-2 text-sm text-text focus:outline-none focus:border-plex/50"
+                                            className="appearance-none text-[16px] leading-5 w-full bg-background/60 border border-border rounded-lg px-4 py-2 text-[16px] text-text focus:outline-none focus:border-plex/50"
                                             value={localSearchYear}
                                             onChange={(e) => setLocalSearchYear(e.target.value)}
                                         />
@@ -2080,7 +2080,7 @@ const Creator: React.FC = () => {
                                         <label className="text-xs text-muted font-medium ml-1">Genre</label>
                                         <input
                                             placeholder="e.g. Action"
-                                            className="w-full bg-background/60 border border-border rounded-lg px-4 py-2 text-sm text-text focus:outline-none focus:border-plex/50"
+                                            className="appearance-none text-[16px] leading-5 w-full bg-background/60 border border-border rounded-lg px-4 py-2 text-[16px] text-text focus:outline-none focus:border-plex/50"
                                             value={localSearchGenre}
                                             onChange={(e) => setLocalSearchGenre(e.target.value)}
                                         />
@@ -2217,7 +2217,7 @@ const Creator: React.FC = () => {
                             </div>
                         </div>
                         <div className="flex gap-2 w-full sm:w-auto">
-                            <input className="flex-1 sm:w-48 bg-background/60 border border-border rounded-lg px-3 py-2 text-sm text-text focus:outline-none focus:border-plex/50" placeholder="Collection Title..." value={collectionTitle} onChange={(e) => setCollectionTitle(e.target.value)} />
+                            <input className="appearance-none text-[16px] leading-5 flex-1 sm:w-48 bg-background/60 border border-border rounded-lg px-3 py-2 text-[16px] text-text focus:outline-none focus:border-plex/50" placeholder="Collection Title..." value={collectionTitle} onChange={(e) => setCollectionTitle(e.target.value)} />
                             <div className="flex gap-2">
                                 <button onClick={handleCreate} disabled={creating || !collectionTitle || !targetLibrary} className="bg-plex hover:bg-plex-hover text-text px-6 py-2 rounded-lg font-bold disabled:opacity-50 flex items-center gap-2">
                                     {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}

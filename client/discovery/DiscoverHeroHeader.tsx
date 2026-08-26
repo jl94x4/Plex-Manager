@@ -234,6 +234,12 @@ export const DiscoverHeroHeader: React.FC<SearchResultProps> = (props) => {
                         <input
                             ref={setInputRef}
                             type="text"
+                            inputMode="search"
+                            enterKeyHint="search"
+                            autoComplete="off"
+                            autoCorrect="off"
+                            autoCapitalize="none"
+                            spellCheck={false}
                             placeholder={t('hero.searchPlaceholder')}
                             value={query}
                             onChange={(e) => onQueryChange(e.target.value)}

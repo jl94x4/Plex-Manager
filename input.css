@@ -701,7 +701,7 @@ html[data-theme="light"] .media-details-hero-scrim-left {
 
   /* —— Forms —— */
   .input-premium {
-    @apply w-full px-4 py-3.5 rounded-xl bg-background/70 border border-white/10 text-text;
+    @apply w-full appearance-none px-4 py-3.5 rounded-xl bg-background/70 border border-white/10 text-[16px] leading-5 text-text;
     @apply placeholder:text-muted/40 focus:border-plex/50 focus:ring-2 focus:ring-plex/15 outline-none transition-all;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   }
@@ -948,7 +948,7 @@ html[data-theme="light"] .media-details-hero-scrim-left {
 
   /* —— Forms —— */
   .input-premium {
-    @apply w-full px-4 py-3.5 rounded-xl bg-background/70 border border-white/10 text-text;
+    @apply w-full appearance-none px-4 py-3.5 rounded-xl bg-background/70 border border-white/10 text-[16px] leading-5 text-text;
     @apply placeholder:text-muted/40 focus:border-plex/50 focus:ring-2 focus:ring-plex/15 outline-none transition-all;
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
   }
@@ -1443,7 +1443,15 @@ textarea {
   line-height: 1.25 !important;
 }
 
-input[type="search"] {
+input:not([type]),
+input[type="text"],
+input[type="search"],
+input[type="email"],
+input[type="password"],
+input[type="url"],
+input[type="tel"],
+input[type="number"],
+textarea {
   -webkit-appearance: none;
   appearance: none;
 }

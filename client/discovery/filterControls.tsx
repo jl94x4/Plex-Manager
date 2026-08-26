@@ -8,7 +8,7 @@ import { useDiscoverI18n } from './i18n';
 export type FilterOption = { id: string; label: string };
 
 const inputClass =
-    'w-full bg-background/60 border border-border focus:border-plex rounded-xl px-4 py-3 text-sm text-text font-medium outline-none transition-colors shadow-inner';
+    'w-full appearance-none bg-background/60 border border-border focus:border-plex rounded-xl px-4 py-3 text-[16px] leading-5 text-text font-medium outline-none transition-colors shadow-inner';
 
 const chipClass =
     'inline-flex items-center gap-1.5 max-w-full rounded-lg border border-plex/30 bg-plex/10 text-plex text-xs font-bold px-2.5 py-1';

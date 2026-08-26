@@ -87,7 +87,7 @@ export const BroadcastSettingsTab: React.FC<{ selectedUserIds: string[]; users: 
 
             <div>
                 <label className="block mb-2 font-bold text-text">Subject</label>
-                <input className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all"
+                <input className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all"
                     type="text"
                     value={subject}
                     onChange={e => setSubject(e.target.value)}

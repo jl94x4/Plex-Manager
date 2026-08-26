@@ -3,7 +3,7 @@ import { Loader2, Plus, Trash2, User } from 'lucide-react';
 import type { PosterSetsConfig } from './types';
 
 const primaryButtonClass = 'inline-flex items-center justify-center gap-1.5 rounded-xl bg-plex px-2.5 py-1.5 text-xs font-bold text-background transition hover:bg-plex-hover active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40 sm:gap-2 sm:px-3 sm:py-2 sm:text-sm';
-const fieldClass = 'w-full rounded-lg border border-white/10 bg-background/70 px-3 py-2 text-xs text-text placeholder:text-muted/60 outline-none transition focus:border-plex focus:ring-1 focus:ring-plex sm:py-2.5 sm:text-sm';
+const fieldClass = 'w-full appearance-none rounded-lg border border-white/10 bg-background/70 px-3 py-2 text-[16px] leading-5 text-text placeholder:text-muted/60 outline-none transition focus:border-plex focus:ring-1 focus:ring-plex sm:py-2.5';
 
 const normalizeHandle = (value: string) => String(value || '').trim().replace(/^@+/, '');
 

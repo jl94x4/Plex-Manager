@@ -390,7 +390,7 @@ export const DiscoverMusic: React.FC<{
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     placeholder={t('music.searchPlaceholder')}
-                    className="w-full pl-11 pr-4 py-3 rounded-xl border border-border bg-white/5 text-base focus:outline-none focus:ring-2 focus:ring-plex/40"
+                    className="w-full appearance-none pl-11 pr-4 py-3 rounded-xl border border-border bg-white/5 text-[16px] leading-5 focus:outline-none focus:ring-2 focus:ring-plex/40"
                 />
             </div>
 

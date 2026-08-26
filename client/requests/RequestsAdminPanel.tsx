@@ -409,7 +409,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                             value={listFilters.search}
                             onChange={(e) => setListFilters((prev) => ({ ...prev, search: e.target.value }))}
                             placeholder={t('requestsAdmin.filters.search')}
-                            className="w-full pl-10 pr-3 py-2 rounded-lg border border-border bg-background text-text text-sm outline-none focus:border-plex transition-colors"
+                            className="w-full pl-10 pr-3 py-2 rounded-lg border border-border bg-background text-text appearance-none text-[16px] leading-5 outline-none focus:border-plex transition-colors"
                         />
                     </div>
                     <CustomSelect

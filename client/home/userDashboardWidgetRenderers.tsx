@@ -510,7 +510,7 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                         </p>
                         <p className="text-muted text-sm leading-relaxed mb-4">{t('homeDashboard.inviteFriendsHint')}</p>
                         <div className="flex flex-col gap-2">
-                            <input type="text" readOnly value={referralUrl} className="w-full p-3 rounded-lg border border-border bg-background text-text text-sm outline-none" />
+                            <input type="text" readOnly value={referralUrl} className="appearance-none text-[16px] leading-5 w-full p-3 rounded-lg border border-border bg-background text-text text-[16px] outline-none" />
                             <button onClick={() => { navigator.clipboard.writeText(referralUrl); setToast({ id: 99, message: t('homeDashboard.copiedToClipboard'), type: 'success' }); }} className="w-full py-2.5 bg-plex text-background rounded-lg font-bold hover:bg-plex-hover transition-colors shadow-md">{t('homeDashboard.copyLink')}</button>
                         </div>
                     </div>

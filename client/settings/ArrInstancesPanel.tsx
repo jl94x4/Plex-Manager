@@ -411,7 +411,7 @@ export const ArrInstancesPanel: React.FC<Props> = ({
                                 <div>
                                     <label className="text-xs text-muted uppercase tracking-wider font-bold mb-1 block">{copy.displayName}</label>
                                     <input
-                                        className="w-full p-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-sm"
+                                        className="appearance-none text-[16px] leading-5 w-full p-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-[16px]"
                                         type="text"
                                         value={instance.name}
                                         onChange={(e) => updateInstance(instance.id, { name: e.target.value })}
@@ -438,7 +438,7 @@ export const ArrInstancesPanel: React.FC<Props> = ({
                                 <div>
                                     <label className="text-xs text-muted uppercase tracking-wider font-bold mb-1 block">{copy.url}</label>
                                     <input
-                                        className="w-full p-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-sm"
+                                        className="appearance-none text-[16px] leading-5 w-full p-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-[16px]"
                                         type="text"
                                         value={instance.url}
                                         onChange={(e) => updateInstance(instance.id, { url: e.target.value })}
@@ -451,7 +451,7 @@ export const ArrInstancesPanel: React.FC<Props> = ({
                                         {copy.externalUrl} <span className="text-[10px] font-normal normal-case text-muted/70">({copy.externalUrlOptional})</span>
                                     </label>
                                     <input
-                                        className="w-full p-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-sm"
+                                        className="appearance-none text-[16px] leading-5 w-full p-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-[16px]"
                                         type="text"
                                         value={instance.externalUrl || ''}
                                         onChange={(e) => updateInstance(instance.id, { externalUrl: e.target.value })}
@@ -462,7 +462,7 @@ export const ArrInstancesPanel: React.FC<Props> = ({
                                 <div>
                                     <label className="text-xs text-muted uppercase tracking-wider font-bold mb-1 block">{copy.apiKey}</label>
                                     <input
-                                        className="w-full p-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-sm"
+                                        className="appearance-none text-[16px] leading-5 w-full p-2.5 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all text-[16px]"
                                         type="password"
                                         value={instance.apiKey}
                                         onChange={(e) => updateInstance(instance.id, { apiKey: e.target.value })}

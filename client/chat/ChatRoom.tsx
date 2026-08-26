@@ -790,7 +790,7 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                                     />
                                     <textarea
                                         ref={draftRef}
-                                        className="h-10 min-h-10 max-h-10 flex-1 resize-none overflow-hidden rounded-xl border border-white/10 bg-black/30 px-3 py-[7px] text-base leading-6 md:py-[9px] md:text-sm md:leading-5 text-text placeholder:text-muted focus:border-plex/40 focus:outline-none"
+                                        className="h-10 min-h-10 max-h-10 flex-1 resize-none overflow-hidden rounded-xl border border-white/10 bg-black/30 px-3 py-[7px] appearance-none text-[16px] leading-6 text-text placeholder:text-muted focus:border-plex/40 focus:outline-none"
                                         placeholder={`Message #${activeRoom.name} · type @ to mention`}
                                         rows={1}
                                         enterKeyHint="send"
@@ -887,7 +887,7 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                             <label className="block">
                                 <span className="text-xs font-bold uppercase tracking-wide text-muted">Name</span>
                                 <input
-                                    className="mt-2 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-text"
+                                    className="appearance-none text-[16px] leading-5 mt-2 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-[16px] text-text"
                                     placeholder="general"
                                     value={newRoomName}
                                     onChange={(event) => setNewRoomName(event.target.value)}
@@ -896,7 +896,7 @@ export const ChatRoom: React.FC<Props> = ({ sessionInfo, onCountsChange, initial
                             <label className="mt-4 block">
                                 <span className="text-xs font-bold uppercase tracking-wide text-muted">Description</span>
                                 <input
-                                    className="mt-2 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-text"
+                                    className="appearance-none text-[16px] leading-5 mt-2 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-[16px] text-text"
                                     placeholder="Optional topic for this channel"
                                     value={newRoomDescription}
                                     onChange={(event) => setNewRoomDescription(event.target.value)}

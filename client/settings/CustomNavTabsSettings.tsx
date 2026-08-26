@@ -145,7 +145,7 @@ export const CustomNavTabsSettings: React.FC<Props> = ({
                                     <label className="block text-sm">
                                         <span className="mb-1 block font-semibold text-text">{t('settings.navigation.customTabs.name')}</span>
                                         <input
-                                            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-text outline-none focus:border-plex"
+                                            className="appearance-none text-[16px] leading-5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[16px] text-text outline-none focus:border-plex"
                                             value={tab.name}
                                             onChange={(event) => updateTab(tab.id, { name: event.target.value })}
                                             placeholder="Game library"
@@ -154,7 +154,7 @@ export const CustomNavTabsSettings: React.FC<Props> = ({
                                     <label className="block text-sm">
                                         <span className="mb-1 block font-semibold text-text">{t('settings.navigation.customTabs.url')}</span>
                                         <input
-                                            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-text outline-none focus:border-plex"
+                                            className="appearance-none text-[16px] leading-5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[16px] text-text outline-none focus:border-plex"
                                             value={tab.url}
                                             onChange={(event) => updateTab(tab.id, { url: event.target.value })}
                                             placeholder="https://games.example.com"
@@ -163,7 +163,7 @@ export const CustomNavTabsSettings: React.FC<Props> = ({
                                     <label className="block text-sm md:col-span-2">
                                         <span className="mb-1 block font-semibold text-text">{t('settings.navigation.customTabs.descriptionLabel')}</span>
                                         <input
-                                            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-text outline-none focus:border-plex"
+                                            className="appearance-none text-[16px] leading-5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[16px] text-text outline-none focus:border-plex"
                                             value={tab.description || ''}
                                             onChange={(event) => updateTab(tab.id, { description: event.target.value })}
                                             placeholder={t('settings.navigation.customTabs.descriptionPlaceholder')}

@@ -151,14 +151,14 @@ export const NotificationTemplatesPanel: React.FC<Props> = ({
                         {field.toLowerCase().includes('body') || field.toLowerCase().includes('content') || field.toLowerCase().includes('description') ? (
                             <textarea
                                 id={`notify-tpl-${activeEvent}-${field}`}
-                                className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all min-h-[88px]"
+                                className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all min-h-[88px]"
                                 value={effectiveValue(field)}
                                 onChange={(e) => setField(field, e.target.value)}
                             />
                         ) : (
                             <input
                                 id={`notify-tpl-${activeEvent}-${field}`}
-                                className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all"
+                                className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all"
                                 value={effectiveValue(field)}
                                 onChange={(e) => setField(field, e.target.value)}
                             />

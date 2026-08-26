@@ -5,7 +5,7 @@ import { overlaysApi } from './api';
 const buttonClass = 'inline-flex items-center gap-2 rounded-md border border-white/15 bg-white/5 px-3 py-2 text-sm font-semibold text-text hover:bg-white/10 disabled:opacity-50';
 const primaryButtonClass = 'inline-flex items-center gap-2 rounded-md bg-plex px-3 py-2 text-sm font-bold text-background hover:bg-plex-hover disabled:opacity-50';
 const ghostButtonClass = 'inline-flex items-center gap-1.5 rounded-md px-2.5 py-2 text-sm font-semibold text-muted hover:bg-white/5 hover:text-text disabled:opacity-50';
-const fieldInputClass = 'mt-1.5 w-full rounded-lg border border-border bg-background p-2.5 text-sm text-text outline-none transition-all focus:border-plex focus:ring-1 focus:ring-plex';
+const fieldInputClass = 'mt-1.5 w-full appearance-none rounded-lg border border-border bg-background p-2.5 text-[16px] leading-5 text-text outline-none transition-all focus:border-plex focus:ring-1 focus:ring-plex';
 const fieldLabelClass = 'text-[10px] font-bold uppercase tracking-[0.14em] text-muted';
 
 export type OverlayJobTitleFilter = 'all' | 'show' | 'movie';

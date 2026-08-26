@@ -932,7 +932,7 @@ export const UpgraderDashboard: React.FC = () => {
                                         value={searchInput}
                                         onChange={(e) => setSearchInput(e.target.value)}
                                         placeholder="Search titles…"
-                                        className="w-full pl-9 pr-3 py-2 h-[38px] rounded-lg border border-border bg-background text-text text-sm outline-none focus:border-plex"
+                                        className="w-full pl-9 pr-3 py-2 h-[38px] rounded-lg border border-border bg-background text-text appearance-none text-[16px] leading-5 outline-none focus:border-plex"
                                     />
                                 </div>
                             </div>

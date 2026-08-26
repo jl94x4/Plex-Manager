@@ -405,7 +405,7 @@ export const ScannerSettingsPanel: React.FC<Props> = ({
                         </button>
                     </div>
                     <textarea
-                        className={`${FIELD} min-h-[130px] font-mono text-xs`}
+                        className={`appearance-none text-[16px] leading-5 ${FIELD} min-h-[130px] font-mono text-[16px]`}
                         value={yamlText}
                         onChange={(e) => {
                             setYamlText(e.target.value);

@@ -281,7 +281,7 @@ export const AchievementsSettings: React.FC<Props> = ({
                             min={0}
                             max={100}
                             step={1}
-                            className="w-full p-2.5 rounded-lg border border-border bg-background text-text text-sm text-right outline-none focus:border-plex"
+                            className="appearance-none text-[16px] leading-5 w-full p-2.5 rounded-lg border border-border bg-background text-text text-[16px] text-right outline-none focus:border-plex"
                             value={Number(achievementsMinPercentComplete) || 0}
                             onChange={(e) => {
                                 const n = Number(e.target.value);
@@ -354,7 +354,7 @@ export const AchievementsSettings: React.FC<Props> = ({
                                 <label className="space-y-1">
                                     <span className="text-[11px] text-muted font-semibold">{t('settings.achievements.name')}</span>
                                     <input
-                                        className="w-full p-2 rounded-lg border border-border bg-background text-text text-sm outline-none focus:border-plex"
+                                        className="w-full appearance-none p-2 rounded-lg border border-border bg-background text-text text-[16px] leading-5 outline-none focus:border-plex"
                                         value={seasonDraft.name}
                                         onChange={(e) => setSeasonDraft({ ...seasonDraft, name: e.target.value })}
                                         placeholder="Halloween 2026"
@@ -371,7 +371,7 @@ export const AchievementsSettings: React.FC<Props> = ({
                                 <label className="space-y-1">
                                     <span className="text-[11px] text-muted font-semibold">{t('settings.achievements.activeFrom')}</span>
                                     <input
-                                        className="w-full p-2 rounded-lg border border-border bg-background text-text text-sm outline-none focus:border-plex font-mono"
+                                        className="w-full appearance-none p-2 rounded-lg border border-border bg-background text-text text-[16px] leading-5 outline-none focus:border-plex font-mono"
                                         value={seasonDraft.activeFrom}
                                         onChange={(e) => setSeasonDraft({ ...seasonDraft, activeFrom: e.target.value })}
                                         placeholder="10-01"
@@ -380,7 +380,7 @@ export const AchievementsSettings: React.FC<Props> = ({
                                 <label className="space-y-1">
                                     <span className="text-[11px] text-muted font-semibold">{t('settings.achievements.activeUntil')}</span>
                                     <input
-                                        className="w-full p-2 rounded-lg border border-border bg-background text-text text-sm outline-none focus:border-plex font-mono"
+                                        className="w-full appearance-none p-2 rounded-lg border border-border bg-background text-text text-[16px] leading-5 outline-none focus:border-plex font-mono"
                                         value={seasonDraft.activeUntil}
                                         onChange={(e) => setSeasonDraft({ ...seasonDraft, activeUntil: e.target.value })}
                                         placeholder="10-31"
@@ -397,7 +397,7 @@ export const AchievementsSettings: React.FC<Props> = ({
                                     value={seasonBadgeQuery}
                                     onChange={(e) => setSeasonBadgeQuery(e.target.value)}
                                     placeholder={t('settings.achievements.searchBadgesToInclude')}
-                                    className="w-full p-2 rounded-lg border border-border bg-background text-text text-sm outline-none focus:border-plex"
+                                    className="w-full appearance-none p-2 rounded-lg border border-border bg-background text-text text-[16px] leading-5 outline-none focus:border-plex"
                                 />
                                 <div className="max-h-40 overflow-y-auto rounded-lg border border-border/60 divide-y divide-border/40">
                                     {seasonBadgeMatches.map((badge) => {
@@ -562,7 +562,7 @@ export const AchievementsSettings: React.FC<Props> = ({
                                     min={0}
                                     max={100}
                                     step={1}
-                                    className="w-16 shrink-0 p-1.5 rounded-md border border-border bg-background text-text text-sm text-right outline-none focus:border-plex"
+                                    className="appearance-none text-[16px] leading-5 w-16 shrink-0 p-1.5 rounded-md border border-border bg-background text-text text-[16px] text-right outline-none focus:border-plex"
                                     value={Number(effectiveWeights[key] ?? 0)}
                                     onChange={(e) => setWeight(key, e.target.value)}
                                 />
@@ -586,7 +586,7 @@ export const AchievementsSettings: React.FC<Props> = ({
                             value={badgeQuery}
                             onChange={(e) => setBadgeQuery(e.target.value)}
                             placeholder={t('settings.achievements.searchBadges')}
-                            className="flex-1 p-2.5 rounded-lg border border-border bg-background text-text text-sm outline-none focus:border-plex"
+                            className="flex-1 appearance-none p-2.5 rounded-lg border border-border bg-background text-text text-[16px] leading-5 outline-none focus:border-plex"
                         />
                         <div className="w-full sm:w-44 shrink-0">
                             <CustomSelect

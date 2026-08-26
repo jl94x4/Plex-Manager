@@ -611,7 +611,7 @@ const confirmBroadLibraryScan = async (roots: string[]) => {
     );
 };
 
-const fieldClass = 'w-full rounded-lg border border-white/10 bg-background/70 px-3 py-2.5 text-sm text-text placeholder:text-muted/60 outline-none transition focus:border-plex focus:ring-1 focus:ring-plex';
+const fieldClass = 'w-full appearance-none rounded-lg border border-white/10 bg-background/70 px-3 py-2.5 text-[16px] leading-5 text-text placeholder:text-muted/60 outline-none transition focus:border-plex focus:ring-1 focus:ring-plex';
 const panelClass = dashboardPanelClass;
 const listCardClass = 'rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.04] to-transparent shadow-xl transition hover:border-plex/40';
 const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-sm font-semibold text-text transition hover:border-plex/40 hover:bg-white/5 disabled:pointer-events-none disabled:opacity-40';
@@ -2655,7 +2655,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         ]}
                                     />
                                     <input
-                                        className="w-full sm:max-w-xs rounded-lg border border-white/10 bg-background/70 px-3 py-2 text-sm text-text placeholder:text-muted/60 outline-none transition focus:border-plex focus:ring-1 focus:ring-plex"
+                                        className="appearance-none text-[16px] leading-5 w-full sm:max-w-xs rounded-lg border border-white/10 bg-background/70 px-3 py-2 text-[16px] text-text placeholder:text-muted/60 outline-none transition focus:border-plex focus:ring-1 focus:ring-plex"
                                         value={queueErrorFilter}
                                         onChange={(event) => setQueueErrorFilter(event.target.value)}
                                         placeholder="Filter by error text…"

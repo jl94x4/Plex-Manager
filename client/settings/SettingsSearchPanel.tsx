@@ -78,7 +78,7 @@ export const SettingsSearchPanel: React.FC<{
                         setIsFocused(true);
                         setRecent(getRecentSettingsEntries());
                     }}
-                    className="w-full bg-background border border-border rounded-lg pl-8 pr-3 py-1.5 text-sm text-text focus:outline-none focus:border-plex transition-colors"
+                    className="w-full appearance-none bg-background border border-border rounded-lg pl-8 pr-3 py-1.5 text-[16px] leading-5 text-text focus:outline-none focus:border-plex transition-colors"
                 />
             </div>
 

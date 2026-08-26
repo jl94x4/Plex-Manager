@@ -388,7 +388,7 @@ const PlaylistsPanel: React.FC = () => {
             <DashboardPanel title="Add playlist or album" subtitle="Spotify URL, URI, or username:liked for Liked Songs.">
                 <div className="flex flex-col gap-2 sm:flex-row">
                     <input
-                        className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm text-text"
+                        className="appearance-none text-[16px] leading-5 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-[16px] text-text"
                         placeholder="https://open.spotify.com/playlist/… or spotify:playlist:…"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
@@ -518,7 +518,7 @@ const SavedItemEditor: React.FC<{
                 <h3 className="text-lg font-bold text-text">Playlist settings</h3>
                 <p className="mt-1 truncate text-xs text-muted">{item.title}</p>
                 <label className="mt-4 block text-[11px] font-bold uppercase tracking-wider text-muted">Category</label>
-                <input className="mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm" value={label} onChange={(e) => setLabel(e.target.value)} />
+                <input className="appearance-none text-[16px] leading-5 mt-1 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-[16px]" value={label} onChange={(e) => setLabel(e.target.value)} />
                 <div className="mt-2 flex flex-wrap gap-1">
                     {labels.map((entry) => (
                         <button key={entry} type="button" className="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-muted hover:border-plex hover:text-plex" onClick={() => setLabel(entry)}>
@@ -534,7 +534,7 @@ const SavedItemEditor: React.FC<{
                     <input
                         type="number"
                         min={0}
-                        className="mt-2 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-sm"
+                        className="appearance-none text-[16px] leading-5 mt-2 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-[16px]"
                         value={interval}
                         onChange={(e) => setIntervalDays(e.target.value)}
                     />
@@ -737,7 +737,7 @@ const MatchingPanel: React.FC = () => {
                     <button type="button" className={primaryButtonClass} onClick={() => void saveJson(block.path, block.value, block.title)}>Save</button>
                 )}>
                     <textarea
-                        className="min-h-[160px] w-full rounded-lg border border-white/10 bg-black/40 p-3 font-mono text-xs text-text"
+                        className="appearance-none text-[16px] leading-5 min-h-[160px] w-full rounded-lg border border-white/10 bg-black/40 p-3 font-mono text-[16px] text-text"
                         value={block.value}
                         onChange={(e) => block.set(e.target.value)}
                     />
@@ -799,10 +799,10 @@ const IntegrationsPanel: React.FC = () => {
                 ))}
             </div>
             <DashboardPanel title="Lidarr" controls={<button type="button" className={primaryButtonClass} onClick={() => void save('lidarr/settings', lidarr, 'Lidarr')}>Save</button>}>
-                <textarea className="min-h-[140px] w-full rounded-lg border border-white/10 bg-black/40 p-3 font-mono text-xs" value={lidarr} onChange={(e) => setLidarr(e.target.value)} />
+                <textarea className="appearance-none text-[16px] leading-5 min-h-[140px] w-full rounded-lg border border-white/10 bg-black/40 p-3 font-mono text-[16px]" value={lidarr} onChange={(e) => setLidarr(e.target.value)} />
             </DashboardPanel>
             <DashboardPanel title="SLSKD" controls={<button type="button" className={primaryButtonClass} onClick={() => void save('slskd/settings', slskd, 'SLSKD')}>Save</button>}>
-                <textarea className="min-h-[140px] w-full rounded-lg border border-white/10 bg-black/40 p-3 font-mono text-xs" value={slskd} onChange={(e) => setSlskd(e.target.value)} />
+                <textarea className="appearance-none text-[16px] leading-5 min-h-[140px] w-full rounded-lg border border-white/10 bg-black/40 p-3 font-mono text-[16px]" value={slskd} onChange={(e) => setSlskd(e.target.value)} />
             </DashboardPanel>
         </div>
     );

@@ -332,7 +332,7 @@ export const PosterSetsPasteView: React.FC = () => {
                         <p className="mt-1 text-sm text-muted">One URL per line. Lines starting with # or // are ignored.</p>
                     </div>
                     <textarea
-                        className={`${fieldClass} min-h-36 font-mono text-xs`}
+                        className={`appearance-none text-[16px] leading-5 ${fieldClass} min-h-36 font-mono text-[16px]`}
                         value={bulkText}
                         onChange={(event) => setBulkText(event.target.value)}
                         placeholder={'https://mediux.pro/sets/123\nhttps://theposterdb.com/set/456\nhttps://theposterdb.com/posters/789'}

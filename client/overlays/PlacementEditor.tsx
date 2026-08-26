@@ -48,7 +48,7 @@ type Props = {
 
 const buttonClass = 'inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-sm font-semibold text-text transition-colors hover:bg-white/10 disabled:opacity-50';
 const primaryButtonClass = 'inline-flex items-center justify-center gap-2 rounded-xl bg-plex px-3 py-2 text-sm font-bold text-background transition-colors hover:bg-plex-hover disabled:opacity-50';
-const fieldInputClass = 'mt-1 w-full rounded-lg border border-white/10 bg-black/25 px-2.5 py-2 text-sm text-text outline-none transition focus:border-plex/50 focus:ring-1 focus:ring-plex/20';
+const fieldInputClass = 'mt-1 w-full appearance-none rounded-lg border border-white/10 bg-black/25 px-2.5 py-2 text-[16px] leading-5 text-text outline-none transition focus:border-plex/50 focus:ring-1 focus:ring-plex/20';
 const fieldLabelClass = 'text-[10px] font-bold uppercase tracking-[0.14em] text-muted';
 
 const BANNER_KINDS: PlacementKind[] = ['show', 'season', 'episode', 'recently'];

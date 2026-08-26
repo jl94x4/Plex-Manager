@@ -718,7 +718,7 @@ const ConfigPage: React.FC = () => {
                                             <span className="text-xs text-muted uppercase font-bold tracking-wider">Pins</span>
                                             <input
                                                 type="number"
-                                                className="w-12 bg-transparent border-none p-0 text-center text-text text-sm focus:ring-0"
+                                                className="appearance-none text-[16px] leading-5 w-12 bg-transparent border-none p-0 text-center text-text text-[16px] focus:ring-0"
                                                 value={pins[lib] || 0}
                                                 onChange={(e) => handlePinCountChange(lib, e.target.value, setConfig)}
                                             />
@@ -900,7 +900,7 @@ const ArrayEditor = ({ list = [], onChange, placeholder }: { list: string[], onC
         <div className="space-y-3">
             <div className="flex gap-2">
                 <input
-                    className="flex-1 bg-background/60 border border-border rounded px-3 py-2 text-sm text-text focus:outline-none focus:border-plex/50 min-w-0"
+                    className="appearance-none text-[16px] leading-5 flex-1 bg-background/60 border border-border rounded px-3 py-2 text-[16px] text-text focus:outline-none focus:border-plex/50 min-w-0"
                     value={input}
                     onChange={e => setInput(e.target.value)}
                     placeholder={placeholder}
@@ -1064,7 +1064,7 @@ const SpecialEditor = ({
                                 <div className="md:w-2/3">
                                     <label className="block text-sm font-medium text-text mb-1.5">Collection Names (comma separated)</label>
                                     <textarea
-                                        className="w-full bg-background/60 border border-border rounded-lg p-2.5 text-sm text-text h-20 focus:outline-none focus:border-plex/50"
+                                        className="appearance-none text-[16px] leading-5 w-full bg-background/60 border border-border rounded-lg p-2.5 text-[16px] text-text h-20 focus:outline-none focus:border-plex/50"
                                         value={(spec.collection_names || []).join(',')}
                                         onChange={e => updateSpecialCollNames(idx, e.target.value)}
                                     />
@@ -1167,7 +1167,7 @@ const CategoryEditor = ({ config, setConfig }: { config: AppConfig, setConfig: R
                                         </div>
                                     </div>
                                     <textarea
-                                        className="w-full bg-background/60 border border-border rounded-lg p-3 text-sm text-text focus:outline-none focus:border-plex/50"
+                                        className="appearance-none text-[16px] leading-5 w-full bg-background/60 border border-border rounded-lg p-3 text-[16px] text-text focus:outline-none focus:border-plex/50"
                                         rows={2}
                                         value={cat.collections.join(',')}
                                         onChange={e => {
