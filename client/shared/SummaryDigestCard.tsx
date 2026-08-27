@@ -25,6 +25,7 @@ import {
     DashboardStatCard,
 } from './dashboard/DashboardChrome';
 import { lockBackgroundScroll } from './lockBackgroundScroll';
+import { formatStoredSummaryPeriodLabel } from '../../lib/notifications/summaryPeriodLabel.js';
 
 export type SummaryDigest = {
     id: string;
@@ -307,7 +308,7 @@ export const SummaryDigestCard: React.FC<Props> = ({ digestId = 'latest', onClos
                                     Smart summary
                                 </div>
                                 <h2 className="text-3xl font-black tracking-tight text-text sm:text-4xl">
-                                    {digest?.periodLabel || 'Server summary'}
+                                    {digest ? formatStoredSummaryPeriodLabel(digest) : 'Server summary'}
                                 </h2>
                                 <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted">
                                     {digest?.periodStart && digest?.periodEnd ? (
@@ -508,7 +509,7 @@ export const SummaryDigestCard: React.FC<Props> = ({ digestId = 'latest', onClos
                                                     <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_0%_0%,rgb(var(--color-plex)_/_0.15),transparent_60%)]" />
                                                 ) : null}
                                                 <p className="relative text-sm font-bold text-text">
-                                                    {item.periodLabel || 'Summary'}
+                                                    {formatStoredSummaryPeriodLabel(item)}
                                                 </p>
                                                 <p className="relative mt-0.5 text-[11px] text-muted">
                                                     {formatWhen(item.createdAt)}
