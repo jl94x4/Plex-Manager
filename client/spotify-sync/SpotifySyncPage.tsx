@@ -51,6 +51,10 @@ import {
 
 const buttonClass = 'inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-muted hover:border-plex hover:text-plex disabled:opacity-50';
 const primaryButtonClass = 'inline-flex items-center gap-2 rounded-lg bg-plex px-3 py-1.5 text-xs font-bold text-background hover:brightness-110 disabled:opacity-50';
+const rowCardClass = (selected: boolean) => (
+    `rounded-xl border p-3 ${selected ? 'border-plex/50 bg-plex/10' : 'border-white/10 bg-black/25'}`
+);
+const rowActionClass = 'grid w-full grid-cols-2 gap-2 lg:flex lg:w-auto lg:shrink-0 lg:flex-wrap lg:justify-end';
 
 const toastListeners = new Set<(message: string, type: 'success' | 'error') => void>();
 const toast = (message: string, type: 'success' | 'error') => {
@@ -820,39 +824,45 @@ const PlaylistsPanel: React.FC<{
                                 {filteredAccount.map((playlist) => {
                                     const selected = selectedIds.has(playlist.id);
                                     return (
-                                        <div
-                                            key={playlist.id}
-                                            className={`flex flex-wrap items-center gap-3 rounded-xl border p-3 ${selected ? 'border-plex/50 bg-plex/10' : 'border-white/10 bg-black/25'}`}
-                                        >
-                                            <button type="button" className="shrink-0 text-muted hover:text-plex" onClick={() => toggleSelected(playlist.id)} title={selected ? 'Deselect' : 'Select'}>
-                                                {selected ? <CheckSquare className="h-4 w-4 text-plex" /> : <Square className="h-4 w-4" />}
-                                            </button>
-                                            {playlist.image ? (
-                                                <img src={workerImageUrl(playlist.image)} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
-                                            ) : (
-                                                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-plex/15 text-plex">
-                                                    {playlist.liked || playlist.kind === 'liked' ? <Heart className="h-5 w-5" /> : playlist.kind === 'album' ? <Disc3 className="h-5 w-5" /> : <ListMusic className="h-5 w-5" />}
+                                        <div key={playlist.id} className={`flex flex-col gap-3 lg:flex-row lg:items-center ${rowCardClass(selected)}`}>
+                                            <button
+                                                type="button"
+                                                className="flex min-w-0 flex-1 items-start gap-3 text-left lg:items-center"
+                                                onClick={() => toggleSelected(playlist.id)}
+                                                title={selected ? 'Deselect' : 'Select'}
+                                            >
+                                                <span className="mt-0.5 shrink-0 text-muted">
+                                                    {selected ? <CheckSquare className="h-4 w-4 text-plex" /> : <Square className="h-4 w-4" />}
+                                                </span>
+                                                {playlist.image ? (
+                                                    <img src={workerImageUrl(playlist.image)} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
+                                                ) : (
+                                                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-plex/15 text-plex">
+                                                        {playlist.liked || playlist.kind === 'liked' ? <Heart className="h-5 w-5" /> : playlist.kind === 'album' ? <Disc3 className="h-5 w-5" /> : <ListMusic className="h-5 w-5" />}
+                                                    </div>
+                                                )}
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-sm font-semibold leading-snug text-text [overflow-wrap:anywhere]">{playlist.title}</p>
+                                                    <p className="mt-0.5 text-[11px] leading-snug text-muted [overflow-wrap:anywhere]">
+                                                        {playlist.kind === 'album' ? 'Album' : playlist.liked ? 'Liked Songs' : 'Playlist'}
+                                                        {playlist.owner ? ` · ${playlist.owner}` : ''}
+                                                        {playlist.private ? ' · Private' : ''}
+                                                        {playlist.added ? ' · Saved' : ''}
+                                                    </p>
                                                 </div>
-                                            )}
-                                            <div className="min-w-0 flex-1">
-                                                <p className="truncate text-sm font-semibold text-text">{playlist.title}</p>
-                                                <p className="truncate text-[11px] text-muted">
-                                                    {playlist.kind === 'album' ? 'Album' : playlist.liked ? 'Liked Songs' : 'Playlist'}
-                                                    {playlist.owner ? ` · ${playlist.owner}` : ''}
-                                                    {playlist.private ? ' · Private' : ''}
-                                                    {playlist.added ? ' · Saved' : ''}
-                                                </p>
+                                            </button>
+                                            <div className={rowActionClass}>
+                                                <button type="button" className={`${buttonClass} h-10 justify-center`} onClick={() => void runOnPlaylists([playlist], 'add')} disabled={locked || playlist.added}>
+                                                    {playlist.added ? 'Saved' : 'Add'}
+                                                </button>
+                                                <button type="button" className={`${buttonClass} h-10 justify-center`} onClick={() => void runOnPlaylists([playlist], 'schedule')} disabled={locked}>
+                                                    Schedule
+                                                </button>
+                                                <button type="button" className={`${primaryButtonClass} col-span-2 h-10 justify-center lg:col-auto`} onClick={() => void runOnPlaylists([playlist], 'sync')} disabled={locked}>
+                                                    {busyAction === 'sync' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+                                                    Sync to Plex
+                                                </button>
                                             </div>
-                                            <button type="button" className={buttonClass} onClick={() => void runOnPlaylists([playlist], 'add')} disabled={locked || playlist.added}>
-                                                {playlist.added ? 'Saved' : 'Add'}
-                                            </button>
-                                            <button type="button" className={buttonClass} onClick={() => void runOnPlaylists([playlist], 'schedule')} disabled={locked}>
-                                                Schedule
-                                            </button>
-                                            <button type="button" className={primaryButtonClass} onClick={() => void runOnPlaylists([playlist], 'sync')} disabled={locked}>
-                                                {busyAction === 'sync' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
-                                                Sync to Plex
-                                            </button>
                                         </div>
                                     );
                                 })}
@@ -925,38 +935,46 @@ const PlaylistsPanel: React.FC<{
                                 <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">{label}</h3>
                                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                                     {groupItems.map((item) => (
-                                        <div key={item.id} className={`flex flex-wrap items-center gap-3 rounded-xl border p-3 ${savedSelectedIds.has(item.id) ? 'border-plex/50 bg-plex/10' : 'border-white/10 bg-black/25'}`}>
-                                            <button type="button" className="shrink-0 text-muted hover:text-plex" onClick={() => toggleSavedSelected(item.id)}>
-                                                {savedSelectedIds.has(item.id) ? <CheckSquare className="h-4 w-4 text-plex" /> : <Square className="h-4 w-4" />}
-                                            </button>
-                                            {item.image ? (
-                                                <img src={workerImageUrl(item.image)} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
-                                            ) : (
-                                                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-plex/15 text-plex">
-                                                    {item.type === 'spotify-album' ? <Disc3 className="h-5 w-5" /> : <ListMusic className="h-5 w-5" />}
+                                        <div key={item.id} className={`flex flex-col gap-3 ${rowCardClass(savedSelectedIds.has(item.id))}`}>
+                                            <button
+                                                type="button"
+                                                className="flex min-w-0 items-start gap-3 text-left"
+                                                onClick={() => toggleSavedSelected(item.id)}
+                                            >
+                                                <span className="mt-0.5 shrink-0 text-muted">
+                                                    {savedSelectedIds.has(item.id) ? <CheckSquare className="h-4 w-4 text-plex" /> : <Square className="h-4 w-4" />}
+                                                </span>
+                                                {item.image ? (
+                                                    <img src={workerImageUrl(item.image)} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
+                                                ) : (
+                                                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-plex/15 text-plex">
+                                                        {item.type === 'spotify-album' ? <Disc3 className="h-5 w-5" /> : <ListMusic className="h-5 w-5" />}
+                                                    </div>
+                                                )}
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="text-sm font-semibold leading-snug text-text [overflow-wrap:anywhere]">{item.title || item.id}</p>
+                                                    <p className="mt-0.5 text-[11px] leading-snug text-muted [overflow-wrap:anywhere]">
+                                                        {item.type === 'spotify-album' ? 'Album' : item.type === 'plex-media' ? 'Plex' : 'Playlist'}
+                                                        {' · '}
+                                                        {item.sync ? `Auto-sync every ${item.sync_interval || 1}d` : 'Manual only'}
+                                                    </p>
                                                 </div>
-                                            )}
-                                            <div className="min-w-0 flex-1">
-                                                <p className="truncate text-sm font-semibold text-text">{item.title || item.id}</p>
-                                                <p className="text-[11px] text-muted">
-                                                    {item.type === 'spotify-album' ? 'Album' : item.type === 'plex-media' ? 'Plex' : 'Playlist'}
-                                                    {' · '}
-                                                    {item.sync ? `Auto-sync every ${item.sync_interval || 1}d` : 'Manual only'}
-                                                </p>
+                                            </button>
+                                            <div className="flex items-center gap-2">
+                                                <button type="button" className="rounded-lg p-2 text-muted hover:text-plex" onClick={() => void inspectItem(item)} title="Preview Spotify tracks">
+                                                    <Eye className="h-4 w-4" />
+                                                </button>
+                                                <button type="button" className="rounded-lg p-2 text-muted hover:text-plex" onClick={() => setEditing(item)} title="Settings">
+                                                    <Pencil className="h-4 w-4" />
+                                                </button>
+                                                <button type="button" className="rounded-lg p-2 text-muted hover:text-rose-300" onClick={() => void removeItem(item.id)} title="Remove">
+                                                    <Trash2 className="h-4 w-4" />
+                                                </button>
+                                                <button type="button" className={`${primaryButtonClass} h-10 min-w-0 flex-1 justify-center`} onClick={() => void runOnSaved([item.id], 'sync')} disabled={locked} title="Match tracks and create or update this playlist on Plex">
+                                                    {busyAction === 'saved-sync' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+                                                    Sync to Plex
+                                                </button>
                                             </div>
-                                            <button type="button" className="rounded-lg p-1.5 text-muted hover:text-plex" onClick={() => void inspectItem(item)} title="Preview Spotify tracks">
-                                                <Eye className="h-3.5 w-3.5" />
-                                            </button>
-                                            <button type="button" className="rounded-lg p-1.5 text-muted hover:text-plex" onClick={() => setEditing(item)} title="Settings">
-                                                <Pencil className="h-3.5 w-3.5" />
-                                            </button>
-                                            <button type="button" className="rounded-lg p-1.5 text-muted hover:text-rose-300" onClick={() => void removeItem(item.id)} title="Remove">
-                                                <Trash2 className="h-3.5 w-3.5" />
-                                            </button>
-                                            <button type="button" className={primaryButtonClass} onClick={() => void runOnSaved([item.id], 'sync')} disabled={locked} title="Match tracks and create or update this playlist on Plex">
-                                                {busyAction === 'saved-sync' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
-                                                Sync to Plex
-                                            </button>
                                         </div>
                                     ))}
                                 </div>
