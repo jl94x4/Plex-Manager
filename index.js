@@ -154,6 +154,13 @@ import {
     syncSpotifyPlaylistsToPlex,
 } from './lib/spotify-to-plex-playlist-sync.js';
 import {
+    snapshotSpotifyPlaylistSyncJob,
+    startSpotifyPlaylistSyncJob,
+} from './lib/spotify-to-plex-playlist-job.js';
+import {
+    listRegisteredPortalJobs,
+} from './lib/portal-jobs.js';
+import {
     applySpotifyToPlexPortalDefaults,
     syncSpotifyToPlexPlexConfigFile,
 } from './lib/spotify-to-plex-portal-defaults.js';
@@ -26069,6 +26076,34 @@ app.get('/api/spotify-to-plex/portal-defaults', requireAdmin, async (req, res) =
     }
 });
 
+app.get('/api/portal-jobs', requireAdmin, async (req, res) => {
+    const jobs = [...listRegisteredPortalJobs()];
+    try {
+        if (typeof mediaAutomationService?.listJobs === 'function') {
+            const listed = await mediaAutomationService.listJobs();
+            const running = (Array.isArray(listed) ? listed : []).filter((job) => job?.state === 'running');
+            if (running.length) {
+                const first = running[0];
+                jobs.push({
+                    id: 'media-automation',
+                    source: 'media-automation',
+                    route: 'media-automation',
+                    title: 'Media Automation',
+                    status: 'running',
+                    message: running.length === 1
+                        ? String(first.title || first.label || first.fileName || 'Encoding')
+                        : `${running.length} encodes running`,
+                    done: running.length === 1 ? Number(first.progress?.percent || 0) : running.length,
+                    total: running.length === 1 ? 100 : running.length,
+                });
+            }
+        }
+    } catch {
+        // Media Automation may be disabled.
+    }
+    return res.json({ jobs });
+});
+
 app.get('/api/spotify-to-plex/status', requireAdmin, requireSpotifyToPlex, async (req, res) => {
     try {
         const config = req.spotifyToPlexConfig || await loadFile(CONFIG_PATH, {});
@@ -26108,6 +26143,7 @@ app.get('/api/spotify-to-plex/status', requireAdmin, requireSpotifyToPlex, async
             plexUri,
             bundled: isSpotifyToPlexBundledAvailable(),
             embedded: getSpotifyToPlexEmbeddedStatus(),
+            playlistSync: snapshotSpotifyPlaylistSyncJob(),
             ...summary,
         });
     } catch (e) {
@@ -26138,35 +26174,46 @@ app.post('/api/spotify-to-plex/sync', requireAdmin, requireSpotifyToPlex, async 
 
 app.post('/api/spotify-to-plex/sync-playlist', requireAdmin, requireSpotifyToPlex, async (req, res) => {
     try {
-        req.setTimeout?.(15 * 60 * 1000);
-        res.setTimeout?.(15 * 60 * 1000);
         const config = req.spotifyToPlexConfig || await loadFile(CONFIG_PATH, {});
-        try {
-            await applySpotifyToPlexPortalDefaults(config, spotifyToPlexPortalDefaultsDeps());
-        } catch (error) {
-            log(`[spotify-sync] Plex defaults before playlist sync: ${error?.message || error}`);
-        }
         const hasIds = Array.isArray(req.body?.ids);
         const idValue = req.body?.id != null ? String(req.body.id).trim() : '';
         const ids = hasIds ? req.body.ids : (idValue ? [idValue] : []);
-        const summary = await syncSpotifyPlaylistsToPlex({
+        const all = req.body?.all === true || (!hasIds && !idValue);
+        const job = startSpotifyPlaylistSyncJob({
             ids,
-            all: req.body?.all === true || (!hasIds && !idValue),
-            fast: req.body?.fast === true,
-            fetchJson: (opts) => fetchSpotifyToPlexJson({
-                config,
-                fetchWithTimeout,
-                allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS,
-                ...opts,
-            }),
+            all,
+            fast: req.body?.fast !== false,
+            run: async ({ ids: jobIds, all: jobAll, fast, onProgress }) => {
+                try {
+                    await applySpotifyToPlexPortalDefaults(config, spotifyToPlexPortalDefaultsDeps());
+                } catch (error) {
+                    log(`[spotify-sync] Plex defaults before playlist sync: ${error?.message || error}`);
+                }
+                return syncSpotifyPlaylistsToPlex({
+                    ids: jobIds,
+                    all: jobAll,
+                    fast,
+                    onProgress,
+                    fetchJson: (opts) => fetchSpotifyToPlexJson({
+                        config,
+                        fetchWithTimeout,
+                        allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS,
+                        ...opts,
+                    }),
+                });
+            },
         });
-        const status = summary.ok || summary.results.some((item) => item?.ok) ? 200 : (summary.results.length ? 502 : 400);
-        return res.status(status).json({
-            ...summary,
-            ...(summary.ok ? {} : { error: summary.message }),
+        return res.status(202).json({
+            ok: true,
+            started: true,
+            message: 'Playlist sync started on the server.',
+            playlistSync: job,
         });
     } catch (e) {
-        return res.status(e?.status || 502).json({ error: e.message || 'Failed to sync playlist to Plex.' });
+        if (Number(e?.status) === 409) {
+            return res.status(409).json({ error: e.message, playlistSync: e.job || snapshotSpotifyPlaylistSyncJob() });
+        }
+        return res.status(e?.status || 502).json({ error: e.message || 'Failed to start playlist sync.' });
     }
 });
 

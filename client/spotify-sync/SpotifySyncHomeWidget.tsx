@@ -12,6 +12,12 @@ type SpotifySyncStatus = {
     plexLoggedIn?: boolean;
     playlistRunCount?: number;
     lastSync?: Record<string, string | null>;
+    playlistSync?: {
+        status?: 'running' | 'success' | 'error';
+        message?: string;
+        done?: number;
+        total?: number;
+    } | null;
 };
 
 type Props = {
@@ -47,9 +53,11 @@ export const SpotifySyncHomeWidget: React.FC<Props> = ({ onOpen }) => {
         void load();
     }, [load]);
 
-    usePoll(() => { void load(); }, 60_000);
+    usePoll(() => { void load(); }, status?.playlistSync?.status === 'running' ? 2_000 : 60_000);
 
     const lastPlaylistSync = status?.lastSync?.playlists;
+    const job = status?.playlistSync;
+    const jobRunning = job?.status === 'running';
 
     return (
         <div className="glass-card p-4 md:p-5 shadow-xl w-full overflow-hidden">
@@ -97,6 +105,16 @@ export const SpotifySyncHomeWidget: React.FC<Props> = ({ onOpen }) => {
                         </div>
                     </div>
                 )}
+
+                {jobRunning ? (
+                    <div className="rounded-xl border border-plex/40 bg-plex/10 px-3 py-2.5">
+                        <p className="text-[10px] uppercase tracking-wide text-plex font-semibold">Syncing to Plex</p>
+                        <p className="text-xs text-text mt-0.5 truncate">{job?.message || 'Matching tracks…'}</p>
+                        {job?.total ? (
+                            <p className="text-[11px] font-semibold text-plex mt-1">{job.done || 0}/{job.total}</p>
+                        ) : null}
+                    </div>
+                ) : null}
 
                 {onOpen && (
                     <button

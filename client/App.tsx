@@ -10,6 +10,7 @@ import { AppAmbientBackground } from './shared/theme';
 import { WhatsNewModal } from './shared/WhatsNewModal';
 import { SummaryDigestCard, openSummaryDigestFromUrl } from './shared/SummaryDigestCard';
 import { DiscoverI18nProvider } from './discovery/i18n';
+import { PortalJobsBanner } from './shared/PortalJobsBanner';
 import { DEFAULT_NAV_ORDER } from './shared/nav';
 import {
     getLastSeenVersion,
@@ -892,6 +893,13 @@ export const MainApp: React.FC = () => {
                 )}
                 <div className={`w-full min-w-0 max-w-[100%] flex flex-col min-h-0 ${isImpersonating ? 'pt-3 md:pt-4' : currentRoute === 'external' ? 'flex-1 pt-[calc(5rem+env(safe-area-inset-top,0px))] md:pt-4' : 'pt-[calc(5rem+env(safe-area-inset-top,0px))] md:pt-8'}`}>
                     <Suspense fallback={<div className="flex w-full items-center justify-center pt-20"><Loader isLoading={true} isCinematic={false} /></div>}>
+                        {isAdmin && !isPublicView ? (
+                            <PortalJobsBanner
+                                currentRoute={currentRoute}
+                                collexionsEnabled={!!sessionInfo?.navFeatures?.collexions}
+                                onNavigate={(route) => setRoute(route as any)}
+                            />
+                        ) : null}
                         {renderView()}
                     </Suspense>
                 </div>

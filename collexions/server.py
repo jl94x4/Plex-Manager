@@ -4783,6 +4783,15 @@ def run_job_now():
         }), 409
 
     if len(targets) == 1:
+        job_meta = managed.get(targets[0]) if isinstance(managed.get(targets[0]), dict) else {}
+        _job_run_set(
+            running=True,
+            total=1,
+            done=0,
+            failed=0,
+            current=str((job_meta or {}).get('name') or targets[0]),
+            current_id=targets[0],
+        )
         try:
             run_sync_job(targets[0])
             job = load_managed_collections().get(targets[0]) or {}
@@ -4796,6 +4805,7 @@ def run_job_now():
         except Exception as e:
             return jsonify({"success": False, "error": str(e)}), 500
         finally:
+            _job_run_set(running=False, current='', current_id='')
             _JOB_RUN_LOCK.release()
 
     _job_run_set(

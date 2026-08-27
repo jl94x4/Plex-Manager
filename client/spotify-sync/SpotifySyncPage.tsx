@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     CheckCircle2,
     ListMusic,
@@ -36,11 +36,11 @@ import { BetaBadge, SpotifySyncBetaBanner } from '../shared/BetaBadge';
 import { useDiscoverI18n } from '../discovery/i18n';
 import { CustomSelect } from '../shared/ui';
 import { SpotifySyncMark } from './SpotifySyncMark';
-import { formatWhen, workerFetch, workerImageUrl, workerJson } from './spotifySyncApi';
-import { syncSpotifyPlaylistsToPlex } from '../../lib/spotify-to-plex-playlist-sync.js';
+import { formatWhen, workerFetch, workerImageUrl } from './spotifySyncApi';
 import {
     asItemArray,
     buildSavedItemAddBody,
+    fetchSpotifyAccountPlaylistPages,
     isAlreadyAddedError,
     normalizeSpotifyAccountPlaylists,
     savedItemIdSet,
@@ -63,6 +63,16 @@ type SyncStatus = {
     plexUri?: string;
     playlistRunCount?: number;
     lastSync?: Record<string, string | null>;
+    playlistSync?: {
+        id?: string;
+        status?: 'running' | 'success' | 'error';
+        message?: string;
+        done?: number;
+        total?: number;
+        startedAt?: number;
+        finishedAt?: number | null;
+        ok?: boolean | null;
+    } | null;
     embedded?: {
         running?: boolean;
         bundledAvailable?: boolean;
@@ -128,7 +138,7 @@ export const SpotifySyncPage: React.FC = () => {
     const [statusError, setStatusError] = useState('');
     const [busy, setBusy] = useState(false);
     const [toasts, setToasts] = useState<ToastMessage[]>([]);
-    const [syncProgress, setSyncProgress] = useState<{ message: string; done?: number; total?: number } | null>(null);
+    const toastedJobRef = useRef('');
 
     useEffect(() => {
         const fn = (message: string, type: 'success' | 'error') => {
@@ -149,7 +159,19 @@ export const SpotifySyncPage: React.FC = () => {
         }
     }, []);
 
-    usePoll(() => { void loadStatus(); }, 60_000, { immediate: true });
+    usePoll(() => { void loadStatus(); }, status?.playlistSync?.status === 'running' ? 1_500 : 60_000, { immediate: true });
+
+    useEffect(() => {
+        const job = status?.playlistSync;
+        if (!job?.id || job.status === 'running') return;
+        if (toastedJobRef.current === job.id) return;
+        if (job.finishedAt && Date.now() - Number(job.finishedAt) > 45_000) {
+            toastedJobRef.current = job.id;
+            return;
+        }
+        toastedJobRef.current = job.id;
+        toast(job.message || (job.ok === false ? 'Playlist sync failed' : 'Synced playlists to Plex'), job.ok === false || job.status === 'error' ? 'error' : 'success');
+    }, [status?.playlistSync]);
 
     useEffect(() => {
         void (async () => {
@@ -189,30 +211,20 @@ export const SpotifySyncPage: React.FC = () => {
 
     const syncPlaylistsToPlex = async (ids?: string[]) => {
         setBusy(true);
-        setSyncProgress({ message: 'Starting Plex sync…', done: 0, total: 0 });
         try {
-            const summary = await syncSpotifyPlaylistsToPlex({
-                ids,
-                all: !ids?.length,
-                fast: true,
-                fetchJson: workerJson,
-                onProgress: (progress: { message?: string; done?: number; total?: number }) => {
-                    setSyncProgress({
-                        message: progress?.message || 'Syncing…',
-                        done: progress?.done,
-                        total: progress?.total,
-                    });
-                },
+            const data = await apiFetch('/api/spotify-to-plex/sync-playlist', {
+                method: 'POST',
+                body: JSON.stringify(ids?.length ? { ids, fast: true } : { all: true, fast: true }),
             });
-            toast(summary?.message || 'Synced playlists to Plex', summary?.ok === false ? 'error' : 'success');
-            void loadStatus();
-            return summary;
+            toast(data?.message || 'Playlist sync started on the server', 'success');
+            await loadStatus();
+            return data;
         } catch (e: any) {
-            toast(e?.message || 'Failed to sync playlists to Plex', 'error');
+            toast(e?.message || 'Failed to start playlist sync', 'error');
+            await loadStatus();
             throw e;
         } finally {
             setBusy(false);
-            setSyncProgress(null);
         }
     };
 
@@ -245,6 +257,12 @@ export const SpotifySyncPage: React.FC = () => {
 
     const workerOk = !!status?.workerReachable;
     const plexOk = !!status?.plexLoggedIn;
+    const playlistJob = status?.playlistSync;
+    const jobRunning = playlistJob?.status === 'running';
+    const syncBusy = busy || jobRunning;
+    const syncProgress = jobRunning || (playlistJob?.finishedAt && Date.now() - Number(playlistJob.finishedAt) < 60_000)
+        ? playlistJob
+        : null;
 
     return (
         <DashboardPageShell>
@@ -263,12 +281,12 @@ export const SpotifySyncPage: React.FC = () => {
                 secondaryBlob
                 actions={(
                     <div className="flex flex-wrap gap-2">
-                        <button type="button" className={buttonClass} onClick={() => void loadStatus()} disabled={busy}>
-                            <RefreshCw className={`h-4 w-4 ${busy ? 'animate-spin' : ''}`} /> Refresh
+                        <button type="button" className={buttonClass} onClick={() => void loadStatus()} disabled={syncBusy}>
+                            <RefreshCw className={`h-4 w-4 ${syncBusy ? 'animate-spin' : ''}`} /> Refresh
                         </button>
-                        <button type="button" className={primaryButtonClass} onClick={() => void syncPlaylistsToPlex()} disabled={busy || !workerOk}>
-                            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                            {busy ? 'Syncing…' : 'Sync playlists to Plex'}
+                        <button type="button" className={primaryButtonClass} onClick={() => void syncPlaylistsToPlex()} disabled={syncBusy || !workerOk}>
+                            {syncBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+                            {jobRunning ? 'Syncing…' : 'Sync playlists to Plex'}
                         </button>
                     </div>
                 )}
@@ -315,9 +333,9 @@ export const SpotifySyncPage: React.FC = () => {
 
             {syncProgress ? (
                 <div className="flex items-center gap-3 rounded-xl border border-plex/40 bg-plex/10 px-4 py-3 text-sm text-text">
-                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-plex" />
+                    {jobRunning ? <Loader2 className="h-4 w-4 shrink-0 animate-spin text-plex" /> : <CheckCircle2 className="h-4 w-4 shrink-0 text-plex" />}
                     <div className="min-w-0">
-                        <p className="font-semibold">Syncing to Plex</p>
+                        <p className="font-semibold">{jobRunning ? 'Syncing to Plex' : (syncProgress.ok === false ? 'Plex sync finished with errors' : 'Plex sync finished')}</p>
                         <p className="truncate text-xs text-muted">{syncProgress.message}</p>
                     </div>
                     {syncProgress.total ? (
@@ -372,9 +390,9 @@ export const SpotifySyncPage: React.FC = () => {
                 })}
             </DashboardSubnav>
 
-            {tab === 'playlists' && <PlaylistsPanel onSyncToPlex={syncPlaylistsToPlex} busy={busy} />}
+            {tab === 'playlists' && <PlaylistsPanel onSyncToPlex={syncPlaylistsToPlex} busy={syncBusy} />}
             {tab === 'users' && <UsersPanel />}
-            {tab === 'sync' && <SyncPanel status={status} busy={busy} onSync={runSync} onSyncPlaylistsToPlex={() => void syncPlaylistsToPlex()} onApplyPlex={applyPlex} />}
+            {tab === 'sync' && <SyncPanel status={status} busy={syncBusy} onSync={runSync} onSyncPlaylistsToPlex={() => void syncPlaylistsToPlex()} onApplyPlex={applyPlex} />}
             {tab === 'matching' && <MatchingPanel />}
             {tab === 'integrations' && <IntegrationsPanel />}
             {tab === 'logs' && <LogsPanel />}
@@ -479,7 +497,9 @@ const PlaylistsPanel: React.FC<{
             const [userList, saved, raw] = await Promise.all([
                 workerFetch('spotify/users').then((data) => asItemArray(data) as SpotifyUser[]),
                 workerFetch('saved-items').then(asItemArray).catch(() => []),
-                workerFetch(`spotify/users/${encodeURIComponent(id)}/items?type=playlists`),
+                fetchSpotifyAccountPlaylistPages(({ limit, offset }) => (
+                    workerFetch(`spotify/users/${encodeURIComponent(id)}/items?type=playlists&limit=${limit}&offset=${offset}`)
+                )),
             ]);
             const user = userList.find((entry) => entry.id === id) || { id };
             const next = normalizeSpotifyAccountPlaylists(raw, {
@@ -696,7 +716,7 @@ const PlaylistsPanel: React.FC<{
         <>
             <DashboardPanel
                 title="From your Spotify account"
-                subtitle="Pull every playlist on the connected account, then add, schedule, or match tracks and write the playlist into Plex. Matching can take a few minutes on large playlists."
+                subtitle="Spotify’s API only lists playlists you own or follow — not Made For You or Spotify editorial lists like Hot Hits. Paste a URL below to add those. Matching can take a few minutes on large playlists."
                 controls={(
                     <div className="flex flex-wrap items-center gap-2">
                         {users.length > 1 ? (
@@ -783,7 +803,7 @@ const PlaylistsPanel: React.FC<{
                         {accountLoading ? (
                             <p className="text-sm text-muted">Loading playlists from Spotify…</p>
                         ) : filteredAccount.length === 0 ? (
-                            <p className="text-sm text-muted">{accountError || 'No playlists found on this account.'}</p>
+                            <p className="text-sm text-muted">{accountError || 'No user-owned playlists came back from Spotify. Made For You and Spotify editorial lists are hidden by Spotify’s API — paste a URL below to add one.'}</p>
                         ) : (
                             <div className="max-h-[28rem] space-y-2 overflow-y-auto pr-1">
                                 {filteredAccount.map((playlist) => {

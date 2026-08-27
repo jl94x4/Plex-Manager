@@ -2,6 +2,7 @@ import { askConfirm } from '../../shared/confirm';
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
+import { usePoll } from '../../shared/usePoll';
 import {
     Play,
     Trash2,
@@ -121,6 +122,21 @@ const JobsPage: React.FC = () => {
     useEffect(() => {
         fetchJobs();
     }, []);
+
+    usePoll(async () => {
+        try {
+            const latest = await api.getJobRunProgress();
+            if (latest.running) {
+                setRunAllProgress(latest);
+                setRunningJob(latest.total > 1 ? 'all' : (latest.currentId || 'all'));
+            } else {
+                setRunAllProgress(null);
+                setRunningJob(null);
+            }
+        } catch {
+            // Worker may be restarting.
+        }
+    }, 2000);
 
     const fetchJobs = async (opts?: { silent?: boolean }) => {
         if (!opts?.silent) setLoading(true);
