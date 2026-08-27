@@ -168,6 +168,7 @@ import {
 } from './lib/portal-jobs.js';
 import {
     applySpotifyToPlexPortalDefaults,
+    getSpotifyToPlexPlexConfigPath,
     syncSpotifyToPlexPlexConfigFile,
 } from './lib/spotify-to-plex-portal-defaults.js';
 import {
@@ -26235,19 +26236,49 @@ app.post('/api/spotify-to-plex/sync-playlist', requireAdmin, requireSpotifyToPle
                 } catch (error) {
                     log(`[spotify-sync] Plex defaults before playlist sync: ${error?.message || error}`);
                 }
+                let workerPlex = {};
+                try {
+                    workerPlex = await fetchSpotifyToPlexJson({
+                        config,
+                        path: '/api/settings',
+                        fetchWithTimeout,
+                        allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS,
+                    }) || {};
+                } catch {
+                    workerPlex = {};
+                }
+                let filePlex = { uri: '', token: '' };
+                try {
+                    const parsed = JSON.parse(fsSync.readFileSync(getSpotifyToPlexPlexConfigPath(CONFIG_DIR), 'utf8'));
+                    filePlex = {
+                        uri: String(parsed?.uri || '').trim().replace(/\/+$/, ''),
+                        token: String(parsed?.serverToken || parsed?.token || '').trim(),
+                    };
+                } catch {
+                    filePlex = { uri: '', token: '' };
+                }
+                const plexBaseUrl = resolveConfiguredPlexServerUrl(config)
+                    || filePlex.uri
+                    || String(workerPlex.uri || '').trim().replace(/\/+$/, '');
+                const plexToken = String(config.plexToken || filePlex.token || '').trim();
+                const applyArtwork = createPlaylistArtworkApplier({
+                    fetchImpl: (url, opts) => fetchWithTimeout(url, opts, 20000),
+                    plexBaseUrl,
+                    plexToken,
+                    plexHeaders: plexClientHeaders,
+                    allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS,
+                    log,
+                });
+                if (!applyArtwork) {
+                    log(`[spotify-sync] Playlist artwork skipped: missing Plex URL or token.`);
+                }
                 return syncSpotifyPlaylistsToPlex({
                     ids: jobIds,
                     all: jobAll,
                     fast,
                     onProgress,
                     workerBase: resolveSpotifyToPlexBase(config, { allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS }),
-                    applyArtwork: createPlaylistArtworkApplier({
-                        fetchImpl: (url, opts) => fetchWithTimeout(url, opts, 20000),
-                        plexBaseUrl: resolveConfiguredPlexServerUrl(config),
-                        plexToken: config.plexToken,
-                        plexHeaders: plexClientHeaders,
-                        allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS,
-                    }),
+                    applyArtwork,
                     fetchJson: (opts) => fetchSpotifyToPlexJson({
                         config,
                         fetchWithTimeout,
