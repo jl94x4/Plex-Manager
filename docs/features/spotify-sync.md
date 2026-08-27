@@ -29,7 +29,7 @@ You do **not** need Spotify variables in the host `.env` when using Settings —
 
 Tabs cover the worker feature set:
 
-- **Playlists** — pull playlists from a connected Spotify account, then add, schedule, or **sync to Plex** (match tracks in your library and create/update the Plex playlist).
+- **Playlists** — pull playlists and saved albums from a connected Spotify account, then add, schedule, or **sync to Plex** (match tracks in your library and create/update a Plex playlist). Paste a playlist, album, or artist URL to add items Spotify’s library API hides.
 - **Users** — connect Spotify accounts (OAuth via the portal callback)
 - **Sync** — **Playlists to Plex** writes saved playlists into Plex. Other buttons start background worker jobs (albums, users, Lidarr, SLSKD, MQTT).
 - **Matching** — match filters, search approaches, text processing
@@ -41,6 +41,7 @@ Tabs cover the worker feature set:
 - **Plex from portal** — portal Plex URL/token (Settings → Plex) are written into the worker automatically on save, boot, and when you open Spotify Sync.
 - **Apply Plex/Lidarr from portal** — manual re-push (`POST /api/spotify-to-plex/apply-portal-defaults`).
 - **Sync playlists to Plex** — `POST /api/spotify-to-plex/sync-playlist` starts a **server-side** job (`202`) that matches tracks and creates or updates the Plex playlist in **Spotify track order** (unmatched tracks are skipped). Body: `{ id }`, `{ ids: [...] }`, or `{ all: true }`. Progress is on `GET /api/spotify-to-plex/status` as `playlistSync` so any signed-in admin session can watch it.
+- **Paste a Spotify link** — `POST /api/spotify-to-plex/import-link` with `{ search }` accepts playlist, album, and artist URLs (including `intl-xx` and `?si=` share links). Artists expand into up to 30 albums, then the UI syncs those items to Plex.
 
 ## Home widget
 

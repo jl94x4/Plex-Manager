@@ -20,6 +20,7 @@ import {
     Heart,
     CalendarClock,
     Eye,
+    Disc3,
 } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { portalUrl } from '../shared/basePath';
@@ -42,6 +43,8 @@ import {
     buildSavedItemAddBody,
     fetchSpotifyAccountPlaylistPages,
     isAlreadyAddedError,
+    mergeSpotifyAccountLibrary,
+    normalizeSpotifyAccountAlbums,
     normalizeSpotifyAccountPlaylists,
     savedItemIdSet,
 } from '../../lib/spotify-to-plex-playlist-import.js';
@@ -109,6 +112,7 @@ type AccountPlaylist = {
     image: string;
     search: string;
     added: boolean;
+    kind?: 'playlist' | 'album' | 'liked';
 };
 
 const TABS: { id: TabId; label: string; icon: React.FC<{ className?: string }> }[] = [
@@ -488,23 +492,27 @@ const PlaylistsPanel: React.FC<{
     const loadAccountPlaylists = useCallback(async (id = '') => {
         if (!id) {
             setAccountPlaylists([]);
-            setAccountError('Connect a Spotify account on the Users tab to pull playlists.');
+            setAccountError('Connect a Spotify account on the Users tab to pull playlists and albums.');
             return;
         }
         setAccountLoading(true);
         setAccountError('');
         try {
-            const [userList, saved, raw] = await Promise.all([
+            const [userList, saved, raw, albumsRaw] = await Promise.all([
                 workerFetch('spotify/users').then((data) => asItemArray(data) as SpotifyUser[]),
                 workerFetch('saved-items').then(asItemArray).catch(() => []),
                 fetchSpotifyAccountPlaylistPages(({ limit, offset }) => (
                     workerFetch(`spotify/users/${encodeURIComponent(id)}/items?type=playlists&limit=${limit}&offset=${offset}`)
                 )),
+                workerFetch(`spotify/users/${encodeURIComponent(id)}/items?type=albums`)
+                    .then(asItemArray)
+                    .catch(() => []),
             ]);
             const user = userList.find((entry) => entry.id === id) || { id };
-            const next = normalizeSpotifyAccountPlaylists(raw, {
-                user,
-                savedIds: savedItemIdSet(saved),
+            const savedIds = savedItemIdSet(saved);
+            const next = mergeSpotifyAccountLibrary({
+                playlists: normalizeSpotifyAccountPlaylists(raw, { user, savedIds }) as AccountPlaylist[],
+                albums: normalizeSpotifyAccountAlbums(albumsRaw, { savedIds }) as AccountPlaylist[],
             }) as AccountPlaylist[];
             setAccountPlaylists(next);
             setSelectedIds(new Set());
@@ -532,6 +540,7 @@ const PlaylistsPanel: React.FC<{
         return accountPlaylists.filter((item) => (
             item.title.toLowerCase().includes(q)
             || item.owner.toLowerCase().includes(q)
+            || String(item.kind || '').toLowerCase().includes(q)
         ));
     }, [accountPlaylists, accountFilter]);
 
@@ -574,7 +583,7 @@ const PlaylistsPanel: React.FC<{
 
     const reportImport = (result: { added: number; skipped: number; failed: number; errors: string[] }) => {
         if (result.failed) {
-            toast(result.errors[0] || `Failed to add ${result.failed} playlist${result.failed === 1 ? '' : 's'}`, 'error');
+            toast(result.errors[0] || `Failed to add ${result.failed} item${result.failed === 1 ? '' : 's'}`, 'error');
         } else if (result.added || result.skipped) {
             const parts = [];
             if (result.added) parts.push(`added ${result.added}`);
@@ -594,7 +603,7 @@ const PlaylistsPanel: React.FC<{
             const savedIds = savedItemIdSet(saved);
             const ids = playlists.map((item) => item.id).filter((id) => savedIds.has(id));
             if ((mode === 'schedule' || mode === 'sync') && !ids.length) {
-                toast('None of those playlists could be saved', 'error');
+                toast('None of those items could be saved', 'error');
                 return;
             }
             if (mode === 'schedule') {
@@ -611,7 +620,7 @@ const PlaylistsPanel: React.FC<{
             await loadAccountPlaylists(userId);
             setSelectedIds(new Set());
         } catch (e: any) {
-            toast(e?.message || 'Could not update playlists', 'error');
+            toast(e?.message || 'Could not update library items', 'error');
         } finally {
             setBusyAction('');
         }
@@ -624,7 +633,7 @@ const PlaylistsPanel: React.FC<{
             if (mode === 'schedule') {
                 await applyPlaylistSchedule(ids, intervalDays);
                 setItems(asItemArray(await workerFetch('saved-items')));
-                toast(`Scheduled ${ids.length} playlist${ids.length === 1 ? '' : 's'}`, 'success');
+                toast(`Scheduled ${ids.length} item${ids.length === 1 ? '' : 's'}`, 'success');
             } else {
                 try {
                     await onSyncToPlex(ids);
@@ -634,7 +643,7 @@ const PlaylistsPanel: React.FC<{
             }
             setSavedSelectedIds(new Set());
         } catch (e: any) {
-            toast(e?.message || 'Could not update saved playlists', 'error');
+            toast(e?.message || 'Could not update saved items', 'error');
         } finally {
             setBusyAction('');
         }
@@ -679,15 +688,17 @@ const PlaylistsPanel: React.FC<{
         setAdding(true);
         try {
             const previous = savedItemIdSet(items);
-            const data = await workerFetch('saved-items', {
+            const data = await apiFetch('/api/spotify-to-plex/import-link', {
                 method: 'POST',
                 body: JSON.stringify({ search: search.trim() }),
             });
-            const next = asItemArray(data) as SavedItem[];
-            setItems(next);
+            const next = asItemArray(data?.items) as SavedItem[];
+            setItems(next.length ? next : asItemArray(await workerFetch('saved-items')) as SavedItem[]);
             setSearch('');
-            toast('Playlist added — matching tracks in Plex…', 'success');
-            const addedIds = next.map((item) => String(item.id || '')).filter((id) => id && !previous.has(id));
+            const addedIds = Array.isArray(data?.syncIds) && data.syncIds.length
+                ? data.syncIds.map((id: unknown) => String(id || '')).filter(Boolean)
+                : next.map((item) => String(item.id || '')).filter((id) => id && !previous.has(id));
+            toast(data?.message || 'Saved — matching tracks in Plex…', 'success');
             if (addedIds.length) {
                 try {
                     await onSyncToPlex(addedIds);
@@ -696,7 +707,7 @@ const PlaylistsPanel: React.FC<{
                 }
             }
         } catch (e: any) {
-            toast(e?.message || 'Could not add playlist', 'error');
+            toast(e?.message || 'Could not add that Spotify link', 'error');
         } finally {
             setAdding(false);
         }
@@ -716,7 +727,7 @@ const PlaylistsPanel: React.FC<{
         <>
             <DashboardPanel
                 title="From your Spotify account"
-                subtitle="Spotify’s API only lists playlists you own or follow — not Made For You or Spotify editorial lists like Hot Hits. Paste a URL below to add those. Matching can take a few minutes on large playlists."
+                subtitle="Spotify’s API lists playlists you own or follow and albums you saved. Made For You and editorial playlists are hidden — paste a playlist, album, or artist URL below. Matching can take a few minutes on large lists."
                 controls={(
                     <div className="flex flex-wrap items-center gap-2">
                         {users.length > 1 ? (
@@ -743,7 +754,7 @@ const PlaylistsPanel: React.FC<{
             >
                 {users.length === 0 ? (
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                        <p className="text-sm text-muted">Connect a Spotify account on the Users tab, then refresh here to import playlists.</p>
+                        <p className="text-sm text-muted">Connect a Spotify account on the Users tab, then refresh here to import playlists and albums.</p>
                         <a href={portalUrl('/api/spotify-to-plex/spotify-login')} className={primaryButtonClass}>Connect Spotify</a>
                     </div>
                 ) : (
@@ -751,7 +762,7 @@ const PlaylistsPanel: React.FC<{
                         <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
                             <input
                                 className="appearance-none w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-[16px] leading-5 text-text"
-                                placeholder="Filter playlists…"
+                                placeholder="Filter playlists and albums…"
                                 value={accountFilter}
                                 onChange={(e) => setAccountFilter(e.target.value)}
                             />
@@ -784,7 +795,7 @@ const PlaylistsPanel: React.FC<{
                                     className={primaryButtonClass}
                                     onClick={() => {
                                         if (!selectedPlaylists.length) {
-                                            toast('Select one or more playlists first.', 'error');
+                                            toast('Select one or more playlists or albums first.', 'error');
                                             return;
                                         }
                                         void runOnPlaylists(selectedPlaylists, 'sync');
@@ -801,9 +812,9 @@ const PlaylistsPanel: React.FC<{
                             {accountError ? ` · ${accountError}` : ''}
                         </p>
                         {accountLoading ? (
-                            <p className="text-sm text-muted">Loading playlists from Spotify…</p>
+                            <p className="text-sm text-muted">Loading playlists and albums from Spotify…</p>
                         ) : filteredAccount.length === 0 ? (
-                            <p className="text-sm text-muted">{accountError || 'No user-owned playlists came back from Spotify. Made For You and Spotify editorial lists are hidden by Spotify’s API — paste a URL below to add one.'}</p>
+                            <p className="text-sm text-muted">{accountError || 'No playlists or saved albums came back from Spotify. Made For You and editorial lists are hidden by Spotify’s API — paste a URL below to add one.'}</p>
                         ) : (
                             <div className="max-h-[28rem] space-y-2 overflow-y-auto pr-1">
                                 {filteredAccount.map((playlist) => {
@@ -820,13 +831,14 @@ const PlaylistsPanel: React.FC<{
                                                 <img src={workerImageUrl(playlist.image)} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
                                             ) : (
                                                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-plex/15 text-plex">
-                                                    {playlist.liked ? <Heart className="h-5 w-5" /> : <ListMusic className="h-5 w-5" />}
+                                                    {playlist.liked || playlist.kind === 'liked' ? <Heart className="h-5 w-5" /> : playlist.kind === 'album' ? <Disc3 className="h-5 w-5" /> : <ListMusic className="h-5 w-5" />}
                                                 </div>
                                             )}
                                             <div className="min-w-0 flex-1">
                                                 <p className="truncate text-sm font-semibold text-text">{playlist.title}</p>
                                                 <p className="truncate text-[11px] text-muted">
-                                                    {playlist.owner || 'Spotify'}
+                                                    {playlist.kind === 'album' ? 'Album' : playlist.liked ? 'Liked Songs' : 'Playlist'}
+                                                    {playlist.owner ? ` · ${playlist.owner}` : ''}
                                                     {playlist.private ? ' · Private' : ''}
                                                     {playlist.added ? ' · Saved' : ''}
                                                 </p>
@@ -850,11 +862,11 @@ const PlaylistsPanel: React.FC<{
                 )}
             </DashboardPanel>
 
-            <DashboardPanel title="Add playlist or album" subtitle="Paste a Spotify URL or URI. That saves it, then matches tracks and creates or updates the Plex playlist.">
+            <DashboardPanel title="Add playlist, album, or artist" subtitle="Paste a Spotify URL or URI. Albums and playlists are saved as-is. An artist page adds their albums (up to 30), then matches tracks and creates or updates Plex playlists.">
                 <div className="flex flex-col gap-2 sm:flex-row">
                     <input
                         className="appearance-none text-[16px] leading-5 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-[16px] text-text"
-                        placeholder="https://open.spotify.com/playlist/… or spotify:playlist:…"
+                        placeholder="https://open.spotify.com/playlist/… · /album/… · /artist/…"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 'Enter') void addItem(); }}
@@ -868,7 +880,7 @@ const PlaylistsPanel: React.FC<{
 
             <DashboardPanel
                 title="Saved items"
-                subtitle={`${items.length} playlist${items.length === 1 ? '' : 's'} and albums. Sync to Plex creates or updates the Plex playlist. Auto-sync uses each item’s interval plus Settings → Spotify Sync.`}
+                subtitle={`${items.length} saved playlist${items.length === 1 ? '' : 's'} and albums. Sync to Plex creates or updates a Plex playlist for each item. Auto-sync uses each item’s interval plus Settings → Spotify Sync.`}
                 controls={items.length ? (
                     <div className="flex flex-wrap gap-2">
                         <button
@@ -889,7 +901,7 @@ const PlaylistsPanel: React.FC<{
                             className={primaryButtonClass}
                             onClick={() => {
                                 if (!savedSelectedIds.size) {
-                                    toast('Select one or more saved playlists first.', 'error');
+                                    toast('Select one or more saved playlists or albums first.', 'error');
                                     return;
                                 }
                                 void runOnSaved([...savedSelectedIds], 'sync');
@@ -905,7 +917,7 @@ const PlaylistsPanel: React.FC<{
                 {loading ? (
                     <p className="text-sm text-muted">Loading…</p>
                 ) : items.length === 0 ? (
-                    <p className="text-sm text-muted">Nothing saved yet. Import from your Spotify account above, or paste a playlist URL.</p>
+                    <p className="text-sm text-muted">Nothing saved yet. Import from your Spotify account above, or paste a playlist, album, or artist URL.</p>
                 ) : (
                     <div className="space-y-6">
                         {groups.map(([label, groupItems]) => (
@@ -921,12 +933,14 @@ const PlaylistsPanel: React.FC<{
                                                 <img src={workerImageUrl(item.image)} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
                                             ) : (
                                                 <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-plex/15 text-plex">
-                                                    <ListMusic className="h-5 w-5" />
+                                                    {item.type === 'spotify-album' ? <Disc3 className="h-5 w-5" /> : <ListMusic className="h-5 w-5" />}
                                                 </div>
                                             )}
                                             <div className="min-w-0 flex-1">
                                                 <p className="truncate text-sm font-semibold text-text">{item.title || item.id}</p>
                                                 <p className="text-[11px] text-muted">
+                                                    {item.type === 'spotify-album' ? 'Album' : item.type === 'plex-media' ? 'Plex' : 'Playlist'}
+                                                    {' · '}
                                                     {item.sync ? `Auto-sync every ${item.sync_interval || 1}d` : 'Manual only'}
                                                 </p>
                                             </div>

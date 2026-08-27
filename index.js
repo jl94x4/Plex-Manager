@@ -158,6 +158,10 @@ import {
     startSpotifyPlaylistSyncJob,
 } from './lib/spotify-to-plex-playlist-job.js';
 import {
+    importSavedItemsFromSpotifyLink,
+} from './lib/spotify-to-plex-playlist-import.js';
+import { createSpotifyWebClient } from './lib/spotify-to-plex-spotify-web.js';
+import {
     listRegisteredPortalJobs,
 } from './lib/portal-jobs.js';
 import {
@@ -26169,6 +26173,46 @@ app.post('/api/spotify-to-plex/sync', requireAdmin, requireSpotifyToPlex, async 
         return res.json(data || { ok: true, message: `Sync ${type} started` });
     } catch (e) {
         return res.status(e?.status || 502).json({ error: e.message || 'Failed to start Spotify Sync.' });
+    }
+});
+
+app.post('/api/spotify-to-plex/import-link', requireAdmin, requireSpotifyToPlex, async (req, res) => {
+    try {
+        const config = req.spotifyToPlexConfig || await loadFile(CONFIG_PATH, {});
+        const search = String(req.body?.search || '').trim();
+        if (!search) {
+            return res.status(400).json({ error: 'Paste a Spotify playlist, album, or artist link.' });
+        }
+        const clientId = String(config.spotifyToPlexClientId || '').trim();
+        const clientSecret = String(config.spotifyToPlexClientSecret || '').trim();
+        const web = clientId && clientSecret
+            ? createSpotifyWebClient({
+                clientId,
+                clientSecret,
+                fetchImpl: (url, opts) => fetchWithTimeout(url, opts, 20000),
+            })
+            : null;
+        const workerCall = (path, method, body) => fetchSpotifyToPlexJson({
+            config,
+            path,
+            method,
+            body,
+            fetchWithTimeout,
+            allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS,
+            timeoutMs: 30000,
+        });
+        const result = await importSavedItemsFromSpotifyLink({
+            search,
+            userId: String(req.body?.user_id || '').trim(),
+            postSavedItem: (body) => workerCall('/api/saved-items', 'POST', body),
+            listSavedItems: () => workerCall('/api/saved-items', 'GET'),
+            fetchArtist: web ? (id) => web.getArtist(id) : null,
+            fetchArtistAlbums: web ? (id) => web.getArtistAlbums(id) : null,
+            fetchTrack: web ? (id) => web.getTrack(id) : null,
+        });
+        return res.json(result);
+    } catch (e) {
+        return res.status(e?.status || 502).json({ error: e.message || 'Could not import that Spotify link.' });
     }
 });
 
