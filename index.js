@@ -148,9 +148,11 @@ import {
 import {
     fetchSpotifyToPlexJson,
     summarizeSpotifyToPlexLogs,
+    resolveSpotifyToPlexBase,
     SPOTIFY_TO_PLEX_SYNC_TYPES,
 } from './lib/spotify-to-plex-api.js';
 import {
+    createPlaylistArtworkApplier,
     syncSpotifyPlaylistsToPlex,
 } from './lib/spotify-to-plex-playlist-sync.js';
 import {
@@ -26238,6 +26240,14 @@ app.post('/api/spotify-to-plex/sync-playlist', requireAdmin, requireSpotifyToPle
                     all: jobAll,
                     fast,
                     onProgress,
+                    workerBase: resolveSpotifyToPlexBase(config, { allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS }),
+                    applyArtwork: createPlaylistArtworkApplier({
+                        fetchImpl: (url, opts) => fetchWithTimeout(url, opts, 20000),
+                        plexBaseUrl: resolveConfiguredPlexServerUrl(config),
+                        plexToken: config.plexToken,
+                        plexHeaders: plexClientHeaders,
+                        allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS,
+                    }),
                     fetchJson: (opts) => fetchSpotifyToPlexJson({
                         config,
                         fetchWithTimeout,

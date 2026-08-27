@@ -40,7 +40,7 @@ Tabs cover the worker feature set:
 
 - **Plex from portal** — portal Plex URL/token (Settings → Plex) are written into the worker automatically on save, boot, and when you open Spotify Sync.
 - **Apply Plex/Lidarr from portal** — manual re-push (`POST /api/spotify-to-plex/apply-portal-defaults`).
-- **Sync playlists to Plex** — `POST /api/spotify-to-plex/sync-playlist` starts a **server-side** job (`202`) that matches tracks and creates or updates the Plex playlist in **Spotify track order** (unmatched tracks are skipped). Body: `{ id }`, `{ ids: [...] }`, or `{ all: true }`. Progress is on `GET /api/spotify-to-plex/status` as `playlistSync` so any signed-in admin session can watch it.
+- **Sync playlists to Plex** — `POST /api/spotify-to-plex/sync-playlist` starts a **server-side** job (`202`) that matches tracks and creates or updates the Plex playlist in **Spotify track order** (unmatched tracks are skipped). After the write, the portal downloads the Spotify cover and uploads it as the Plex playlist poster. Body: `{ id }`, `{ ids: [...] }`, or `{ all: true }`. Progress is on `GET /api/spotify-to-plex/status` as `playlistSync` so any signed-in admin session can watch it.
 - **Paste a Spotify link** — `POST /api/spotify-to-plex/import-link` with `{ search }` accepts playlist, album, and artist URLs (including `intl-xx` and `?si=` share links). Artists expand into up to 30 albums, then the UI syncs those items to Plex.
 
 ## Home widget
