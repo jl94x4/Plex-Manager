@@ -14,10 +14,49 @@ type Props = {
     isAdmin?: boolean;
 };
 
+type PortalHtmlTheme = {
+    colorScheme: 'dark' | 'light';
+    card: string;
+    text: string;
+};
+
+const DEFAULT_HTML_THEME: PortalHtmlTheme = {
+    colorScheme: 'dark',
+    card: '22 27 34',
+    text: '201 209 217',
+};
+
+const rgbComponents = (value: string, fallback: string) => (
+    /^[\d.\s]+$/.test(value.trim()) ? value.trim() : fallback
+);
+
+const readPortalHtmlTheme = (): PortalHtmlTheme => {
+    if (typeof document === 'undefined') return DEFAULT_HTML_THEME;
+    const root = document.documentElement;
+    const styles = getComputedStyle(root);
+    const isLight = root.getAttribute('data-theme') === 'light';
+    return {
+        colorScheme: isLight ? 'light' : 'dark',
+        card: rgbComponents(styles.getPropertyValue('--color-card'), isLight ? '255 255 255' : DEFAULT_HTML_THEME.card),
+        text: rgbComponents(styles.getPropertyValue('--color-text'), isLight ? '22 27 34' : DEFAULT_HTML_THEME.text),
+    };
+};
+
+const buildHomeHtmlSrcDoc = (html: string, css: string, theme: PortalHtmlTheme) => {
+    const safeCss = String(css || '').replace(/<\/style/gi, '<\\/style');
+    return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>`
+        + `:root{color-scheme:${theme.colorScheme};}`
+        + `html,body{margin:0;padding:0;background:rgb(${theme.card});color:rgb(${theme.text});font-family:Inter,system-ui,sans-serif;}`
+        + `.home-custom-module-html{box-sizing:border-box;min-width:0;}`
+        + `${safeCss}`
+        + `</style></head><body><div class="home-custom-module-html">${html || ''}</div></body></html>`;
+};
+
 export const HomeCustomModuleSection: React.FC<Props> = ({ module, isAdmin = false }) => {
     const { t } = useDiscoverI18n();
     const [iframeKey, setIframeKey] = useState(0);
     const [embedBlocked, setEmbedBlocked] = useState(false);
+    const [portalTheme, setPortalTheme] = useState<PortalHtmlTheme>(DEFAULT_HTML_THEME);
     const accessible = canAccessHomeCustomModule(module, isAdmin);
     const usesProxy = homeModuleUsesProxy(module);
     const predictedEmbedIssue = module.mode === 'iframe' ? homeModuleEmbedIssue(module) : null;
@@ -29,6 +68,14 @@ export const HomeCustomModuleSection: React.FC<Props> = ({ module, isAdmin = fal
         setEmbedBlocked(false);
         setIframeKey((value) => value + 1);
     }, [module.id, module.url, module.mode, usesProxy]);
+
+    useEffect(() => {
+        const apply = () => setPortalTheme(readPortalHtmlTheme());
+        apply();
+        const observer = new MutationObserver(apply);
+        observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style'] });
+        return () => observer.disconnect();
+    }, []);
 
     if (!accessible) return null;
 
@@ -70,14 +117,15 @@ export const HomeCustomModuleSection: React.FC<Props> = ({ module, isAdmin = fal
     );
 
     if (module.mode === 'html') {
-        const srcDoc = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;padding:12px;background:transparent;color:#e8e8e8;font-family:Inter,system-ui,sans-serif;}</style>${module.css ? `<style>${String(module.css).replace(/<\/style/gi, '<\\/style')}</style>` : ''}</head><body>${module.html || ''}</body></html>`;
+        const srcDoc = buildHomeHtmlSrcDoc(module.html || '', module.css || '', portalTheme);
         return (
             <div className="glass-card p-4 md:p-5 shadow-xl w-full min-w-0">
                 {header}
                 <iframe
                     title={module.title}
                     srcDoc={srcDoc}
-                    className="min-h-[16rem] w-full rounded-xl border border-white/10 bg-black/20"
+                    className="min-h-[16rem] w-full rounded-xl"
+                    style={{ colorScheme: portalTheme.colorScheme, backgroundColor: `rgb(${portalTheme.card})` }}
                     sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
                     referrerPolicy="no-referrer"
                 />
