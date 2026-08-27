@@ -21,6 +21,8 @@ import {
     CalendarClock,
     Eye,
     Disc3,
+    ChevronLeft,
+    ChevronRight,
 } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { portalUrl } from '../shared/basePath';
@@ -51,10 +53,13 @@ import {
 
 const buttonClass = 'inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-muted hover:border-plex hover:text-plex disabled:opacity-50';
 const primaryButtonClass = 'inline-flex items-center gap-2 rounded-lg bg-plex px-3 py-1.5 text-xs font-bold text-background hover:brightness-110 disabled:opacity-50';
+const tileButtonClass = `${buttonClass} px-2 py-1 justify-center`;
+const tilePrimaryClass = `${primaryButtonClass} px-2 py-1 justify-center`;
 const rowCardClass = (selected: boolean) => (
-    `rounded-xl border p-3 ${selected ? 'border-plex/50 bg-plex/10' : 'border-white/10 bg-black/25'}`
+    `rounded-xl border p-2.5 ${selected ? 'border-plex/50 bg-plex/10' : 'border-white/10 bg-black/25'}`
 );
-const rowActionClass = 'grid w-full grid-cols-2 gap-2 lg:flex lg:w-auto lg:shrink-0 lg:flex-wrap lg:justify-end';
+const rowActionClass = 'grid w-full grid-cols-3 gap-1.5 lg:flex lg:w-auto lg:shrink-0 lg:flex-wrap lg:justify-end';
+const ACCOUNT_PAGE_SIZES = [10, 25, 50] as const;
 
 const toastListeners = new Set<(message: string, type: 'success' | 'error') => void>();
 const toast = (message: string, type: 'success' | 'error') => {
@@ -461,6 +466,8 @@ const PlaylistsPanel: React.FC<{
     const [accountLoading, setAccountLoading] = useState(false);
     const [accountError, setAccountError] = useState('');
     const [accountFilter, setAccountFilter] = useState('');
+    const [accountPageSize, setAccountPageSize] = useState<(typeof ACCOUNT_PAGE_SIZES)[number]>(10);
+    const [accountPage, setAccountPage] = useState(1);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [savedSelectedIds, setSavedSelectedIds] = useState<Set<string>>(new Set());
     const [intervalDays, setIntervalDays] = useState('2');
@@ -547,6 +554,21 @@ const PlaylistsPanel: React.FC<{
             || String(item.kind || '').toLowerCase().includes(q)
         ));
     }, [accountPlaylists, accountFilter]);
+
+    const accountTotalPages = Math.max(1, Math.ceil(filteredAccount.length / accountPageSize) || 1);
+    const safeAccountPage = Math.min(accountPage, accountTotalPages);
+    const pagedAccount = useMemo(() => {
+        const start = (safeAccountPage - 1) * accountPageSize;
+        return filteredAccount.slice(start, start + accountPageSize);
+    }, [filteredAccount, safeAccountPage, accountPageSize]);
+
+    useEffect(() => {
+        setAccountPage(1);
+    }, [accountFilter, accountPageSize, userId]);
+
+    useEffect(() => {
+        if (accountPage !== safeAccountPage) setAccountPage(safeAccountPage);
+    }, [accountPage, safeAccountPage]);
 
     const selectedPlaylists = useMemo(
         () => accountPlaylists.filter((item) => selectedIds.has(item.id)),
@@ -811,20 +833,36 @@ const PlaylistsPanel: React.FC<{
                                 </button>
                             </div>
                         </div>
-                        <p className="text-[11px] text-muted">
-                            {selectedPlaylists.length} selected · {filteredAccount.length} shown
-                            {accountError ? ` · ${accountError}` : ''}
+                        <p className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[11px] text-muted">
+                            <span>
+                                {selectedPlaylists.length} selected · {filteredAccount.length
+                                    ? `${((safeAccountPage - 1) * accountPageSize) + 1}–${Math.min(filteredAccount.length, safeAccountPage * accountPageSize)} of ${filteredAccount.length}`
+                                    : '0 shown'}
+                                {accountError ? ` · ${accountError}` : ''}
+                            </span>
+                            <CustomSelect
+                                compact
+                                className="w-[8.5rem]"
+                                value={accountPageSize}
+                                onChange={(value) => setAccountPageSize(
+                                    ACCOUNT_PAGE_SIZES.includes(Number(value) as (typeof ACCOUNT_PAGE_SIZES)[number])
+                                        ? Number(value) as (typeof ACCOUNT_PAGE_SIZES)[number]
+                                        : 10,
+                                )}
+                                options={ACCOUNT_PAGE_SIZES.map((size) => ({ value: size, label: `${size} per page` }))}
+                            />
                         </p>
                         {accountLoading ? (
                             <p className="text-sm text-muted">Loading playlists and albums from Spotify…</p>
                         ) : filteredAccount.length === 0 ? (
                             <p className="text-sm text-muted">{accountError || 'No playlists or saved albums came back from Spotify. Made For You and editorial lists are hidden by Spotify’s API — paste a URL below to add one.'}</p>
                         ) : (
-                            <div className="max-h-[28rem] space-y-2 overflow-y-auto pr-1">
-                                {filteredAccount.map((playlist) => {
+                            <>
+                            <div className="space-y-2">
+                                {pagedAccount.map((playlist) => {
                                     const selected = selectedIds.has(playlist.id);
                                     return (
-                                        <div key={playlist.id} className={`flex flex-col gap-3 lg:flex-row lg:items-center ${rowCardClass(selected)}`}>
+                                        <div key={playlist.id} className={`flex flex-col gap-2 lg:flex-row lg:items-center ${rowCardClass(selected)}`}>
                                             <button
                                                 type="button"
                                                 className="flex min-w-0 flex-1 items-start gap-3 text-left lg:items-center"
@@ -835,10 +873,10 @@ const PlaylistsPanel: React.FC<{
                                                     {selected ? <CheckSquare className="h-4 w-4 text-plex" /> : <Square className="h-4 w-4" />}
                                                 </span>
                                                 {playlist.image ? (
-                                                    <img src={workerImageUrl(playlist.image)} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
+                                                    <img src={workerImageUrl(playlist.image)} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover" />
                                                 ) : (
-                                                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-plex/15 text-plex">
-                                                        {playlist.liked || playlist.kind === 'liked' ? <Heart className="h-5 w-5" /> : playlist.kind === 'album' ? <Disc3 className="h-5 w-5" /> : <ListMusic className="h-5 w-5" />}
+                                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-plex/15 text-plex">
+                                                        {playlist.liked || playlist.kind === 'liked' ? <Heart className="h-4 w-4" /> : playlist.kind === 'album' ? <Disc3 className="h-4 w-4" /> : <ListMusic className="h-4 w-4" />}
                                                     </div>
                                                 )}
                                                 <div className="min-w-0 flex-1">
@@ -852,21 +890,47 @@ const PlaylistsPanel: React.FC<{
                                                 </div>
                                             </button>
                                             <div className={rowActionClass}>
-                                                <button type="button" className={`${buttonClass} h-10 justify-center`} onClick={() => void runOnPlaylists([playlist], 'add')} disabled={locked || playlist.added}>
+                                                <button type="button" className={tileButtonClass} onClick={() => void runOnPlaylists([playlist], 'add')} disabled={locked || playlist.added}>
                                                     {playlist.added ? 'Saved' : 'Add'}
                                                 </button>
-                                                <button type="button" className={`${buttonClass} h-10 justify-center`} onClick={() => void runOnPlaylists([playlist], 'schedule')} disabled={locked}>
+                                                <button type="button" className={tileButtonClass} onClick={() => void runOnPlaylists([playlist], 'schedule')} disabled={locked}>
                                                     Schedule
                                                 </button>
-                                                <button type="button" className={`${primaryButtonClass} col-span-2 h-10 justify-center lg:col-auto`} onClick={() => void runOnPlaylists([playlist], 'sync')} disabled={locked}>
+                                                <button type="button" className={tilePrimaryClass} onClick={() => void runOnPlaylists([playlist], 'sync')} disabled={locked} title="Sync to Plex">
                                                     {busyAction === 'sync' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
-                                                    Sync to Plex
+                                                    Sync
                                                 </button>
                                             </div>
                                         </div>
                                     );
                                 })}
                             </div>
+                            {accountTotalPages > 1 ? (
+                                <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                                    <p className="text-xs text-muted">Page {safeAccountPage} of {accountTotalPages}</p>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            className={buttonClass}
+                                            disabled={safeAccountPage <= 1}
+                                            onClick={() => setAccountPage((page) => Math.max(1, page - 1))}
+                                        >
+                                            <ChevronLeft className="h-3.5 w-3.5" />
+                                            Previous
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className={buttonClass}
+                                            disabled={safeAccountPage >= accountTotalPages}
+                                            onClick={() => setAccountPage((page) => Math.min(accountTotalPages, page + 1))}
+                                        >
+                                            Next
+                                            <ChevronRight className="h-3.5 w-3.5" />
+                                        </button>
+                                    </div>
+                                </div>
+                            ) : null}
+                            </>
                         )}
                     </div>
                 )}
@@ -970,9 +1034,9 @@ const PlaylistsPanel: React.FC<{
                                                 <button type="button" className="rounded-lg p-2 text-muted hover:text-rose-300" onClick={() => void removeItem(item.id)} title="Remove">
                                                     <Trash2 className="h-4 w-4" />
                                                 </button>
-                                                <button type="button" className={`${primaryButtonClass} h-10 min-w-0 flex-1 justify-center`} onClick={() => void runOnSaved([item.id], 'sync')} disabled={locked} title="Match tracks and create or update this playlist on Plex">
+                                                <button type="button" className={`${tilePrimaryClass} ml-auto`} onClick={() => void runOnSaved([item.id], 'sync')} disabled={locked} title="Match tracks and create or update this playlist on Plex">
                                                     {busyAction === 'saved-sync' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
-                                                    Sync to Plex
+                                                    Sync
                                                 </button>
                                             </div>
                                         </div>
