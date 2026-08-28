@@ -37,7 +37,7 @@ import { WrapUpCardGrid, AchievementsWrapUpSpotlight, periodLabel, formatWrapUpD
 import { SetupWizard } from './setup/SetupWizard';
 import { DiscoveryDashboard } from './discovery/DiscoveryDashboard';
 import { AuthPageBackground, themeClasses, SlideshowBackground } from './shared/theme';
-import { activityStreamColumnCount, activityStreamGridClass, upgraderPosterGridClass, upgraderPosterGridStyle, type UpgraderGridSize } from './shared/portalLayout';
+import { activityStreamColumnCount, activityStreamGridClass, DEFAULT_UPGRADER_GRID_SIZE, upgraderPosterGridClass, upgraderPosterGridStyle, type UpgraderGridSize } from './shared/portalLayout';
 import { DiscoverGridSizeSelect } from './discovery/DiscoverGridSizeSelect';
 import { useDiscoverGridSize } from './discovery/useDiscoverGridSize';
 import { useDiscoverI18n } from './discovery/i18n';
@@ -7071,7 +7071,7 @@ const DISCOVER_LIMIT_OPTIONS = [
     { value: '250', label: '250' },
 ];
 
-const TrendingDiscoverSection: React.FC<{ title: string; items: any[]; limit: number; showQualityBadges?: boolean; useScrollRevealAnimations?: boolean; onItemClick?: (item: any) => void; gridSize?: UpgraderGridSize }> = ({ title, items, limit, showQualityBadges = true, useScrollRevealAnimations, onItemClick, gridSize = 'medium' }) => {
+const TrendingDiscoverSection: React.FC<{ title: string; items: any[]; limit: number; showQualityBadges?: boolean; useScrollRevealAnimations?: boolean; onItemClick?: (item: any) => void; gridSize?: UpgraderGridSize }> = ({ title, items, limit, showQualityBadges = true, useScrollRevealAnimations, onItemClick, gridSize = DEFAULT_UPGRADER_GRID_SIZE }) => {
     if (!items?.length) return null;
     return (
         <ScrollReveal enabled={!!useScrollRevealAnimations} className="flex flex-col">

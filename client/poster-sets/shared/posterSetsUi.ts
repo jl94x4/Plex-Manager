@@ -2,7 +2,7 @@ import { UPGRADER_GRID_SIZE_OPTIONS } from '../../shared/portalLayout';
 import { dashboardPanelClass } from '../../shared/dashboard/DashboardChrome';
 import { MEDIUX_FILTER_OPTIONS, type PosterSetsBrowseRail } from '../types';
 
-export const POSTER_SETS_GRID_STORAGE_KEY = 'posterSetsGridSize';
+export const POSTER_SETS_GRID_STORAGE_KEY = 'posterSetsGridSize.v2';
 export const POSTER_SETS_LIBRARY_DETAIL_LAYOUT_KEY = 'posterSetsLibraryDetailLayout';
 export const POSTER_SETS_GRID_OPTIONS = UPGRADER_GRID_SIZE_OPTIONS.filter((option) => option.value !== 'list');
 

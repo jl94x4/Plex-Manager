@@ -11,6 +11,7 @@ import {
     type DiscoverView,
 } from './urlState';
 import {
+    DEFAULT_UPGRADER_GRID_SIZE,
     normalizeUpgraderGridSize,
     upgraderLandscapeGridStyle,
     upgraderPosterGridClass,
@@ -151,7 +152,7 @@ export function usePosterSetsDashboardState() {
     const searchSetsSectionRef = useRef<HTMLDivElement | null>(null);
     const [recentTick, setRecentTick] = useState(0);
     const [gridSize, setGridSize] = useState<UpgraderGridSize>(() => {
-        if (typeof window === 'undefined') return 'medium';
+        if (typeof window === 'undefined') return DEFAULT_UPGRADER_GRID_SIZE;
         return normalizeUpgraderGridSize(window.localStorage.getItem(POSTER_SETS_GRID_STORAGE_KEY));
     });
     const [libraryDetailLayout, setLibraryDetailLayout] = useState(() => {
@@ -1645,7 +1646,7 @@ export function usePosterSetsDashboardState() {
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
-        window.localStorage.setItem(POSTER_SETS_GRID_STORAGE_KEY, gridSize === 'list' ? 'medium' : gridSize);
+        window.localStorage.setItem(POSTER_SETS_GRID_STORAGE_KEY, gridSize === 'list' ? DEFAULT_UPGRADER_GRID_SIZE : gridSize);
     }, [gridSize]);
 
     useEffect(() => {
@@ -1654,15 +1655,15 @@ export function usePosterSetsDashboardState() {
     }, [libraryDetailLayout]);
 
     const posterGridClass = useMemo(
-        () => upgraderPosterGridClass(gridSize === 'list' ? 'medium' : gridSize),
+        () => upgraderPosterGridClass(gridSize === 'list' ? DEFAULT_UPGRADER_GRID_SIZE : gridSize),
         [gridSize],
     );
     const posterGridStyle = useMemo(
-        () => upgraderPosterGridStyle(gridSize === 'list' ? 'medium' : gridSize),
+        () => upgraderPosterGridStyle(gridSize === 'list' ? DEFAULT_UPGRADER_GRID_SIZE : gridSize),
         [gridSize],
     );
     const titleCardGridStyle = useMemo(
-        () => upgraderLandscapeGridStyle(gridSize === 'list' ? 'medium' : gridSize),
+        () => upgraderLandscapeGridStyle(gridSize === 'list' ? DEFAULT_UPGRADER_GRID_SIZE : gridSize),
         [gridSize],
     );
     const searchSetsUseTitleCardGrid = useMemo(

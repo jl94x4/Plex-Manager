@@ -6,7 +6,7 @@ import { askConfirm } from '../shared/confirm';
 import { usePoll } from '../shared/usePoll';
 import { CustomSelect, OverlayCheckbox } from '../shared/ui';
 import { Loader, ToastContainer, pushToast } from '../shared/toast';
-import { normalizeUpgraderGridSize, UPGRADER_GRID_SIZE_OPTIONS, UPGRADER_GRID_SIZE_STORAGE_KEY, upgraderPosterGridClass, upgraderPosterGridStyle, type UpgraderGridSize } from '../shared/portalLayout';
+import { DEFAULT_UPGRADER_GRID_SIZE, normalizeUpgraderGridSize, UPGRADER_GRID_SIZE_OPTIONS, UPGRADER_GRID_SIZE_STORAGE_KEY, upgraderPosterGridClass, upgraderPosterGridStyle, type UpgraderGridSize } from '../shared/portalLayout';
 import { DiscoverPosterCard } from '../screens';
 import type { ToastMessage } from '../shared/types';
 import { mediaAutomationApi } from '../media-automation/api';
@@ -227,7 +227,7 @@ export const UpgraderDashboard: React.FC = () => {
     }, [showDrawerItem, loading, restoreListScroll]);
 
     const [gridSize, setGridSize] = useState<UpgraderGridSize>(() => {
-        if (typeof window === 'undefined') return 'medium';
+        if (typeof window === 'undefined') return DEFAULT_UPGRADER_GRID_SIZE;
         return normalizeUpgraderGridSize(window.localStorage.getItem(UPGRADER_GRID_SIZE_STORAGE_KEY));
     });
 

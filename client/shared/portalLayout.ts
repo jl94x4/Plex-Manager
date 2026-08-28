@@ -9,6 +9,8 @@ export const discoverPosterGridClass = 'discover-poster-grid';
 
 export type UpgraderGridSize = 'small' | 'medium' | 'large' | 'xlarge' | 'list';
 
+export const DEFAULT_UPGRADER_GRID_SIZE: UpgraderGridSize = 'large';
+
 export const UPGRADER_GRID_SIZE_OPTIONS: Array<{ value: UpgraderGridSize; label: string }> = [
     { value: 'small', label: 'Grid: Small' },
     { value: 'medium', label: 'Grid: Medium' },
@@ -81,7 +83,7 @@ export const DISCOVER_ROW_CARD_WIDTH_CLASS: Record<UpgraderGridSize, string> = {
     list: 'w-[140px] sm:w-[160px]',
 };
 
-export const discoverRowCardWidthClass = (size: UpgraderGridSize) => DISCOVER_ROW_CARD_WIDTH_CLASS[size] || DISCOVER_ROW_CARD_WIDTH_CLASS.medium;
+export const discoverRowCardWidthClass = (size: UpgraderGridSize) => DISCOVER_ROW_CARD_WIDTH_CLASS[size] || DISCOVER_ROW_CARD_WIDTH_CLASS[DEFAULT_UPGRADER_GRID_SIZE];
 
 /** Square album/artist card widths for Discover music rails. */
 export const DISCOVER_MUSIC_ROW_CARD_WIDTH_CLASS: Record<UpgraderGridSize, string> = {
@@ -93,12 +95,12 @@ export const DISCOVER_MUSIC_ROW_CARD_WIDTH_CLASS: Record<UpgraderGridSize, strin
 };
 
 export const discoverMusicRowCardWidthClass = (size: UpgraderGridSize) => (
-    DISCOVER_MUSIC_ROW_CARD_WIDTH_CLASS[size] || DISCOVER_MUSIC_ROW_CARD_WIDTH_CLASS.medium
+    DISCOVER_MUSIC_ROW_CARD_WIDTH_CLASS[size] || DISCOVER_MUSIC_ROW_CARD_WIDTH_CLASS[DEFAULT_UPGRADER_GRID_SIZE]
 );
 
-export const UPGRADER_GRID_SIZE_STORAGE_KEY = 'upgraderGridSize';
+export const UPGRADER_GRID_SIZE_STORAGE_KEY = 'upgraderGridSize.v2';
 
 export const normalizeUpgraderGridSize = (value: unknown): UpgraderGridSize => {
     if (value === 'small' || value === 'medium' || value === 'large' || value === 'xlarge' || value === 'list') return value;
-    return 'medium';
+    return DEFAULT_UPGRADER_GRID_SIZE;
 };

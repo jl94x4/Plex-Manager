@@ -24,6 +24,7 @@ import {
 import { CustomSelect } from '../../shared/ui';
 import { NoPosterPlaceholder } from '../../shared/NoPosterPlaceholder';
 import {
+    DEFAULT_UPGRADER_GRID_SIZE,
     normalizeUpgraderGridSize,
     UPGRADER_GRID_SIZE_OPTIONS,
     upgraderPosterGridClass,
@@ -36,6 +37,8 @@ const LEGACY_GRID_MAP: Record<string, UpgraderGridSize> = {
     md: 'medium',
     lg: 'large',
 };
+
+const GALLERY_GRID_DEFAULT_VERSION = 2;
 
 type StatusFilter = 'all' | 'pinned' | 'tracked' | 'missing_art';
 type SortMode = 'title' | 'library';
@@ -105,7 +108,7 @@ const Gallery: React.FC = () => {
     const [selectedLibrary, setSelectedLibrary] = useState<string>('All');
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
     const [sortMode, setSortMode] = useState<SortMode>('title');
-    const [gridSize, setGridSize] = useState<UpgraderGridSize>('medium');
+    const [gridSize, setGridSize] = useState<UpgraderGridSize>(DEFAULT_UPGRADER_GRID_SIZE);
     const [pinningId, setPinningId] = useState<string | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [fixingArtId, setFixingArtId] = useState<string | null>(null);
@@ -134,7 +137,7 @@ const Gallery: React.FC = () => {
                 if (state.statusFilter !== undefined) setStatusFilter(state.statusFilter);
                 else if (state.showPinnedOnly) setStatusFilter('pinned');
                 if (state.sortMode !== undefined) setSortMode(state.sortMode);
-                if (state.gridSize !== undefined) {
+                if (Number(state.gridDefaultVersion) === GALLERY_GRID_DEFAULT_VERSION && state.gridSize !== undefined) {
                     const raw = String(state.gridSize);
                     setGridSize(normalizeUpgraderGridSize(LEGACY_GRID_MAP[raw] || raw));
                 }
@@ -151,6 +154,7 @@ const Gallery: React.FC = () => {
             statusFilter,
             sortMode,
             gridSize,
+            gridDefaultVersion: GALLERY_GRID_DEFAULT_VERSION,
         }));
     }, [searchQuery, selectedLibrary, statusFilter, sortMode, gridSize]);
 
