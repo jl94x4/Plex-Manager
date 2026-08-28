@@ -2376,3 +2376,10 @@ Object.assign(fr, { profilePage: {
     viewAsUser: 'Voir en tant qu’utilisateur',
     hours: 'Heures',
 } });
+Object.assign(fr, { homeDashboard: { ...fr.homeDashboard, nowPlayingCompanion: { ...fr.homeDashboard.nowPlayingCompanion,
+    sections: { ...fr.homeDashboard.nowPlayingCompanion.sections, storySnapshot: 'Résumé de l’histoire' },
+    overview: { show: 'À propos de la série', movie: 'À propos du film', season: 'Aperçu de la saison {season}', episode: 'Épisode S{season}E{episode}', episodeWithName: 'Épisode S{season}E{episode} : {name}', readMore: 'Lire la suite', readLess: 'Afficher moins', unavailable: 'Aucun résumé n’est encore disponible pour ce titre.' },
+    crew: { popularity: 'Popularité {value}', otherRoles: 'Également sur ce titre : {roles}', productionSnapshot: 'Aperçu de la production', moreCrew: 'Plus de membres de l’équipe', networks: 'Réseaux' },
+    header: { ...fr.homeDashboard.nowPlayingCompanion.header, playbackProgress: '{type} · {progress} % visionné' },
+    summary: { progress: 'progression {progress} %', throughSession: '{progress} % de cette session' },
+} } });

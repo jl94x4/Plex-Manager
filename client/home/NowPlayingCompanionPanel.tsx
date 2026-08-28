@@ -398,7 +398,10 @@ const CompanionHeroCard: React.FC<CompanionHeroCardProps> = ({
                 </div>
                 <div className="min-w-0 flex-1">
                     <p className="text-[10px] uppercase tracking-[0.22em] text-emerald-200/90 font-bold">
-                        {mediaType === 'tv' ? 'Series' : 'Feature'} · {progress}% watched
+                        {t('homeDashboard.nowPlayingCompanion.header.playbackProgress', {
+                            type: mediaType === 'tv' ? t('mediaType.series') : t('mediaType.movie'),
+                            progress,
+                        })}
                     </p>
                     <h4 className="text-lg sm:text-xl font-black text-white leading-tight truncate">
                         {title}{year ? ` (${year})` : ''}
@@ -1262,7 +1265,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
     };
 
     const copyRoomSummary = async () => {
-        const summary = `${title}${year ? ` (${year})` : ''} - ${mediaType.toUpperCase()} - progress ${Math.round(Number(session.progress) || 0)}%`;
+        const summary = `${title}${year ? ` (${year})` : ''} - ${mediaType.toUpperCase()} - ${t('homeDashboard.nowPlayingCompanion.summary.progress', { progress: Math.round(Number(session.progress) || 0) })}`;
         if (navigator?.clipboard?.writeText) {
             try {
                 await navigator.clipboard.writeText(summary);
@@ -2049,7 +2052,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
                                     <div className="min-w-0">
                                         <p className="text-[10px] uppercase tracking-[0.2em] text-violet-200/90 font-bold">Deep dive</p>
                                         <p className="text-lg font-black text-white truncate">{title}</p>
-                                        <p className="text-xs text-white/70 mt-1">{sessionProgress}% through this session</p>
+                                        <p className="text-xs text-white/70 mt-1">{t('homeDashboard.nowPlayingCompanion.summary.throughSession', { progress: sessionProgress })}</p>
                                     </div>
                                 </div>
                             </div>
