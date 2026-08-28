@@ -16,6 +16,7 @@ const EVENT_LABEL_KEYS: Record<string, string> = {
     scanner_deleted: 'settings.notifications.templates.events.scanner_deleted',
     scanner_upgrade: 'settings.notifications.templates.events.scanner_upgrade',
     scanner_import: 'settings.notifications.templates.events.scanner_import',
+    scanner_grab: 'settings.notifications.templates.events.scanner_grab',
     status_down: 'settings.notifications.templates.events.status_down',
     status_up: 'settings.notifications.templates.events.status_up',
     media_job_failed: 'settings.notifications.templates.events.media_job_failed',
@@ -98,7 +99,7 @@ export const NotificationTemplatesPanel: React.FC<Props> = ({
     };
 
     const variableHint = useMemo(
-        () => '{title} {user} {media_type} {status} {portal_url} {year} {season} {server_name} {decline_reason} {release_date} {release_type}',
+        () => '{title} {user} {media_type} {status} {portal_url} {year} {season} {server_name} {decline_reason} {release_date} {release_type} {filename}',
         [],
     );
 

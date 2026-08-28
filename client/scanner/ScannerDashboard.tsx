@@ -110,7 +110,7 @@ const readManualPathCollapsed = () => {
     }
 };
 
-const ACTIVITY_EVENT_FILTER_ORDER = ['import', 'upgrade', 'deleted', 'rename', 'manual', 'refresh', 'other'];
+const ACTIVITY_EVENT_FILTER_ORDER = ['import', 'grab', 'upgrade', 'deleted', 'rename', 'manual', 'refresh', 'other'];
 
 const ActionIcon: React.FC<{ action?: string; className?: string }> = ({ action, className }) => {
     const key = String(action || '').toLowerCase();

@@ -244,6 +244,8 @@ type Props = {
     setScannerNotifyUpgrade: (v: boolean) => void;
     scannerNotifyImport: boolean;
     setScannerNotifyImport: (v: boolean) => void;
+    scannerNotifyGrab: boolean;
+    setScannerNotifyGrab: (v: boolean) => void;
     webPushEnabled: boolean;
     setWebPushEnabled: (v: boolean) => void;
     notificationTemplates: Record<string, Record<string, string>>;
@@ -332,6 +334,8 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
     setScannerNotifyUpgrade,
     scannerNotifyImport,
     setScannerNotifyImport,
+    scannerNotifyGrab,
+    setScannerNotifyGrab,
     webPushEnabled,
     setWebPushEnabled,
     notificationTemplates,
@@ -403,6 +407,7 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
         scanner_deleted: t('settings.notifications.events.scanner_deleted'),
         scanner_upgrade: t('settings.notifications.events.scanner_upgrade'),
         scanner_import: t('settings.notifications.events.scanner_import'),
+        scanner_grab: t('settings.notifications.events.scanner_grab'),
         status_down: t('settings.notifications.events.status_down'),
         status_up: t('settings.notifications.events.status_up'),
         media_job_failed: t('settings.notifications.events.media_job_failed'),
@@ -734,6 +739,13 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                     description={t('settings.notifications.scannerActivity.importDescription')}
                     checked={scannerNotifyImport}
                     onChange={setScannerNotifyImport}
+                    border={false}
+                />
+                <SettingsToggleRow
+                    title={t('settings.notifications.scannerActivity.grabTitle')}
+                    description={t('settings.notifications.scannerActivity.grabDescription')}
+                    checked={scannerNotifyGrab}
+                    onChange={setScannerNotifyGrab}
                     border={false}
                 />
             </div>

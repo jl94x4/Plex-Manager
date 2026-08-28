@@ -2343,7 +2343,7 @@ const loadFile = async (path, defaultContent) => {
     }
 };
 
-const notifyOps = async (event, { title, body, href, dedupeKey, cooldownMs, meta } = {}) => {
+const notifyOps = async (event, { title, body, href, dedupeKey, cooldownMs, meta, filename } = {}) => {
     try {
         const config = await loadFile(CONFIG_PATH, {});
         return await notifyOpsAdmins({
@@ -2355,6 +2355,7 @@ const notifyOps = async (event, { title, body, href, dedupeKey, cooldownMs, meta
             dedupeKey,
             cooldownMs,
             meta,
+            filename,
             loadUsers: () => loadFile(USERS_PATH, []),
             log,
         });
@@ -2369,12 +2370,19 @@ const notifyScannerActivity = (config, meta = {}, scan = null) => {
     if (!event || !isScannerActivityNotifyEnabled(config, event)) return;
     const title = formatScannerNotifyTitle(meta, scan);
     const folder = String(scan?.folder || '').trim();
+    const filename = String(meta.filename || '').trim();
+    const body = event === 'scanner_grab'
+        ? (filename || title)
+        : [meta.reason, folder].filter(Boolean).join(' · ');
     void (async () => {
         const artwork = await resolveScannerNotifyPoster({ artwork: meta, config });
         await notifyOps(event, {
             title,
-            body: [meta.reason, folder].filter(Boolean).join(' · '),
-            dedupeKey: `scanner:${event}:${title}`,
+            body,
+            filename: filename || title,
+            dedupeKey: event === 'scanner_grab'
+                ? `scanner:${event}:${title}:${filename || ''}`
+                : `scanner:${event}:${title}`,
             meta: artwork,
         });
     })().catch(() => {});
@@ -4316,6 +4324,7 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             notifyScannerDeleted,
             notifyScannerUpgrade,
             notifyScannerImport,
+            notifyScannerGrab,
             notifySpotifySyncFailed,
             notifyStatusDown,
             notifyStatusUp,
@@ -4382,6 +4391,7 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             notifyScannerDeleted,
             notifyScannerUpgrade,
             notifyScannerImport,
+            notifyScannerGrab,
             notifySpotifySyncFailed,
             notifyStatusDown,
             notifyStatusUp,
@@ -5483,6 +5493,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 scannerNotifyDeleted: config.scannerNotifyDeleted === true,
                 scannerNotifyUpgrade: config.scannerNotifyUpgrade === true,
                 scannerNotifyImport: config.scannerNotifyImport === true,
+                scannerNotifyGrab: config.scannerNotifyGrab === true,
                 notificationTemplates: normalizeNotificationTemplates(config.notificationTemplates),
                 notificationTemplateDefaults: DEFAULT_NOTIFY_TEMPLATES,
                 notificationTemplateEvents: NOTIFY_EVENTS,
@@ -5676,6 +5687,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 scannerNotifyDeleted: false,
                 scannerNotifyUpgrade: false,
                 scannerNotifyImport: false,
+                scannerNotifyGrab: false,
                 notificationTemplates: {},
                 notificationTemplateDefaults: DEFAULT_NOTIFY_TEMPLATES,
                 notificationTemplateEvents: NOTIFY_EVENTS,
@@ -5746,7 +5758,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         inactiveCleanupEnabled, inactiveCleanupDays,
         primaryColor, customLogoUrl, customLoginLogoUrl, loginLogoCircleFrame, customFaviconUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, customNavTabs, homeCustomModules, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
-        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, spotifyToPlexEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, supportTicketsEnabled, chatEnabled, chatMentionNotifyInApp, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, scannerNotifyDeleted, scannerNotifyUpgrade, scannerNotifyImport, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, spotifyToPlexInternalUrl, spotifyToPlexClientId, spotifyToPlexClientSecret, spotifyToPlexEncryptionKey, spotifyToPlexHomeWidgetEnabled, spotifyToPlexScheduleMode, spotifyToPlexScheduledSyncEnabled, spotifyToPlexScheduledSyncIntervalHours, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
+        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, spotifyToPlexEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, supportTicketsEnabled, chatEnabled, chatMentionNotifyInApp, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, scannerNotifyDeleted, scannerNotifyUpgrade, scannerNotifyImport, scannerNotifyGrab, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, spotifyToPlexInternalUrl, spotifyToPlexClientId, spotifyToPlexClientSecret, spotifyToPlexEncryptionKey, spotifyToPlexHomeWidgetEnabled, spotifyToPlexScheduleMode, spotifyToPlexScheduledSyncEnabled, spotifyToPlexScheduledSyncIntervalHours, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
     } = req.body;
 
@@ -6316,6 +6328,9 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         scannerNotifyImport: scannerNotifyImport !== undefined
             ? !!scannerNotifyImport
             : !!existingConfig.scannerNotifyImport,
+        scannerNotifyGrab: scannerNotifyGrab !== undefined
+            ? !!scannerNotifyGrab
+            : !!existingConfig.scannerNotifyGrab,
         webPushEnabled: webPushEnabled !== undefined
             ? !!webPushEnabled
             : (existingConfig.webPushEnabled !== false),
@@ -27466,15 +27481,19 @@ const handleArrTrigger = async (req, res, kind) => {
         if (!paths.length) {
             log(`[scanner] ${kind} ${eventType || 'event'} produced no paths`);
             const meta = classifyArrEvent(kind, event);
+            const isGrab = meta.action === 'grab';
             await appendLog({
-                ok: false,
-                folder: 'Webhook received — no scan queued',
+                ok: isGrab,
+                folder: isGrab
+                    ? (meta.filename || 'Grab — download started')
+                    : 'Webhook received — no scan queued',
                 source: `${kind}:${trigger.name}`,
                 eventType: eventType || 'Unknown',
                 action: meta.action || 'ignored',
-                reason: 'No media paths',
+                reason: isGrab ? 'Grab' : 'No media paths',
                 title: meta.title || `${kind.charAt(0).toUpperCase()}${kind.slice(1)} webhook`,
-                error: `${eventType || 'Unknown'} webhook contained no usable media paths.`,
+                quality: meta.quality,
+                error: isGrab ? undefined : `${eventType || 'Unknown'} webhook contained no usable media paths.`,
             }, { countProcessed: false });
             notifyScannerActivity(config, meta);
             if (kind === 'sonarr' && /^download$/i.test(eventType)) {

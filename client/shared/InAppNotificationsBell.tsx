@@ -18,6 +18,7 @@ import {
     Music,
     AlertTriangle,
     Cpu,
+    Download,
     Sparkles,
     Trash2,
     Tv,
@@ -162,6 +163,12 @@ const typeVisual = (type?: string) => {
                 tone: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/35',
                 tile: 'from-emerald-500/30 via-teal-500/10 to-card',
             };
+        case 'scanner_grab':
+            return {
+                Icon: Download,
+                tone: 'text-sky-400 bg-sky-500/15 border-sky-500/35',
+                tile: 'from-sky-500/30 via-cyan-500/10 to-card',
+            };
         case 'status_down':
             return {
                 Icon: AlertTriangle,
@@ -210,6 +217,7 @@ const STACK_TITLE_TYPES = new Set([
     'scanner_deleted',
     'scanner_upgrade',
     'scanner_import',
+    'scanner_grab',
     'status_down',
     'status_up',
     'media_job_failed',

@@ -1,6 +1,7 @@
 export type ScannerAction =
     | 'import'
     | 'upgrade'
+    | 'grab'
     | 'file-delete'
     | 'series-delete'
     | 'movie-delete'
@@ -32,7 +33,7 @@ export const scannerActionFilterKey = (action?: string, isUpgrade?: boolean): st
         }
         return 'file-delete';
     }
-    if (raw === 'import' || raw === 'rename' || raw === 'manual' || raw === 'refresh' || raw === 'test') {
+    if (raw === 'import' || raw === 'grab' || raw === 'rename' || raw === 'manual' || raw === 'refresh' || raw === 'test') {
         return raw;
     }
     return raw || 'other';
@@ -44,6 +45,7 @@ export const scannerActionFilterGroup = (action?: string, isUpgrade?: boolean): 
     if (key === 'upgrade') return 'upgrade';
     if (key.includes('delete')) return 'deleted';
     if (key === 'import') return 'import';
+    if (key === 'grab') return 'grab';
     if (key === 'rename') return 'rename';
     if (key === 'manual') return 'manual';
     if (key === 'refresh' || key === 'test') return 'refresh';
@@ -53,6 +55,7 @@ export const scannerActionFilterGroup = (action?: string, isUpgrade?: boolean): 
 export const SCANNER_ACTION_FILTER_LABELS: Record<string, string> = {
     all: 'All events',
     import: 'Imports',
+    grab: 'Grabs',
     upgrade: 'Upgrades',
     deleted: 'Deleted',
     rename: 'Renames',
@@ -65,6 +68,7 @@ export const SCANNER_ACTION_FILTER_LABELS: Record<string, string> = {
 export const SCANNER_ACTION_FILTER_LABEL_KEYS: Record<string, string> = {
     all: 'scanner.filters.allEvents',
     import: 'scanner.filters.imports',
+    grab: 'scanner.filters.grabs',
     upgrade: 'scanner.filters.upgrades',
     deleted: 'scanner.filters.deleted',
     rename: 'scanner.filters.renames',
@@ -87,6 +91,13 @@ export const scannerActionStyles = (action?: string, isUpgrade?: boolean): {
                 labelKey: 'scanner.activity.actions.import',
                 className: 'bg-emerald-500/15 text-emerald-300 border-emerald-400/30',
                 iconTone: 'text-emerald-300',
+            };
+        case 'grab':
+            return {
+                label: 'Grab',
+                labelKey: 'scanner.activity.actions.grab',
+                className: 'bg-sky-500/15 text-sky-300 border-sky-400/30',
+                iconTone: 'text-sky-300',
             };
         case 'upgrade':
             return {
