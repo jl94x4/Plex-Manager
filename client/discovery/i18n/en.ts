@@ -2828,7 +2828,9 @@ Object.assign(en, { homeDashboard: { ...en.homeDashboard, nowPlayingCompanion: {
         title: 'Second Screen Companion',
         subtitle: 'Live context for {title} - only on Home hero.',
         subtitleWithYear: 'Live context for {title} ({year}) - only on Home hero.',
+        playbackProgress: '{type} · {progress}% watched',
     },
+    summary: { progress: 'progress {progress}%', throughSession: '{progress}% through this session' },
     tabs: { companion: 'Companion', deepDive: 'Deep Dive', watchRoom: 'Watch Room' },
     actions: {
         enableCompanion: 'Enable second-screen companion', collapse: 'Collapse', expand: 'Expand',
