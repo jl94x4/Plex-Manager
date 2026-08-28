@@ -97,8 +97,8 @@ export const PendingRequestsHomeWidget: React.FC<{
                 body: JSON.stringify({ title: item.title }),
             });
             onToast?.(t('homeDashboard.admin.approvedToast', { title: item.title }), 'success');
-            await load({ silent: true });
             onActionComplete?.();
+            void load({ silent: true });
         } catch (e: any) {
             onToast?.(e?.message || t('homeDashboard.admin.approveFailed'), 'error');
         } finally {

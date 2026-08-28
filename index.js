@@ -12729,7 +12729,7 @@ app.post('/api/requests/:id/approve', requireAdmin, async (req, res) => {
                 engine: 'portal',
                 arrInstanceId: result?.arrInstanceId || null,
             });
-            await notifyPortalRequestDecision(config, result, { approved: true });
+            void notifyPortalRequestDecision(config, result, { approved: true });
             return res.json({ success: true, title, engine: 'portal' });
         }
         const existing = await requestAppService.getRequest(config, requestId).catch(() => null);
@@ -12749,7 +12749,7 @@ app.post('/api/requests/:id/approve', requireAdmin, async (req, res) => {
             || `Request #${requestId}`;
         lifecycleRecord.title = title;
         await appendAuditLog('request_approved', req.user, null, { requestId, title, overrides: overrides || null });
-        await notifyPortalRequestDecision(config, lifecycleRecord, { approved: true });
+        void notifyPortalRequestDecision(config, lifecycleRecord, { approved: true });
         res.json({ success: true, title });
     } catch (error) {
         res.status(error.status || 502).json({ error: error.message || 'Failed to approve request' });

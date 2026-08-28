@@ -261,8 +261,8 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                 body: JSON.stringify({ title: item.title }),
             });
             addToast(t('requestsAdmin.toasts.approvedTitle', { title: item.title }));
-            await loadData({ silent: true });
             onCountsChange?.();
+            void loadData({ silent: true });
         } catch (e: any) {
             addToast(e?.message || t('requestsAdmin.errors.approve'), 'error');
         } finally {
