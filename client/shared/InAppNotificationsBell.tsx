@@ -169,6 +169,18 @@ const typeVisual = (type?: string) => {
                 tone: 'text-sky-400 bg-sky-500/15 border-sky-500/35',
                 tile: 'from-sky-500/30 via-cyan-500/10 to-card',
             };
+        case 'scanner_update':
+            return {
+                Icon: Sparkles,
+                tone: 'text-indigo-400 bg-indigo-500/15 border-indigo-500/35',
+                tile: 'from-indigo-500/30 via-violet-500/10 to-card',
+            };
+        case 'scanner_interaction':
+            return {
+                Icon: AlertTriangle,
+                tone: 'text-orange-400 bg-orange-500/15 border-orange-500/35',
+                tile: 'from-orange-500/30 via-amber-500/10 to-card',
+            };
         case 'status_down':
             return {
                 Icon: AlertTriangle,
@@ -218,6 +230,8 @@ const STACK_TITLE_TYPES = new Set([
     'scanner_upgrade',
     'scanner_import',
     'scanner_grab',
+    'scanner_update',
+    'scanner_interaction',
     'status_down',
     'status_up',
     'media_job_failed',

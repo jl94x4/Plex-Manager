@@ -8,6 +8,8 @@ export type ScannerAction =
     | 'artist-delete'
     | 'rename'
     | 'manual'
+    | 'manual-interaction'
+    | 'app-update'
     | 'test'
     | 'refresh'
     | string;
@@ -33,7 +35,7 @@ export const scannerActionFilterKey = (action?: string, isUpgrade?: boolean): st
         }
         return 'file-delete';
     }
-    if (raw === 'import' || raw === 'grab' || raw === 'rename' || raw === 'manual' || raw === 'refresh' || raw === 'test') {
+    if (raw === 'import' || raw === 'grab' || raw === 'rename' || raw === 'manual' || raw === 'manual-interaction' || raw === 'app-update' || raw === 'refresh' || raw === 'test') {
         return raw;
     }
     return raw || 'other';
@@ -48,6 +50,8 @@ export const scannerActionFilterGroup = (action?: string, isUpgrade?: boolean): 
     if (key === 'grab') return 'grab';
     if (key === 'rename') return 'rename';
     if (key === 'manual') return 'manual';
+    if (key === 'manual-interaction') return 'manual-interaction';
+    if (key === 'app-update') return 'app-update';
     if (key === 'refresh' || key === 'test') return 'refresh';
     return key || 'other';
 };
@@ -60,6 +64,8 @@ export const SCANNER_ACTION_FILTER_LABELS: Record<string, string> = {
     deleted: 'Deleted',
     rename: 'Renames',
     manual: 'Manual',
+    'manual-interaction': 'Needs attention',
+    'app-update': 'Updates',
     refresh: 'Refresh',
     other: 'Other',
 };
@@ -73,6 +79,8 @@ export const SCANNER_ACTION_FILTER_LABEL_KEYS: Record<string, string> = {
     deleted: 'scanner.filters.deleted',
     rename: 'scanner.filters.renames',
     manual: 'scanner.filters.manual',
+    'manual-interaction': 'scanner.filters.interaction',
+    'app-update': 'scanner.filters.updates',
     refresh: 'scanner.filters.refresh',
     other: 'scanner.filters.other',
 };
@@ -98,6 +106,20 @@ export const scannerActionStyles = (action?: string, isUpgrade?: boolean): {
                 labelKey: 'scanner.activity.actions.grab',
                 className: 'bg-sky-500/15 text-sky-300 border-sky-400/30',
                 iconTone: 'text-sky-300',
+            };
+        case 'app-update':
+            return {
+                label: 'Update',
+                labelKey: 'scanner.activity.actions.appUpdate',
+                className: 'bg-indigo-500/15 text-indigo-300 border-indigo-400/30',
+                iconTone: 'text-indigo-300',
+            };
+        case 'manual-interaction':
+            return {
+                label: 'Needs attention',
+                labelKey: 'scanner.activity.actions.interaction',
+                className: 'bg-orange-500/15 text-orange-300 border-orange-400/30',
+                iconTone: 'text-orange-300',
             };
         case 'upgrade':
             return {

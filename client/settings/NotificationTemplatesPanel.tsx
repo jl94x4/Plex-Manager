@@ -17,6 +17,8 @@ const EVENT_LABEL_KEYS: Record<string, string> = {
     scanner_upgrade: 'settings.notifications.templates.events.scanner_upgrade',
     scanner_import: 'settings.notifications.templates.events.scanner_import',
     scanner_grab: 'settings.notifications.templates.events.scanner_grab',
+    scanner_update: 'settings.notifications.templates.events.scanner_update',
+    scanner_interaction: 'settings.notifications.templates.events.scanner_interaction',
     status_down: 'settings.notifications.templates.events.status_down',
     status_up: 'settings.notifications.templates.events.status_up',
     media_job_failed: 'settings.notifications.templates.events.media_job_failed',

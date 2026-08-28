@@ -116,7 +116,7 @@ export const resolveNotificationDestination = (item: NotificationLike): Notifica
     if (href.startsWith('/collexions') || type === 'collexions_failed') {
         return { kind: 'route', route: 'collexions', labelKey: 'notifications.openCollexions' };
     }
-    if (href.startsWith('/scanner') || type === 'scanner_failed' || type === 'scanner_deleted' || type === 'scanner_upgrade' || type === 'scanner_import' || type === 'scanner_grab') {
+    if (href.startsWith('/scanner') || type === 'scanner_failed' || type === 'scanner_deleted' || type === 'scanner_upgrade' || type === 'scanner_import' || type === 'scanner_grab' || type === 'scanner_update' || type === 'scanner_interaction') {
         return { kind: 'route', route: 'scanner', labelKey: 'notifications.openScanner' };
     }
     if (href.startsWith('/status') || type === 'status_down' || type === 'status_up') {

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePoll } from '../shared/usePoll';
 import {
     ArrowUpCircle,
+    AlertTriangle,
     ChevronDown,
     ChevronLeft,
     ChevronRight,
@@ -110,11 +111,13 @@ const readManualPathCollapsed = () => {
     }
 };
 
-const ACTIVITY_EVENT_FILTER_ORDER = ['import', 'grab', 'upgrade', 'deleted', 'rename', 'manual', 'refresh', 'other'];
+const ACTIVITY_EVENT_FILTER_ORDER = ['import', 'grab', 'upgrade', 'deleted', 'rename', 'manual', 'manual-interaction', 'app-update', 'refresh', 'other'];
 
 const ActionIcon: React.FC<{ action?: string; className?: string }> = ({ action, className }) => {
     const key = String(action || '').toLowerCase();
     if (key === 'upgrade') return <ArrowUpCircle className={className} />;
+    if (key === 'app-update') return <RefreshCw className={className} />;
+    if (key === 'manual-interaction') return <AlertTriangle className={className} />;
     if (key.includes('delete')) return <FileMinus2 className={className} />;
     if (key === 'rename') return <Wand2 className={className} />;
     if (key === 'manual') return <FolderInput className={className} />;

@@ -93,6 +93,8 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
     const [notifyScannerUpgrade, setNotifyScannerUpgrade] = useState(user?.notifyScannerUpgrade !== false);
     const [notifyScannerImport, setNotifyScannerImport] = useState(user?.notifyScannerImport !== false);
     const [notifyScannerGrab, setNotifyScannerGrab] = useState(user?.notifyScannerGrab !== false);
+    const [notifyScannerUpdate, setNotifyScannerUpdate] = useState(user?.notifyScannerUpdate !== false);
+    const [notifyScannerInteraction, setNotifyScannerInteraction] = useState(user?.notifyScannerInteraction !== false);
     const [notifyStatusDown, setNotifyStatusDown] = useState(user?.notifyStatusDown !== false);
     const [notifyStatusUp, setNotifyStatusUp] = useState(user?.notifyStatusUp !== false);
     const [notifyMediaJobFailed, setNotifyMediaJobFailed] = useState(user?.notifyMediaJobFailed !== false);
@@ -142,6 +144,8 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
         setNotifyScannerUpgrade(user?.notifyScannerUpgrade !== false);
         setNotifyScannerImport(user?.notifyScannerImport !== false);
         setNotifyScannerGrab(user?.notifyScannerGrab !== false);
+        setNotifyScannerUpdate(user?.notifyScannerUpdate !== false);
+        setNotifyScannerInteraction(user?.notifyScannerInteraction !== false);
         setNotifyStatusDown(user?.notifyStatusDown !== false);
         setNotifyStatusUp(user?.notifyStatusUp !== false);
         setNotifyMediaJobFailed(user?.notifyMediaJobFailed !== false);
@@ -183,6 +187,8 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
         user?.notifyScannerUpgrade,
         user?.notifyScannerImport,
         user?.notifyScannerGrab,
+        user?.notifyScannerUpdate,
+        user?.notifyScannerInteraction,
         user?.notifyStatusDown,
         user?.notifyStatusUp,
         user?.notifyMediaJobFailed,
@@ -289,6 +295,8 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                     notifyScannerUpgrade,
                     notifyScannerImport,
                     notifyScannerGrab,
+                    notifyScannerUpdate,
+                    notifyScannerInteraction,
                     notifyStatusDown,
                     notifyStatusUp,
                     notifyMediaJobFailed,
@@ -667,6 +675,22 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                     on={notifyScannerGrab}
                                     onToggle={flip(setNotifyScannerGrab)}
                                     ariaLabel={t('homeDashboard.toggleScannerGrabAria')}
+                                    disabled={busy}
+                                />
+                                <PrefToggle
+                                    title={t('homeDashboard.scannerUpdateAlerts')}
+                                    hint={t('homeDashboard.scannerUpdateAlertsHint')}
+                                    on={notifyScannerUpdate}
+                                    onToggle={flip(setNotifyScannerUpdate)}
+                                    ariaLabel={t('homeDashboard.toggleScannerUpdateAria')}
+                                    disabled={busy}
+                                />
+                                <PrefToggle
+                                    title={t('homeDashboard.scannerInteractionAlerts')}
+                                    hint={t('homeDashboard.scannerInteractionAlertsHint')}
+                                    on={notifyScannerInteraction}
+                                    onToggle={flip(setNotifyScannerInteraction)}
+                                    ariaLabel={t('homeDashboard.toggleScannerInteractionAria')}
                                     disabled={busy}
                                 />
                                 <PrefToggle

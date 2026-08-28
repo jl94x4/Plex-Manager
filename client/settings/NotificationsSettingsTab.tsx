@@ -246,6 +246,10 @@ type Props = {
     setScannerNotifyImport: (v: boolean) => void;
     scannerNotifyGrab: boolean;
     setScannerNotifyGrab: (v: boolean) => void;
+    scannerNotifyUpdate: boolean;
+    setScannerNotifyUpdate: (v: boolean) => void;
+    scannerNotifyInteraction: boolean;
+    setScannerNotifyInteraction: (v: boolean) => void;
     webPushEnabled: boolean;
     setWebPushEnabled: (v: boolean) => void;
     notificationTemplates: Record<string, Record<string, string>>;
@@ -336,6 +340,10 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
     setScannerNotifyImport,
     scannerNotifyGrab,
     setScannerNotifyGrab,
+    scannerNotifyUpdate,
+    setScannerNotifyUpdate,
+    scannerNotifyInteraction,
+    setScannerNotifyInteraction,
     webPushEnabled,
     setWebPushEnabled,
     notificationTemplates,
@@ -408,6 +416,8 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
         scanner_upgrade: t('settings.notifications.events.scanner_upgrade'),
         scanner_import: t('settings.notifications.events.scanner_import'),
         scanner_grab: t('settings.notifications.events.scanner_grab'),
+        scanner_update: t('settings.notifications.events.scanner_update'),
+        scanner_interaction: t('settings.notifications.events.scanner_interaction'),
         status_down: t('settings.notifications.events.status_down'),
         status_up: t('settings.notifications.events.status_up'),
         media_job_failed: t('settings.notifications.events.media_job_failed'),
@@ -746,6 +756,20 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                     description={t('settings.notifications.scannerActivity.grabDescription')}
                     checked={scannerNotifyGrab}
                     onChange={setScannerNotifyGrab}
+                    border={false}
+                />
+                <SettingsToggleRow
+                    title={t('settings.notifications.scannerActivity.updateTitle')}
+                    description={t('settings.notifications.scannerActivity.updateDescription')}
+                    checked={scannerNotifyUpdate}
+                    onChange={setScannerNotifyUpdate}
+                    border={false}
+                />
+                <SettingsToggleRow
+                    title={t('settings.notifications.scannerActivity.interactionTitle')}
+                    description={t('settings.notifications.scannerActivity.interactionDescription')}
+                    checked={scannerNotifyInteraction}
+                    onChange={setScannerNotifyInteraction}
                     border={false}
                 />
             </div>
