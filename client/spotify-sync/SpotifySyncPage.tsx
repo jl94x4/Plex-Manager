@@ -55,17 +55,20 @@ import {
 
 const buttonClass = 'inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-muted hover:border-plex hover:text-plex disabled:opacity-50';
 const primaryButtonClass = 'inline-flex items-center gap-2 rounded-lg bg-plex px-3 py-1.5 text-xs font-bold text-background hover:brightness-110 disabled:opacity-50';
-const tileButtonClass = `${buttonClass} h-11 px-2 justify-center`;
-const tilePrimaryClass = `${primaryButtonClass} h-11 px-2 justify-center`;
+const tileButtonClass = `${buttonClass} h-8 py-0 px-2.5 leading-none justify-center`;
+const tilePrimaryClass = `${primaryButtonClass} h-8 py-0 px-2.5 leading-none justify-center`;
 const toolbarButtonClass = `${buttonClass} h-11 w-full min-w-0 justify-center px-3 text-center lg:w-auto`;
 const toolbarPrimaryClass = `${primaryButtonClass} h-11 w-full min-w-0 justify-center px-3 text-center lg:w-auto`;
 const toolbarFieldClass = 'flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-black/30 px-3 text-xs font-semibold text-muted lg:w-auto';
 const rowCardClass = (selected: boolean) => (
     `rounded-2xl border p-4 ${selected ? 'border-plex/50 bg-plex/10' : 'border-white/10 bg-black/25'}`
 );
-const rowActionClass = 'grid w-full grid-cols-3 gap-2.5 lg:flex lg:w-auto lg:shrink-0 lg:flex-wrap lg:justify-end';
-const artworkClass = 'h-32 w-32 shrink-0 rounded-xl object-cover lg:h-16 lg:w-16';
-const artworkFallbackClass = 'flex h-32 w-32 shrink-0 items-center justify-center rounded-xl bg-plex/15 text-plex lg:h-16 lg:w-16';
+const rowActionClass = 'flex w-full shrink-0 items-center justify-end gap-2 lg:w-auto';
+const artworkClass = 'h-28 w-28 shrink-0 rounded-xl object-cover ring-1 ring-white/10';
+const artworkFallbackClass = 'flex h-28 w-28 shrink-0 items-center justify-center rounded-xl bg-plex/15 text-plex ring-1 ring-white/10';
+const rowCheckClass = (selected: boolean) => (
+    `inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${selected ? 'text-plex' : 'text-muted hover:text-text'}`
+);
 const ACCOUNT_PAGE_SIZES = [10, 25, 50] as const;
 
 const toastListeners = new Set<(message: string, type: 'success' | 'error') => void>();
@@ -139,6 +142,21 @@ const TABS: { id: TabId; label: string; icon: React.FC<{ className?: string }> }
     { id: 'integrations', label: 'Integrations', icon: Plug },
     { id: 'logs', label: 'Logs', icon: ScrollText },
 ];
+const TAB_IDS = TABS.map((item) => item.id);
+
+const parseSpotifySyncTab = (hash = typeof window !== 'undefined' ? window.location.hash : ''): TabId => {
+    const raw = String(hash || '').replace(/^#/, '').split(/[/?&]/)[0].trim().toLowerCase();
+    return TAB_IDS.includes(raw as TabId) ? (raw as TabId) : 'playlists';
+};
+
+const spotifySyncTabHash = (tab: TabId) => (tab === 'playlists' ? '' : `#${tab}`);
+
+const writeSpotifySyncTabHash = (tab: TabId) => {
+    if (typeof window === 'undefined') return;
+    const desired = spotifySyncTabHash(tab);
+    if ((window.location.hash || '') === desired) return;
+    window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${desired}`);
+};
 
 const SYNC_TYPES = [
     { id: 'playlists', label: 'Playlists' },
@@ -153,7 +171,12 @@ const SYNC_TYPES = [
 export const SpotifySyncPage: React.FC = () => {
     const { t } = useDiscoverI18n();
     const betaNotice = t('spotifySyncPage.betaNotice');
-    const [tab, setTab] = useState<TabId>('playlists');
+    const [tab, setTab] = useState<TabId>(() => {
+        if (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('spotify') === 'connected') {
+            return 'users';
+        }
+        return parseSpotifySyncTab();
+    });
     const [status, setStatus] = useState<SyncStatus | null>(null);
     const [statusError, setStatusError] = useState('');
     const [busy, setBusy] = useState(false);
@@ -205,12 +228,24 @@ export const SpotifySyncPage: React.FC = () => {
     }, [loadStatus]);
 
     useEffect(() => {
+        writeSpotifySyncTabHash(tab);
+    }, [tab]);
+
+    useEffect(() => {
+        const onHashChange = () => setTab(parseSpotifySyncTab());
+        window.addEventListener('hashchange', onHashChange);
+        return () => window.removeEventListener('hashchange', onHashChange);
+    }, []);
+
+    useEffect(() => {
         const params = new URLSearchParams(window.location.search);
-        if (params.get('spotify') === 'connected') {
-            toast('Spotify account connected', 'success');
-            setTab('users');
-            void loadStatus();
-        }
+        if (params.get('spotify') !== 'connected') return;
+        toast('Spotify account connected', 'success');
+        setTab('users');
+        params.delete('spotify');
+        const qs = params.toString();
+        window.history.replaceState(null, '', `${window.location.pathname}${qs ? `?${qs}` : ''}#users`);
+        void loadStatus();
     }, [loadStatus]);
 
     const runSync = async (type = 'all') => {
@@ -864,14 +899,14 @@ const PlaylistsPanel: React.FC<{
                                 {pagedAccount.map((playlist) => {
                                     const selected = selectedIds.has(playlist.id);
                                     return (
-                                        <div key={playlist.id} className={`flex flex-col gap-4 ${rowCardClass(selected)}`}>
+                                        <div key={playlist.id} className={`flex flex-col gap-3 lg:flex-row lg:items-center ${rowCardClass(selected)}`}>
                                             <button
                                                 type="button"
-                                                className="flex min-w-0 gap-4 text-left"
+                                                className="flex min-w-0 flex-1 items-center gap-3 text-left"
                                                 onClick={() => toggleSelected(playlist.id)}
                                                 title={selected ? 'Deselect' : 'Select'}
                                             >
-                                                <span className="relative shrink-0">
+                                                <span className="shrink-0 overflow-hidden rounded-xl">
                                                     {playlist.image ? (
                                                         <img src={workerImageUrl(playlist.image)} alt="" className={artworkClass} />
                                                     ) : (
@@ -879,11 +914,8 @@ const PlaylistsPanel: React.FC<{
                                                             {playlist.liked || playlist.kind === 'liked' ? <Heart className="h-12 w-12" /> : playlist.kind === 'album' ? <Disc3 className="h-12 w-12" /> : <ListMusic className="h-12 w-12" />}
                                                         </span>
                                                     )}
-                                                    <span className={`absolute left-1.5 top-1.5 rounded-md p-0.5 ${selected ? 'bg-plex text-background' : 'bg-black/80 text-white'}`}>
-                                                        {selected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-                                                    </span>
                                                 </span>
-                                                <span className="min-w-0 flex-1 self-center">
+                                                <span className="min-w-0 flex-1">
                                                     <p className="text-[15px] font-semibold leading-snug text-text [overflow-wrap:anywhere]">{playlist.title}</p>
                                                     <p className="mt-1.5 text-xs leading-relaxed text-muted [overflow-wrap:anywhere]">
                                                         {playlist.kind === 'album' ? 'Album' : playlist.liked ? 'Liked Songs' : 'Playlist'}
@@ -903,6 +935,14 @@ const PlaylistsPanel: React.FC<{
                                                 <button type="button" className={tilePrimaryClass} onClick={() => void runOnPlaylists([playlist], 'sync')} disabled={locked} title="Sync to Plex">
                                                     {busyAction === 'sync' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
                                                     Sync
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className={rowCheckClass(selected)}
+                                                    onClick={() => toggleSelected(playlist.id)}
+                                                    title={selected ? 'Deselect' : 'Select'}
+                                                >
+                                                    {selected ? <CheckSquare className="h-5 w-5" /> : <Square className="h-5 w-5" />}
                                                 </button>
                                             </div>
                                         </div>
@@ -1003,13 +1043,13 @@ const PlaylistsPanel: React.FC<{
                                 <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">{label}</h3>
                                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                                     {groupItems.map((item) => (
-                                        <div key={item.id} className={`flex flex-col gap-4 ${rowCardClass(savedSelectedIds.has(item.id))}`}>
+                                        <div key={item.id} className={`flex flex-col gap-3 ${rowCardClass(savedSelectedIds.has(item.id))}`}>
                                             <button
                                                 type="button"
-                                                className="flex min-w-0 gap-4 text-left"
+                                                className="flex min-w-0 items-center gap-3 text-left"
                                                 onClick={() => toggleSavedSelected(item.id)}
                                             >
-                                                <span className="relative shrink-0">
+                                                <span className="shrink-0 overflow-hidden rounded-xl">
                                                     {item.image ? (
                                                         <img src={workerImageUrl(item.image)} alt="" className={artworkClass} />
                                                     ) : (
@@ -1017,17 +1057,17 @@ const PlaylistsPanel: React.FC<{
                                                             {item.type === 'spotify-album' ? <Disc3 className="h-12 w-12" /> : <ListMusic className="h-12 w-12" />}
                                                         </span>
                                                     )}
-                                                    <span className={`absolute left-1.5 top-1.5 rounded-md p-0.5 ${savedSelectedIds.has(item.id) ? 'bg-plex text-background' : 'bg-black/80 text-white'}`}>
-                                                        {savedSelectedIds.has(item.id) ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
-                                                    </span>
                                                 </span>
-                                                <span className="min-w-0 flex-1 self-center">
+                                                <span className="min-w-0 flex-1">
                                                     <p className="text-[15px] font-semibold leading-snug text-text [overflow-wrap:anywhere]">{item.title || item.id}</p>
                                                     <p className="mt-1.5 text-xs leading-relaxed text-muted [overflow-wrap:anywhere]">
                                                         {item.type === 'spotify-album' ? 'Album' : item.type === 'plex-media' ? 'Plex' : 'Playlist'}
                                                         {' · '}
                                                         {item.sync ? `Auto-sync every ${item.sync_interval || 1}d` : 'Manual only'}
                                                     </p>
+                                                </span>
+                                                <span className={rowCheckClass(savedSelectedIds.has(item.id))}>
+                                                    {savedSelectedIds.has(item.id) ? <CheckSquare className="h-5 w-5" /> : <Square className="h-5 w-5" />}
                                                 </span>
                                             </button>
                                             <div className="flex items-center gap-1">
