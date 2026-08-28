@@ -53,12 +53,17 @@ import {
 
 const buttonClass = 'inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-muted hover:border-plex hover:text-plex disabled:opacity-50';
 const primaryButtonClass = 'inline-flex items-center gap-2 rounded-lg bg-plex px-3 py-1.5 text-xs font-bold text-background hover:brightness-110 disabled:opacity-50';
-const tileButtonClass = `${buttonClass} px-2 py-1 justify-center`;
-const tilePrimaryClass = `${primaryButtonClass} px-2 py-1 justify-center`;
+const tileButtonClass = `${buttonClass} h-11 px-2 justify-center`;
+const tilePrimaryClass = `${primaryButtonClass} h-11 px-2 justify-center`;
+const toolbarButtonClass = `${buttonClass} h-11 w-full min-w-0 justify-center px-3 text-center lg:w-auto`;
+const toolbarPrimaryClass = `${primaryButtonClass} h-11 w-full min-w-0 justify-center px-3 text-center lg:w-auto`;
+const toolbarFieldClass = 'flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-black/30 px-3 text-xs font-semibold text-muted lg:w-auto';
 const rowCardClass = (selected: boolean) => (
-    `rounded-xl border p-2.5 ${selected ? 'border-plex/50 bg-plex/10' : 'border-white/10 bg-black/25'}`
+    `rounded-2xl border p-4 ${selected ? 'border-plex/50 bg-plex/10' : 'border-white/10 bg-black/25'}`
 );
-const rowActionClass = 'grid w-full grid-cols-3 gap-1.5 lg:flex lg:w-auto lg:shrink-0 lg:flex-wrap lg:justify-end';
+const rowActionClass = 'grid w-full grid-cols-3 gap-2.5 lg:flex lg:w-auto lg:shrink-0 lg:flex-wrap lg:justify-end';
+const artworkClass = 'h-32 w-32 shrink-0 rounded-xl object-cover lg:h-16 lg:w-16';
+const artworkFallbackClass = 'flex h-32 w-32 shrink-0 items-center justify-center rounded-xl bg-plex/15 text-plex lg:h-16 lg:w-16';
 const ACCOUNT_PAGE_SIZES = [10, 25, 50] as const;
 
 const toastListeners = new Set<(message: string, type: 'success' | 'error') => void>();
@@ -784,54 +789,54 @@ const PlaylistsPanel: React.FC<{
                         <a href={portalUrl('/api/spotify-to-plex/spotify-login')} className={primaryButtonClass}>Connect Spotify</a>
                     </div>
                 ) : (
-                    <div className="space-y-3">
-                        <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-                            <input
-                                className="appearance-none w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-[16px] leading-5 text-text"
-                                placeholder="Filter playlists and albums…"
-                                value={accountFilter}
-                                onChange={(e) => setAccountFilter(e.target.value)}
-                            />
-                            <div className="flex flex-wrap items-center gap-2">
-                                <label className="flex items-center gap-1.5 text-xs text-muted whitespace-nowrap">
-                                    Every
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        className="appearance-none w-16 rounded-lg border border-white/10 bg-black/30 px-2 py-1.5 text-[16px] leading-5 text-text"
-                                        value={intervalDays}
-                                        onChange={(e) => setIntervalDays(e.target.value)}
-                                    />
-                                    days
-                                </label>
-                                <button type="button" className={buttonClass} onClick={toggleSelectAllFiltered} disabled={!filteredAccount.length}>
-                                    {allFilteredSelected ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
-                                    {allFilteredSelected ? 'Clear' : 'Select all'}
-                                </button>
-                                <button type="button" className={buttonClass} onClick={() => void runOnPlaylists(selectedPlaylists, 'add')} disabled={!selectedPlaylists.length || locked}>
-                                    {busyAction === 'add' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
-                                    Add selected
-                                </button>
-                                <button type="button" className={buttonClass} onClick={() => void runOnPlaylists(selectedPlaylists, 'schedule')} disabled={!selectedPlaylists.length || locked}>
-                                    {busyAction === 'schedule' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarClock className="h-3.5 w-3.5" />}
-                                    Schedule selected
-                                </button>
-                                <button
-                                    type="button"
-                                    className={primaryButtonClass}
-                                    onClick={() => {
-                                        if (!selectedPlaylists.length) {
-                                            toast('Select one or more playlists or albums first.', 'error');
-                                            return;
-                                        }
-                                        void runOnPlaylists(selectedPlaylists, 'sync');
-                                    }}
-                                    disabled={locked}
-                                >
-                                    {busyAction === 'sync' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
-                                    Sync to Plex
-                                </button>
-                            </div>
+                    <div className="space-y-4">
+                        <input
+                            className="appearance-none w-full rounded-xl border border-white/10 bg-black/30 px-3 py-3 text-[16px] leading-5 text-text"
+                            placeholder="Filter playlists and albums…"
+                            value={accountFilter}
+                            onChange={(e) => setAccountFilter(e.target.value)}
+                        />
+                        <div className="grid grid-cols-2 gap-3 lg:flex lg:flex-wrap">
+                            <label className={toolbarFieldClass}>
+                                Every
+                                <input
+                                    type="number"
+                                    min={0}
+                                    className="appearance-none h-8 w-12 rounded-md border border-white/10 bg-black/40 px-1 text-center text-[16px] leading-5 text-text"
+                                    value={intervalDays}
+                                    onChange={(e) => setIntervalDays(e.target.value)}
+                                />
+                                days
+                            </label>
+                            <button type="button" className={toolbarButtonClass} onClick={toggleSelectAllFiltered} disabled={!filteredAccount.length}>
+                                {allFilteredSelected ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+                                {allFilteredSelected ? 'Clear' : 'Select all'}
+                            </button>
+                            <button type="button" className={toolbarButtonClass} onClick={() => void runOnPlaylists(selectedPlaylists, 'add')} disabled={!selectedPlaylists.length || locked}>
+                                {busyAction === 'add' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
+                                <span className="lg:hidden">Add</span>
+                                <span className="hidden lg:inline">Add selected</span>
+                            </button>
+                            <button type="button" className={toolbarButtonClass} onClick={() => void runOnPlaylists(selectedPlaylists, 'schedule')} disabled={!selectedPlaylists.length || locked}>
+                                {busyAction === 'schedule' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CalendarClock className="h-3.5 w-3.5" />}
+                                <span className="lg:hidden">Schedule</span>
+                                <span className="hidden lg:inline">Schedule selected</span>
+                            </button>
+                            <button
+                                type="button"
+                                className={`${toolbarPrimaryClass} col-span-2`}
+                                onClick={() => {
+                                    if (!selectedPlaylists.length) {
+                                        toast('Select one or more playlists or albums first.', 'error');
+                                        return;
+                                    }
+                                    void runOnPlaylists(selectedPlaylists, 'sync');
+                                }}
+                                disabled={locked}
+                            >
+                                {busyAction === 'sync' ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+                                Sync to Plex
+                            </button>
                         </div>
                         <p className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[11px] text-muted">
                             <span>
@@ -858,36 +863,38 @@ const PlaylistsPanel: React.FC<{
                             <p className="text-sm text-muted">{accountError || 'No playlists or saved albums came back from Spotify. Made For You and editorial lists are hidden by Spotify’s API — paste a URL below to add one.'}</p>
                         ) : (
                             <>
-                            <div className="space-y-2">
+                            <div className="space-y-4">
                                 {pagedAccount.map((playlist) => {
                                     const selected = selectedIds.has(playlist.id);
                                     return (
-                                        <div key={playlist.id} className={`flex flex-col gap-2 lg:flex-row lg:items-center ${rowCardClass(selected)}`}>
+                                        <div key={playlist.id} className={`flex flex-col gap-4 ${rowCardClass(selected)}`}>
                                             <button
                                                 type="button"
-                                                className="flex min-w-0 flex-1 items-start gap-3 text-left lg:items-center"
+                                                className="flex min-w-0 gap-4 text-left"
                                                 onClick={() => toggleSelected(playlist.id)}
                                                 title={selected ? 'Deselect' : 'Select'}
                                             >
-                                                <span className="mt-0.5 shrink-0 text-muted">
-                                                    {selected ? <CheckSquare className="h-4 w-4 text-plex" /> : <Square className="h-4 w-4" />}
+                                                <span className="relative shrink-0">
+                                                    {playlist.image ? (
+                                                        <img src={workerImageUrl(playlist.image)} alt="" className={artworkClass} />
+                                                    ) : (
+                                                        <span className={artworkFallbackClass}>
+                                                            {playlist.liked || playlist.kind === 'liked' ? <Heart className="h-12 w-12" /> : playlist.kind === 'album' ? <Disc3 className="h-12 w-12" /> : <ListMusic className="h-12 w-12" />}
+                                                        </span>
+                                                    )}
+                                                    <span className={`absolute left-1.5 top-1.5 rounded-md p-0.5 ${selected ? 'bg-plex text-background' : 'bg-black/80 text-white'}`}>
+                                                        {selected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                                                    </span>
                                                 </span>
-                                                {playlist.image ? (
-                                                    <img src={workerImageUrl(playlist.image)} alt="" className="h-10 w-10 shrink-0 rounded-lg object-cover" />
-                                                ) : (
-                                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-plex/15 text-plex">
-                                                        {playlist.liked || playlist.kind === 'liked' ? <Heart className="h-4 w-4" /> : playlist.kind === 'album' ? <Disc3 className="h-4 w-4" /> : <ListMusic className="h-4 w-4" />}
-                                                    </div>
-                                                )}
-                                                <div className="min-w-0 flex-1">
-                                                    <p className="text-sm font-semibold leading-snug text-text [overflow-wrap:anywhere]">{playlist.title}</p>
-                                                    <p className="mt-0.5 text-[11px] leading-snug text-muted [overflow-wrap:anywhere]">
+                                                <span className="min-w-0 flex-1 self-center">
+                                                    <p className="text-[15px] font-semibold leading-snug text-text [overflow-wrap:anywhere]">{playlist.title}</p>
+                                                    <p className="mt-1.5 text-xs leading-relaxed text-muted [overflow-wrap:anywhere]">
                                                         {playlist.kind === 'album' ? 'Album' : playlist.liked ? 'Liked Songs' : 'Playlist'}
                                                         {playlist.owner ? ` · ${playlist.owner}` : ''}
                                                         {playlist.private ? ' · Private' : ''}
                                                         {playlist.added ? ' · Saved' : ''}
                                                     </p>
-                                                </div>
+                                                </span>
                                             </button>
                                             <div className={rowActionClass}>
                                                 <button type="button" className={tileButtonClass} onClick={() => void runOnPlaylists([playlist], 'add')} disabled={locked || playlist.added}>
@@ -997,34 +1004,36 @@ const PlaylistsPanel: React.FC<{
                         {groups.map(([label, groupItems]) => (
                             <div key={label}>
                                 <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted">{label}</h3>
-                                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                                     {groupItems.map((item) => (
-                                        <div key={item.id} className={`flex flex-col gap-3 ${rowCardClass(savedSelectedIds.has(item.id))}`}>
+                                        <div key={item.id} className={`flex flex-col gap-4 ${rowCardClass(savedSelectedIds.has(item.id))}`}>
                                             <button
                                                 type="button"
-                                                className="flex min-w-0 items-start gap-3 text-left"
+                                                className="flex min-w-0 gap-4 text-left"
                                                 onClick={() => toggleSavedSelected(item.id)}
                                             >
-                                                <span className="mt-0.5 shrink-0 text-muted">
-                                                    {savedSelectedIds.has(item.id) ? <CheckSquare className="h-4 w-4 text-plex" /> : <Square className="h-4 w-4" />}
+                                                <span className="relative shrink-0">
+                                                    {item.image ? (
+                                                        <img src={workerImageUrl(item.image)} alt="" className={artworkClass} />
+                                                    ) : (
+                                                        <span className={artworkFallbackClass}>
+                                                            {item.type === 'spotify-album' ? <Disc3 className="h-12 w-12" /> : <ListMusic className="h-12 w-12" />}
+                                                        </span>
+                                                    )}
+                                                    <span className={`absolute left-1.5 top-1.5 rounded-md p-0.5 ${savedSelectedIds.has(item.id) ? 'bg-plex text-background' : 'bg-black/80 text-white'}`}>
+                                                        {savedSelectedIds.has(item.id) ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                                                    </span>
                                                 </span>
-                                                {item.image ? (
-                                                    <img src={workerImageUrl(item.image)} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
-                                                ) : (
-                                                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-plex/15 text-plex">
-                                                        {item.type === 'spotify-album' ? <Disc3 className="h-5 w-5" /> : <ListMusic className="h-5 w-5" />}
-                                                    </div>
-                                                )}
-                                                <div className="min-w-0 flex-1">
-                                                    <p className="text-sm font-semibold leading-snug text-text [overflow-wrap:anywhere]">{item.title || item.id}</p>
-                                                    <p className="mt-0.5 text-[11px] leading-snug text-muted [overflow-wrap:anywhere]">
+                                                <span className="min-w-0 flex-1 self-center">
+                                                    <p className="text-[15px] font-semibold leading-snug text-text [overflow-wrap:anywhere]">{item.title || item.id}</p>
+                                                    <p className="mt-1.5 text-xs leading-relaxed text-muted [overflow-wrap:anywhere]">
                                                         {item.type === 'spotify-album' ? 'Album' : item.type === 'plex-media' ? 'Plex' : 'Playlist'}
                                                         {' · '}
                                                         {item.sync ? `Auto-sync every ${item.sync_interval || 1}d` : 'Manual only'}
                                                     </p>
-                                                </div>
+                                                </span>
                                             </button>
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-1">
                                                 <button type="button" className="rounded-lg p-2 text-muted hover:text-plex" onClick={() => void inspectItem(item)} title="Preview Spotify tracks">
                                                     <Eye className="h-4 w-4" />
                                                 </button>
