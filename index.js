@@ -149,6 +149,7 @@ import {
 import {
     fetchSpotifyToPlexJson,
     summarizeSpotifyToPlexLogs,
+    buildSpotifyToPlexLogsView,
     resolveSpotifyToPlexBase,
     SPOTIFY_TO_PLEX_SYNC_TYPES,
 } from './lib/spotify-to-plex-api.js';
@@ -159,6 +160,8 @@ import {
 import {
     snapshotSpotifyPlaylistSyncJob,
     startSpotifyPlaylistSyncJob,
+    listSpotifyPlaylistSyncHistory,
+    clearSpotifyPlaylistSyncHistory,
 } from './lib/spotify-to-plex-playlist-job.js';
 import {
     importSavedItemsFromSpotifyLink,
@@ -6598,6 +6601,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
     if (spotifySyncDefaultsChanged || spotifyBundledDefaultsChanged) {
         log('[spotify-sync] Applied default internal URL.');
     }
+    let spotifyEnvWritten = false;
     try {
         const envSync = await syncSpotifyToPlexSidecarEnv(spotifySyncConfig, {
             configDir: CONFIG_DIR,
@@ -6606,6 +6610,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
             resolveSpotifyToPlexCallbackUrl,
             log,
         });
+        spotifyEnvWritten = !!envSync.written;
         const usingBundled = isSpotifyToPlexBundledAvailable() && isUsingBundledSpotifyToPlexUrl(spotifySyncConfig);
         let supervisorSync = { written: false };
         if (!usingBundled) {
@@ -6626,10 +6631,13 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         log(`[spotify-sync] Portal Plex config file sync failed: ${e.message}`);
     }
     try {
+        const scheduleChanged = resolveSpotifyToPlexScheduleMode(spotifySyncConfig)
+            !== resolveSpotifyToPlexScheduleMode(existingConfig);
         await syncSpotifyToPlexEmbeddedWorker(spotifySyncConfig, {
             configDir: CONFIG_DIR,
             log,
-            forceRestart: true,
+            // Saving unrelated settings used to SIGKILL the worker and fire a false "failed" notification.
+            forceRestart: spotifyEnvWritten || scheduleChanged,
         });
     } catch (e) {
         log(`[spotify-sync] Bundled spotify-to-plex sync failed: ${e.message}`);
@@ -26245,7 +26253,8 @@ app.get('/api/spotify-to-plex/status', requireAdmin, requireSpotifyToPlex, async
         } catch {
             logs = {};
         }
-        const summary = summarizeSpotifyToPlexLogs(logs);
+        const playlistJobs = listSpotifyPlaylistSyncHistory();
+        const summary = summarizeSpotifyToPlexLogs(logs, { playlistJobs });
         let plexLoggedIn = false;
         let plexUri = '';
         try {
@@ -26269,10 +26278,66 @@ app.get('/api/spotify-to-plex/status', requireAdmin, requireSpotifyToPlex, async
             bundled: isSpotifyToPlexBundledAvailable(),
             embedded: getSpotifyToPlexEmbeddedStatus(),
             playlistSync: snapshotSpotifyPlaylistSyncJob(),
+            playlistSyncHistory: playlistJobs,
             ...summary,
         });
     } catch (e) {
         return res.status(e?.status || 502).json({ error: e.message || 'Failed to load Spotify Sync status.' });
+    }
+});
+
+const loadSpotifyToPlexLogsView = async (config) => {
+    let logs = {};
+    try {
+        logs = await fetchSpotifyToPlexJson({
+            config,
+            path: '/api/logs',
+            fetchWithTimeout,
+            allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS,
+        }) || {};
+    } catch {
+        logs = {};
+    }
+    return buildSpotifyToPlexLogsView(logs, listSpotifyPlaylistSyncHistory());
+};
+
+app.get('/api/spotify-to-plex/logs', requireAdmin, requireSpotifyToPlex, async (req, res) => {
+    try {
+        const config = req.spotifyToPlexConfig || await loadFile(CONFIG_PATH, {});
+        return res.json(await loadSpotifyToPlexLogsView(config));
+    } catch (e) {
+        return res.status(e?.status || 502).json({ error: e.message || 'Failed to load Spotify Sync logs.' });
+    }
+});
+
+app.delete('/api/spotify-to-plex/logs', requireAdmin, requireSpotifyToPlex, async (req, res) => {
+    try {
+        const config = req.spotifyToPlexConfig || await loadFile(CONFIG_PATH, {});
+        clearSpotifyPlaylistSyncHistory();
+        try {
+            await fetchSpotifyToPlexJson({
+                config,
+                path: '/api/logs',
+                method: 'DELETE',
+                fetchWithTimeout,
+                allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS,
+            });
+        } catch {
+            try {
+                await fetchSpotifyToPlexJson({
+                    config,
+                    path: '/api/logs/clear',
+                    method: 'POST',
+                    fetchWithTimeout,
+                    allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS,
+                });
+            } catch {
+                // Worker log files may be empty or the clear route may not exist.
+            }
+        }
+        return res.json(await loadSpotifyToPlexLogsView(config));
+    } catch (e) {
+        return res.status(e?.status || 502).json({ error: e.message || 'Failed to clear Spotify Sync logs.' });
     }
 });
 
@@ -30388,7 +30453,9 @@ app.listen(PORT, BIND_HOST, async () => {
         dedupeKey: `spotify-sync:${payload?.signature || 'failed'}`,
     }));
     setSpotifyToPlexUnexpectedExitHandler(({ code, signal }) => notifyOps('spotify_sync_failed', {
-        title: `Bundled spotify-to-plex exited (code=${code}, signal=${signal || 'none'})`,
+        title: signal === 'SIGKILL'
+            ? 'Spotify Sync worker was killed (SIGKILL). This is usually the OS reclaiming memory.'
+            : `Bundled spotify-to-plex exited (code=${code}, signal=${signal || 'none'})`,
         dedupeKey: `spotify-sync:exit:${code}:${signal || 'none'}`,
     }));
     void (async () => {

@@ -42,6 +42,7 @@ import { useDiscoverI18n } from '../discovery/i18n';
 import { CustomSelect } from '../shared/ui';
 import { SpotifySyncMark } from './SpotifySyncMark';
 import { formatWhen, workerFetch, workerImageUrl } from './spotifySyncApi';
+import { MatchingPanel } from './MatchingPanel';
 import {
     asItemArray,
     buildSavedItemAddBody,
@@ -143,6 +144,14 @@ const TABS: { id: TabId; label: string; icon: React.FC<{ className?: string }> }
     { id: 'logs', label: 'Logs', icon: ScrollText },
 ];
 const TAB_IDS = TABS.map((item) => item.id);
+const TAB_HELP: Record<TabId, string> = {
+    playlists: 'Start here. Import Spotify playlists, then Sync to Plex to create matching playlists in your music library.',
+    users: 'Connect the Spotify account that owns Liked Songs and private playlists.',
+    sync: 'Advanced. Re-run saved playlists, or start worker jobs for albums, Lidarr, SLSKD, and MQTT.',
+    matching: 'Optional. Tighten or loosen how Spotify titles map onto tracks already in Plex.',
+    integrations: 'Optional. Lidarr, SLSKD, and Tidal for tracks that are not in Plex yet.',
+    logs: 'History of Plex playlist jobs and worker sync runs.',
+};
 
 const parseSpotifySyncTab = (hash = typeof window !== 'undefined' ? window.location.hash : ''): TabId => {
     const raw = String(hash || '').replace(/^#/, '').split(/[/?&]/)[0].trim().toLowerCase();
@@ -330,8 +339,8 @@ export const SpotifySyncPage: React.FC = () => {
                         <BetaBadge title={betaNotice} />
                     </span>
                 }
-                title="Playlists from Spotify to Plex"
-                description="Match Spotify playlists against your Plex music library and create or update the Plex playlist. Plex URL and token come from Settings → Plex."
+                title="Turn Spotify playlists into Plex playlists"
+                description="This is not a Spotify player. It finds songs you already have in Plex, then creates or updates a Plex playlist in the same order as Spotify. Tracks that are missing from Plex are skipped."
                 icon={<SpotifySyncMark className="h-5 w-5" />}
                 secondaryBlob
                 actions={(
@@ -346,6 +355,28 @@ export const SpotifySyncPage: React.FC = () => {
                     </div>
                 )}
             />
+
+            <div className="grid gap-3 md:grid-cols-3">
+                {([
+                    { step: '1', title: 'Connect Spotify', body: 'Link the account that owns the playlists.', tab: 'users' as TabId, Icon: Users },
+                    { step: '2', title: 'Choose playlists', body: 'Import from your library, or paste a Spotify URL.', tab: 'playlists' as TabId, Icon: ListMusic },
+                    { step: '3', title: 'Sync to Plex', body: 'Match those tracks in Plex and write the playlist there.', tab: 'playlists' as TabId, Icon: Play },
+                ]).map(({ step, title, body, tab: target, Icon }) => (
+                    <button
+                        key={step}
+                        type="button"
+                        onClick={() => setTab(target)}
+                        className="rounded-2xl border border-white/10 bg-black/25 p-4 text-left transition-colors hover:border-plex/40 hover:bg-plex/5"
+                    >
+                        <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-plex">
+                            <span className="inline-flex h-6 w-6 items-center justify-center rounded-lg border border-plex/30 bg-plex/10 text-xs">{step}</span>
+                            <Icon className="h-3.5 w-3.5" />
+                            {title}
+                        </p>
+                        <p className="mt-2 text-sm leading-relaxed text-muted">{body}</p>
+                    </button>
+                ))}
+            </div>
 
             <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
                 <DashboardStatCard
@@ -431,6 +462,7 @@ export const SpotifySyncPage: React.FC = () => {
                             key={item.id}
                             type="button"
                             onClick={() => setTab(item.id)}
+                            title={TAB_HELP[item.id]}
                             className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold whitespace-nowrap transition-colors ${dashboardSubnavLinkClass(tab === item.id)}`}
                         >
                             <Icon className="h-4 w-4 shrink-0" />
@@ -439,11 +471,12 @@ export const SpotifySyncPage: React.FC = () => {
                     );
                 })}
             </DashboardSubnav>
+            <p className="text-sm leading-relaxed text-muted">{TAB_HELP[tab]}</p>
 
             {tab === 'playlists' && <PlaylistsPanel onSyncToPlex={syncPlaylistsToPlex} busy={syncBusy} />}
             {tab === 'users' && <UsersPanel />}
-            {tab === 'sync' && <SyncPanel status={status} busy={syncBusy} onSync={runSync} onSyncPlaylistsToPlex={() => void syncPlaylistsToPlex()} onApplyPlex={applyPlex} />}
-            {tab === 'matching' && <MatchingPanel />}
+            {tab === 'sync' && <SyncPanel status={status} busy={syncBusy} onSync={runSync} onSyncPlaylistsToPlex={() => void syncPlaylistsToPlex()} onApplyPlex={applyPlex} onOpenPlaylists={() => setTab('playlists')} />}
+            {tab === 'matching' && <MatchingPanel onToast={toast} />}
             {tab === 'integrations' && <IntegrationsPanel />}
             {tab === 'logs' && <LogsPanel />}
             <ToastContainer toasts={toasts} setToasts={setToasts} />
@@ -1306,7 +1339,8 @@ const SyncPanel: React.FC<{
     onSync: (type: string) => void;
     onSyncPlaylistsToPlex: () => void;
     onApplyPlex: () => void;
-}> = ({ status, busy, onSync, onSyncPlaylistsToPlex, onApplyPlex }) => {
+    onOpenPlaylists: () => void;
+}> = ({ status, busy, onSync, onSyncPlaylistsToPlex, onApplyPlex, onOpenPlaylists }) => {
     const [availability, setAvailability] = useState<Record<string, boolean>>({});
 
     useEffect(() => {
@@ -1317,14 +1351,21 @@ const SyncPanel: React.FC<{
 
     return (
         <div className="grid gap-4 lg:grid-cols-2">
-            <DashboardPanel title="Plex connection" subtitle="Uses Settings → Plex URL and token. No extra Plex login in this page.">
+            <DashboardPanel title="Plex connection" subtitle="Spotify Sync uses the Plex URL and token from Settings → Plex. You do not log into Plex on this page.">
                 <p className="text-sm text-text">{status?.plexLoggedIn ? 'Linked' : 'Not linked yet'}</p>
                 {status?.plexUri ? <p className="mt-1 truncate text-xs text-muted">{status.plexUri}</p> : null}
                 <button type="button" className={`${buttonClass} mt-3`} onClick={onApplyPlex} disabled={busy}>
                     <Settings2 className="h-3.5 w-3.5" /> Apply portal Plex settings
                 </button>
             </DashboardPanel>
-            <DashboardPanel title="Manual sync" subtitle="Playlists matches Spotify tracks against your Plex library and creates or updates the Plex playlist. Other buttons start background worker jobs.">
+            <DashboardPanel
+                title="Manual sync"
+                subtitle="Day-to-day use is Playlists → Sync to Plex. These buttons re-run saved items or start optional worker jobs (albums, Lidarr, SLSKD, MQTT)."
+            >
+                <button type="button" className={`${buttonClass} mb-3`} onClick={onOpenPlaylists}>
+                    <ListMusic className="h-3.5 w-3.5" />
+                    Go to Playlists
+                </button>
                 <div className="flex flex-wrap gap-2">
                     {SYNC_TYPES.map((entry) => (
                         <button
@@ -1340,78 +1381,6 @@ const SyncPanel: React.FC<{
                     ))}
                 </div>
             </DashboardPanel>
-        </div>
-    );
-};
-
-const MatchingPanel: React.FC = () => {
-    const [filters, setFilters] = useState('[]');
-    const [approaches, setApproaches] = useState('[]');
-    const [text, setText] = useState('{}');
-    const [loading, setLoading] = useState(true);
-
-    const load = useCallback(async () => {
-        setLoading(true);
-        try {
-            const [match, search, processing] = await Promise.all([
-                workerFetch('plex/music-search-config/match-filters'),
-                workerFetch('plex/music-search-config/search-approaches'),
-                workerFetch('plex/music-search-config/text-processing'),
-            ]);
-            setFilters(JSON.stringify(match, null, 2));
-            setApproaches(JSON.stringify(search, null, 2));
-            setText(JSON.stringify(processing, null, 2));
-        } catch (e: any) {
-            toast(e?.message || 'Could not load matching config', 'error');
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    useEffect(() => { void load(); }, [load]);
-
-    const saveJson = async (path: string, raw: string, label: string) => {
-        try {
-            const parsed = JSON.parse(raw);
-            await workerFetch(path, { method: 'POST', body: JSON.stringify(parsed) });
-            toast(`${label} saved`, 'success');
-        } catch (e: any) {
-            toast(e?.message || `Invalid JSON for ${label}`, 'error');
-        }
-    };
-
-    const reset = async () => {
-        try {
-            await workerFetch('plex/music-search-config/reset', { method: 'POST', body: JSON.stringify({}) });
-            toast('Matching config reset', 'success');
-            await load();
-        } catch (e: any) {
-            toast(e?.message || 'Reset failed', 'error');
-        }
-    };
-
-    if (loading) return <p className="text-sm text-muted">Loading matching config…</p>;
-
-    return (
-        <div className="space-y-4">
-            <div className="flex justify-end">
-                <button type="button" className={buttonClass} onClick={() => void reset()}>Reset to defaults</button>
-            </div>
-            {[
-                { title: 'Match filters', value: filters, set: setFilters, path: 'plex/music-search-config/match-filters' },
-                { title: 'Search approaches', value: approaches, set: setApproaches, path: 'plex/music-search-config/search-approaches' },
-                { title: 'Text processing', value: text, set: setText, path: 'plex/music-search-config/text-processing' },
-            ].map((block) => (
-                <DashboardPanel key={block.path} title={block.title} controls={(
-                    <button type="button" className={primaryButtonClass} onClick={() => void saveJson(block.path, block.value, block.title)}>Save</button>
-                )}>
-                    <textarea
-                        className="appearance-none text-[16px] leading-5 min-h-[160px] w-full rounded-lg border border-white/10 bg-black/40 p-3 font-mono text-[16px] text-text"
-                        value={block.value}
-                        onChange={(e) => block.set(e.target.value)}
-                    />
-                </DashboardPanel>
-            ))}
         </div>
     );
 };
@@ -1481,36 +1450,39 @@ const LogsPanel: React.FC = () => {
     const [logs, setLogs] = useState<any>(null);
     const [loading, setLoading] = useState(true);
 
-    const load = useCallback(async () => {
-        setLoading(true);
+    const load = useCallback(async (silent = false) => {
+        if (!silent) setLoading(true);
         try {
-            setLogs(await workerFetch('logs'));
+            setLogs(await apiFetch('/api/spotify-to-plex/logs'));
         } catch (e: any) {
-            toast(e?.message || 'Could not load logs', 'error');
-            setLogs(null);
+            if (!silent) {
+                toast(e?.message || 'Could not load logs', 'error');
+                setLogs(null);
+            }
         } finally {
             setLoading(false);
         }
     }, []);
 
-    useEffect(() => { void load(); }, [load]);
+    usePoll(() => { void load(true); }, 3_000, { immediate: true });
 
     const clear = async () => {
         try {
-            await workerFetch('logs', { method: 'DELETE' });
+            setLogs(await apiFetch('/api/spotify-to-plex/logs', { method: 'DELETE' }));
             toast('Logs cleared', 'success');
-            await load();
         } catch (e: any) {
             toast(e?.message || 'Clear failed', 'error');
         }
     };
 
     const missing = logs?.missing_files || {};
+    const types = ['playlists', 'albums', 'users', 'lidarr', 'mqtt', 'slskd'];
+    const syncLog = logs?.sync_log || {};
 
     return (
         <DashboardPanel
             title="Sync history"
-            subtitle="Worker logs for playlists, albums, users, Lidarr, and SLSKD."
+            subtitle="Plex playlist jobs plus worker logs for albums, users, Lidarr, MQTT, and SLSKD."
             controls={(
                 <div className="flex gap-2">
                     <button type="button" className={buttonClass} onClick={() => void load()}>Refresh</button>
@@ -1518,27 +1490,33 @@ const LogsPanel: React.FC = () => {
                 </div>
             )}
         >
-            {loading ? <p className="text-sm text-muted">Loading…</p> : (
+            {loading && !logs ? <p className="text-sm text-muted">Loading…</p> : (
                 <div className="space-y-4">
-                    {Object.entries(logs?.sync_log || {}).map(([type, entries]) => (
+                    {types.map((type) => {
+                        const entries = Array.isArray(syncLog[type]) ? syncLog[type] : [];
+                        return (
                         <div key={type}>
                             <h3 className="mb-1 text-xs font-bold uppercase tracking-wider text-muted">{type}</h3>
-                            {!Array.isArray(entries) || !entries.length ? (
+                            {!entries.length ? (
                                 <p className="text-xs text-muted">No runs</p>
                             ) : (
                                 <ul className="space-y-1 text-xs">
-                                    {[...entries].slice(-8).reverse().map((entry: any, index: number) => (
-                                        <li key={index} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-text">
+                                    {[...entries].slice(0, 12).map((entry: any, index: number) => (
+                                        <li key={entry.id || index} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-text">
                                             {entry.error || entry.message || entry.status || JSON.stringify(entry)}
-                                            {entry.finishedAt || entry.timestamp ? (
-                                                <span className="ml-2 text-muted">{formatWhen(entry.finishedAt || entry.timestamp)}</span>
+                                            {entry.total ? (
+                                                <span className="ml-2 text-muted">{entry.done || 0}/{entry.total}</span>
+                                            ) : null}
+                                            {entry.finishedAt || entry.timestamp || entry.startedAt ? (
+                                                <span className="ml-2 text-muted">{formatWhen(entry.finishedAt || entry.timestamp || entry.startedAt)}</span>
                                             ) : null}
                                         </li>
                                     ))}
                                 </ul>
                             )}
                         </div>
-                    ))}
+                        );
+                    })}
                     {Object.entries(missing).some(([, value]) => String(value || '').trim()) ? (
                         <div>
                             <h3 className="mb-1 text-xs font-bold uppercase tracking-wider text-muted">Missing files</h3>
