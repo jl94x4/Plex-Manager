@@ -42,43 +42,32 @@ const readPortalHtmlTheme = (): PortalHtmlTheme => {
     };
 };
 
-const HOME_HTML_RESIZE_SOURCE = 'smp-home-html-resize';
-const MIN_HOME_HTML_FRAME_PX = 1;
-const MAX_HOME_HTML_FRAME_PX = 100_000;
+const HOME_HTML_MIN_FRAME_PX = 1;
+const HOME_HTML_MAX_FRAME_PX = 100_000;
 
 const clampHomeHtmlFrameHeight = (value: unknown) => {
     const height = Math.ceil(Number(value));
     if (!Number.isFinite(height) || height < 0) return null;
-    return Math.min(Math.max(height, MIN_HOME_HTML_FRAME_PX), MAX_HOME_HTML_FRAME_PX);
+    return Math.min(Math.max(height, HOME_HTML_MIN_FRAME_PX), HOME_HTML_MAX_FRAME_PX);
 };
 
-const buildHomeHtmlResizeScript = (moduleId: string) => {
-    const meta = JSON.stringify({ source: HOME_HTML_RESIZE_SOURCE, id: String(moduleId) });
-    return `<script>(function(){`
-        + `var meta=${meta};`
-        + `var last=-1;`
-        + `function measure(){`
-        + `var wrap=document.querySelector(".home-custom-module-html");`
-        + `var body=document.body;`
-        + `var root=document.documentElement;`
-        + `var height=Math.ceil(Math.max(wrap&&wrap.scrollHeight||0,wrap&&wrap.offsetHeight||0,body&&body.scrollHeight||0,body&&body.offsetHeight||0,root&&root.scrollHeight||0));`
-        + `if(!isFinite(height)||height<0) height=0;`
-        + `if(height===last) return;`
-        + `last=height;`
-        + `parent.postMessage({source:meta.source,id:meta.id,height:height},"*");`
-        + `}`
-        + `function schedule(){ if(typeof requestAnimationFrame==="function") requestAnimationFrame(measure); else measure(); }`
-        + `window.addEventListener("load",schedule);`
-        + `window.addEventListener("resize",schedule);`
-        + `document.addEventListener("click",function(){ setTimeout(schedule,50); setTimeout(schedule,320); });`
-        + `document.addEventListener("transitionend",schedule);`
-        + `if(typeof ResizeObserver!=="undefined"){ var ro=new ResizeObserver(schedule); if(document.documentElement) ro.observe(document.documentElement); if(document.body) ro.observe(document.body); var wrapEl=document.querySelector(".home-custom-module-html"); if(wrapEl) ro.observe(wrapEl); }`
-        + `if(typeof MutationObserver!=="undefined"&&document.body){ new MutationObserver(schedule).observe(document.body,{childList:true,subtree:true,attributes:true,characterData:true}); }`
-        + `schedule();`
-        + `})();</script>`;
+const measureHomeHtmlFrame = (frame: HTMLIFrameElement) => {
+    const doc = frame.contentDocument;
+    if (!doc) return null;
+    const wrap = doc.querySelector('.home-custom-module-html');
+    if (wrap) {
+        return clampHomeHtmlFrameHeight(Math.max(wrap.scrollHeight, wrap.offsetHeight));
+    }
+    const body = doc.body;
+    const root = doc.documentElement;
+    return clampHomeHtmlFrameHeight(Math.max(
+        body?.scrollHeight || 0,
+        body?.offsetHeight || 0,
+        root?.scrollHeight || 0,
+    ));
 };
 
-const buildHomeHtmlSrcDoc = (html: string, css: string, theme: PortalHtmlTheme, moduleId: string) => {
+const buildHomeHtmlSrcDoc = (html: string, css: string, theme: PortalHtmlTheme) => {
     const safeCss = String(css || '').replace(/<\/style/gi, '<\\/style');
     return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>`
         + `:root{color-scheme:${theme.colorScheme};}`
@@ -86,7 +75,7 @@ const buildHomeHtmlSrcDoc = (html: string, css: string, theme: PortalHtmlTheme, 
         + `.home-custom-module-html{box-sizing:border-box;min-width:0;}`
         + `${safeCss}`
         + `html,body,.home-custom-module-html{height:auto!important;max-height:none!important;overflow:visible!important;}`
-        + `</style></head><body><div class="home-custom-module-html">${html || ''}</div>${buildHomeHtmlResizeScript(moduleId)}</body></html>`;
+        + `</style></head><body><div class="home-custom-module-html">${html || ''}</div></body></html>`;
 };
 
 export const HomeCustomModuleSection: React.FC<Props> = ({ module, isAdmin = false }) => {
@@ -104,9 +93,9 @@ export const HomeCustomModuleSection: React.FC<Props> = ({ module, isAdmin = fal
     ), [module]);
     const htmlSrcDoc = useMemo(() => (
         module.mode === 'html'
-            ? buildHomeHtmlSrcDoc(module.html || '', module.css || '', portalTheme, module.id)
+            ? buildHomeHtmlSrcDoc(module.html || '', module.css || '', portalTheme)
             : ''
-    ), [module.mode, module.html, module.css, module.id, portalTheme]);
+    ), [module.mode, module.html, module.css, portalTheme]);
 
     useEffect(() => {
         setEmbedBlocked(false);
@@ -127,18 +116,79 @@ export const HomeCustomModuleSection: React.FC<Props> = ({ module, isAdmin = fal
 
     useEffect(() => {
         if (module.mode !== 'html') return;
-        const onMessage = (event: MessageEvent) => {
-            const frame = htmlIframeRef.current;
-            if (!frame || event.source !== frame.contentWindow) return;
-            const data = event.data;
-            if (!data || data.source !== HOME_HTML_RESIZE_SOURCE || String(data.id) !== String(module.id)) return;
-            const next = clampHomeHtmlFrameHeight(data.height);
+        const frame = htmlIframeRef.current;
+        if (!frame) return;
+
+        let cancelled = false;
+        let resizeObserver: ResizeObserver | undefined;
+        let mutationObserver: MutationObserver | undefined;
+        let attachedDoc: Document | null = null;
+        const timeouts: number[] = [];
+
+        const apply = () => {
+            if (cancelled) return;
+            const next = measureHomeHtmlFrame(frame);
             if (next == null) return;
             setHtmlFrameHeight((prev) => (prev === next ? prev : next));
         };
-        window.addEventListener('message', onMessage);
-        return () => window.removeEventListener('message', onMessage);
-    }, [module.id, module.mode]);
+
+        const onClick = () => {
+            timeouts.push(window.setTimeout(apply, 50), window.setTimeout(apply, 320));
+        };
+
+        const detach = () => {
+            resizeObserver?.disconnect();
+            mutationObserver?.disconnect();
+            resizeObserver = undefined;
+            mutationObserver = undefined;
+            if (attachedDoc) {
+                attachedDoc.removeEventListener('click', onClick);
+                attachedDoc.removeEventListener('transitionend', apply);
+                attachedDoc = null;
+            }
+            window.removeEventListener('resize', apply);
+            timeouts.forEach((id) => window.clearTimeout(id));
+            timeouts.length = 0;
+        };
+
+        const attach = () => {
+            detach();
+            const doc = frame.contentDocument;
+            if (!doc) return;
+            attachedDoc = doc;
+            apply();
+            if (typeof requestAnimationFrame === 'function') requestAnimationFrame(apply);
+            timeouts.push(window.setTimeout(apply, 50), window.setTimeout(apply, 300));
+            if (typeof ResizeObserver !== 'undefined') {
+                resizeObserver = new ResizeObserver(apply);
+                if (doc.documentElement) resizeObserver.observe(doc.documentElement);
+                if (doc.body) resizeObserver.observe(doc.body);
+                const wrap = doc.querySelector('.home-custom-module-html');
+                if (wrap) resizeObserver.observe(wrap);
+            }
+            if (typeof MutationObserver !== 'undefined' && doc.body) {
+                mutationObserver = new MutationObserver(apply);
+                mutationObserver.observe(doc.body, {
+                    childList: true,
+                    subtree: true,
+                    attributes: true,
+                    characterData: true,
+                });
+            }
+            doc.addEventListener('click', onClick);
+            doc.addEventListener('transitionend', apply);
+            window.addEventListener('resize', apply);
+        };
+
+        frame.addEventListener('load', attach);
+        if (frame.contentDocument?.readyState === 'complete') attach();
+
+        return () => {
+            cancelled = true;
+            frame.removeEventListener('load', attach);
+            detach();
+        };
+    }, [accessible, htmlSrcDoc, module.mode]);
 
     if (!accessible) return null;
 
@@ -196,7 +246,7 @@ export const HomeCustomModuleSection: React.FC<Props> = ({ module, isAdmin = fal
                         backgroundColor: `rgb(${portalTheme.card})`,
                     }}
                     scrolling="no"
-                    sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
+                    sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
                     referrerPolicy="no-referrer"
                 />
             </div>
