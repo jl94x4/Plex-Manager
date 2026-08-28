@@ -655,7 +655,7 @@ export const PosterSetsWatchingView: React.FC = () => {
                                     {watchStatsState.enabled || 0} live
                                 </MetaPill>
                                 <MetaPill className="border-white/15 bg-white/5 text-muted" truncate={false}>
-                                    {watchStatsState.total || 0} pinned
+                                    {watchStatsState.total || 0}{watchStatsState.max ? ` / ${watchStatsState.max}` : ''} pinned
                                 </MetaPill>
                                 {(watchStatsState.errored || 0) > 0 ? (
                                     <MetaPill className="border-red-400/35 bg-red-500/15 text-red-200" truncate={false}>
@@ -1030,7 +1030,7 @@ export const PosterSetsWatchingView: React.FC = () => {
                                                                             ) : null}
                                                                         </div>
                                                                         <p className="mt-1 text-[10px] leading-relaxed text-muted">
-                                                                            {(watch.knownAssetIds || []).length} known
+                                                                            {(watch.knownAssetCount ?? watch.knownAssetIds?.length ?? 0)} known
                                                                             {watch.lastCheckedAt ? ` · ${formatTime(watch.lastCheckedAt)}` : ' · not checked'}
                                                                             {watch.lastNewCount ? ` · +${watch.lastNewCount} last` : ''}
                                                                         </p>
@@ -1048,7 +1048,7 @@ export const PosterSetsWatchingView: React.FC = () => {
                                                                         ) : null}
                                                                     </div>
                                                                     <p className="text-[10px] leading-relaxed text-muted">
-                                                                        {(watch.knownAssetIds || []).length} known
+                                                                        {(watch.knownAssetCount ?? watch.knownAssetIds?.length ?? 0)} known
                                                                         {watch.lastCheckedAt ? ` · ${formatTime(watch.lastCheckedAt)}` : ' · not checked'}
                                                                         {watch.lastNewCount ? ` · +${watch.lastNewCount} last` : ''}
                                                                     </p>

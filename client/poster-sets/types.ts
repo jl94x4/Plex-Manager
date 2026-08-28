@@ -67,6 +67,7 @@ export type PosterSetsWatch = {
     setKind?: string | null;
     mediuxFilters?: string[];
     knownAssetIds?: string[];
+    knownAssetCount?: number;
     appliedAssetIds?: string[];
     lastMatchedAssetIds?: string[];
     assetTrackingVersion?: number;
@@ -87,6 +88,7 @@ export type PosterSetsWatchStats = {
     total?: number;
     enabled?: number;
     errored?: number;
+    max?: number;
 };
 
 export type PosterSetsWatcherPassStatus = {
