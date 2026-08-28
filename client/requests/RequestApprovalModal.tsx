@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Film, Loader2, Tv, X } from 'lucide-react';
+import { Check, Film, Loader2, Music, Tv, X } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { formatDateTime } from '../shared/format';
 import { CustomSelect, StyledCheckbox } from '../shared/ui';
 import { RequestMetaChips } from './RequestMetaChips';
+import { portalRequestArrSegment, portalRequestTypeLabelKey } from './requestFilterUtils';
 import type {
     PortalRequestDetail,
     PortalRequestOverrides,
@@ -97,12 +98,10 @@ export const RequestApprovalModal: React.FC<Props> = ({
     useEffect(() => { onErrorRef.current = onError; }, [onError]);
     useEffect(() => { onCompleteRef.current = onComplete; }, [onComplete]);
 
-    const serviceType = detail?.type === 'tv' ? 'sonarr' : 'radarr';
-
-    const loadServiceOptions = useCallback(async (type: 'movie' | 'tv', nextServerId: number) => {
+    const loadServiceOptions = useCallback(async (type: 'movie' | 'tv' | 'music', nextServerId: number) => {
         setOptionsLoading(true);
         try {
-            const segment = type === 'tv' ? 'sonarr' : 'radarr';
+            const segment = portalRequestArrSegment(type);
             const data = await apiFetch(`/api/requests/services/${segment}/${nextServerId}`);
             setServiceOptions(data);
         } catch (e: any) {
@@ -129,7 +128,7 @@ export const RequestApprovalModal: React.FC<Props> = ({
                 const usersList: PortalRequestUser[] = Array.isArray(usersData?.users) ? usersData.users : [];
                 setUsers(usersList);
 
-                const segment = nextDetail.type === 'tv' ? 'sonarr' : 'radarr';
+                const segment = portalRequestArrSegment(nextDetail.type);
                 const serversData = await apiFetch(`/api/requests/services/${segment}`);
                 if (cancelled) return;
 
@@ -299,7 +298,7 @@ export const RequestApprovalModal: React.FC<Props> = ({
     };
 
     const title = detail?.title || initialTitle || 'Request';
-    const TypeIcon = detail?.type === 'tv' ? Tv : Film;
+    const TypeIcon = detail?.type === 'tv' ? Tv : detail?.type === 'music' ? Music : Film;
 
     return (
         <div
@@ -353,6 +352,7 @@ export const RequestApprovalModal: React.FC<Props> = ({
                                 >
                                     {detail.requestedBy.displayName}
                                 </button>
+                                {' · '}{t(portalRequestTypeLabelKey(detail.type))}
                                 {detail.is4k ? ' · 4K' : ''}
                                 {detail.isAnime ? ' · Anime' : ''}
                             </p>

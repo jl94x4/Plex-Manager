@@ -12,6 +12,7 @@ import { CustomSelect } from '../shared/ui';
 import { formatIssueRelativeTime, issueStatusBadgeClass } from '../discovery/issueUtils';
 import { useDiscoverI18n } from '../discovery/i18n';
 import { goToProfile } from '../profile/helpers';
+import { portalRequestTypeLabelKey } from '../requests/requestFilterUtils';
 
 type TicketFilter = 'open' | 'resolved' | 'closed' | 'all';
 
@@ -572,7 +573,7 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                                                 <p className="text-[10px] font-bold uppercase tracking-wide text-plex">{t('support.labels.mediaIssue')}</p>
                                                 <p className="text-sm font-bold truncate">{linked.title || active.subject}</p>
                                                 <p className="text-[11px] text-muted truncate">
-                                                    {[linked.issueTypeLabel, linked.mediaType === 'tv' ? t('mediaType.tv') : t('mediaType.movie')]
+                                                    {[linked.issueTypeLabel, t(portalRequestTypeLabelKey(linked.mediaType))]
                                                         .filter(Boolean)
                                                         .join(' · ')}
                                                 </p>

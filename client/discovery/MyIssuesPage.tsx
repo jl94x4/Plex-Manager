@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle, Film, LifeBuoy, Loader2, MessageSquare, RotateCcw, Trash2, Tv } from 'lucide-react';
+import { CheckCircle, Film, LifeBuoy, Loader2, MessageSquare, Music, RotateCcw, Trash2, Tv } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { portalUrl } from '../shared/basePath';
 import { NoPosterPlaceholder } from '../shared/NoPosterPlaceholder';
 import { RequestCardActions, RequestCardShell, requestCardActionBtnClass } from '../requests/RequestCardShell';
+import { portalRequestTypeLabelKey } from '../requests/requestFilterUtils';
 import type { PortalIssueItem } from '../requests/types';
 import {
     formatIssueLocation,
@@ -25,7 +26,7 @@ type Props = {
 
 const IssueTypeBadge: React.FC<{ type: string; t: (key: string) => string }> = ({ type, t }) => (
     <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-white/5 border border-border text-muted">
-        {type === 'tv' ? t('mediaType.tv') : t('mediaType.movie')}
+        {t(portalRequestTypeLabelKey(type))}
     </span>
 );
 
@@ -368,7 +369,7 @@ export const MyIssuesPage: React.FC<Props> = ({ navigate, pushToast, onCountsCha
                                             onClick={() => openMedia(item)}
                                             className={`${requestCardActionBtnClass} border border-border text-text/70 hover:bg-white/5`}
                                         >
-                                            {item.type === 'tv' ? <Tv className="w-3.5 h-3.5" /> : <Film className="w-3.5 h-3.5" />}
+                                            {item.type === 'tv' ? <Tv className="w-3.5 h-3.5" /> : item.type === 'music' ? <Music className="w-3.5 h-3.5" /> : <Film className="w-3.5 h-3.5" />}
                                             {t('common.view')}
                                         </button>
                                     </RequestCardActions>

@@ -1487,6 +1487,8 @@ import {
     fetchArrInstanceJson,
     fetchRadarrMovieReleaseDates,
     fetchLidarrAlbumsForArtist,
+    lookupLidarrArtist,
+    findLidarrArtistInLibrary,
 } from './lib/arr-service.js';
 import { leanRadarrMovieList, leanSonarrSeriesList } from './lib/portal-request/leanArrCatalog.js';
 import { getSonarrTrashCatalog, getSonarrTrashCustomFormat } from './lib/trash-guides-catalog.js';
@@ -11809,35 +11811,43 @@ app.get('/api/arr/deep-link', requireAuth, requireAdmin, async (req, res) => {
         const mediaTypeRaw = String(req.query.mediaType || req.query.type || '').trim().toLowerCase();
         const mediaType = mediaTypeRaw === 'tv' || mediaTypeRaw === 'show' || mediaTypeRaw === 'series'
             ? 'tv'
-            : (mediaTypeRaw === 'movie' ? 'movie' : '');
+            : (mediaTypeRaw === 'music' || mediaTypeRaw === 'artist' || mediaTypeRaw === 'album'
+                ? 'music'
+                : (mediaTypeRaw === 'movie' ? 'movie' : ''));
         const tmdbId = Number(req.query.tmdbId);
+        const mbid = String(req.query.mbid || '').trim();
         const title = String(req.query.title || '').trim();
         const yearRaw = Number(req.query.year);
         const year = Number.isFinite(yearRaw) && yearRaw > 0 ? yearRaw : null;
         const is4k = req.query.is4k === '1' || String(req.query.is4k || '').toLowerCase() === 'true';
 
-        if (mediaType !== 'movie' && mediaType !== 'tv') {
-            return res.status(400).json({ error: 'mediaType must be movie or tv' });
+        if (mediaType !== 'movie' && mediaType !== 'tv' && mediaType !== 'music') {
+            return res.status(400).json({ error: 'mediaType must be movie, tv, or music' });
         }
-        if ((!Number.isFinite(tmdbId) || tmdbId <= 0) && !title) {
+        if (mediaType === 'music') {
+            if (!mbid && !title) {
+                return res.status(400).json({ error: 'mbid or title is required' });
+            }
+        } else if ((!Number.isFinite(tmdbId) || tmdbId <= 0) && !title) {
             return res.status(400).json({ error: 'tmdbId or title is required' });
         }
 
         const config = await loadFile(CONFIG_PATH, {});
         const normalized = normalizeArrConfig(config);
-        const arrType = mediaType === 'movie' ? 'radarr' : 'sonarr';
+        const arrType = mediaType === 'movie' ? 'radarr' : (mediaType === 'music' ? 'lidarr' : 'sonarr');
+        const arrLabel = arrType === 'radarr' ? 'Radarr' : (arrType === 'lidarr' ? 'Lidarr' : 'Sonarr');
         const enabled = getArrInstances(normalized, { type: arrType, enabledOnly: true }).filter(isArrInstanceReady);
         if (!enabled.length) {
-            return res.status(404).json({ error: `${arrType === 'radarr' ? 'Radarr' : 'Sonarr'} is not configured` });
+            return res.status(404).json({ error: `${arrLabel} is not configured` });
         }
 
         let preferred = null;
-        if (is4k) {
+        if (is4k && arrType !== 'lidarr') {
             preferred = enabled.find((entry) => /4k|uhd/i.test(String(entry.name || ''))) || null;
         }
         if (!preferred) preferred = getDefaultArrInstance(normalized, arrType);
         if (!isArrInstanceReady(preferred)) {
-            return res.status(404).json({ error: `${arrType === 'radarr' ? 'Radarr' : 'Sonarr'} is not configured` });
+            return res.status(404).json({ error: `${arrLabel} is not configured` });
         }
 
         const lookupItem = {
@@ -11846,6 +11856,36 @@ app.get('/api/arr/deep-link', requireAuth, requireAdmin, async (req, res) => {
             title,
             year,
         };
+        const lidarrFetchOpts = {
+            resolveUrl: resolveIntegrationUrlForFetch,
+            fetchImpl: fetch,
+        };
+
+        if (arrType === 'lidarr') {
+            let entity = null;
+            if (mbid) {
+                entity = await findLidarrArtistInLibrary(preferred, mbid, lidarrFetchOpts).catch(() => null);
+                if (!entity) {
+                    entity = await lookupLidarrArtist(preferred, `mbid:${mbid}`, lidarrFetchOpts).catch(() => null);
+                }
+            }
+            if (!entity && title) {
+                entity = await lookupLidarrArtist(preferred, title, lidarrFetchOpts).catch(() => null);
+            }
+            if (!entity) {
+                entity = { title, artistName: title, foreignArtistId: mbid || undefined };
+            }
+            const url = buildArrDeepUrl(preferred, entity, 'lidarr');
+            if (!url) {
+                return res.status(404).json({ error: 'Unable to build Arr deep link' });
+            }
+            return res.json({
+                url,
+                arrType,
+                label: 'Open in Lidarr',
+                instanceName: preferred.name || 'Lidarr',
+            });
+        }
 
         // Movies can deep-link by TMDB id without scanning the full Arr catalog.
         if (arrType === 'radarr' && lookupItem.tmdbId) {
@@ -12592,10 +12632,17 @@ app.get('/api/requests/users', requireAdmin, async (req, res) => {
     }
 });
 
+const requestMediaTypeFromArrSegment = (raw) => {
+    const value = String(raw || '').toLowerCase();
+    if (value === 'radarr' || value === 'movie') return 'movie';
+    if (value === 'lidarr' || value === 'music') return 'music';
+    return 'tv';
+};
+
 app.get('/api/requests/services/:type', requireAdmin, async (req, res) => {
     try {
         const config = await loadFile(CONFIG_PATH, {});
-        const type = String(req.params.type || '').toLowerCase() === 'radarr' ? 'movie' : 'tv';
+        const type = requestMediaTypeFromArrSegment(req.params.type);
         if (getRequestEngine(config) === 'portal') {
             const portalRequests = getPortalRequestService(config);
             return res.json({ servers: portalRequests.listPortalArrServers(type) });
@@ -12612,7 +12659,7 @@ app.get('/api/requests/services/:type', requireAdmin, async (req, res) => {
 app.get('/api/requests/services/:type/:serverId', requireAdmin, async (req, res) => {
     try {
         const config = await loadFile(CONFIG_PATH, {});
-        const type = String(req.params.type || '').toLowerCase() === 'radarr' ? 'movie' : 'tv';
+        const type = requestMediaTypeFromArrSegment(req.params.type);
         const serverId = String(req.params.serverId || '').trim();
         if (!serverId) return res.status(400).json({ error: 'Server ID is required' });
         if (getRequestEngine(config) === 'portal') {

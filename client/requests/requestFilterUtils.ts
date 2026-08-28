@@ -4,11 +4,19 @@ export type AdminRequestFilter = 'pending' | 'processing' | 'available' | 'faile
 
 export type RequestListFilters = {
     requesterId: string;
-    mediaType: 'all' | 'movie' | 'tv';
+    mediaType: 'all' | 'movie' | 'tv' | 'music';
     quality: 'all' | 'hd' | '4k';
     dateRange: 'all' | '7d' | '30d';
     search: string;
 };
+
+export const portalRequestArrSegment = (type?: string | null) => (
+    type === 'tv' ? 'sonarr' : type === 'music' ? 'lidarr' : 'radarr'
+);
+
+export const portalRequestTypeLabelKey = (type?: string | null) => (
+    type === 'tv' ? 'mediaType.tv' : type === 'music' ? 'mediaType.music' : 'mediaType.movie'
+);
 
 export const defaultRequestListFilters = (): RequestListFilters => ({
     requesterId: '',

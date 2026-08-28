@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Check, ExternalLink, Film, Loader2, Pencil, RefreshCw, RotateCcw, Search, Trash2, Tv, X } from 'lucide-react';
+import { Check, ExternalLink, Film, Loader2, Music, Pencil, RefreshCw, RotateCcw, Search, Trash2, Tv, X } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { formatDateTime } from '../shared/format';
 import { Loader, ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
@@ -14,6 +14,7 @@ import {
     buildRequesterOptions,
     defaultRequestListFilters,
     filterPortalRequests,
+    portalRequestTypeLabelKey,
     type RequestListFilters,
 } from './requestFilterUtils';
 import type { PortalRequestItem, PortalRequestUser } from './types';
@@ -46,7 +47,7 @@ const formatRelativeTime = (value: string | null | undefined, t: ReturnType<type
 const RequestTypeBadge: React.FC<{ type: string; is4k: boolean; t: ReturnType<typeof useDiscoverI18n>['t'] }> = ({ type, is4k, t }) => (
     <span className="inline-flex items-center gap-1.5">
         <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-white/5 border border-border text-muted">
-            {type === 'tv' ? t('mediaType.tv') : t('mediaType.movie')}
+            {t(portalRequestTypeLabelKey(type))}
         </span>
         {is4k && (
             <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-200">
@@ -424,6 +425,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                             { value: 'all', label: t('requestsAdmin.filters.allTypes') },
                             { value: 'movie', label: t('mediaType.movies') },
                             { value: 'tv', label: t('mediaType.tv') },
+                            { value: 'music', label: t('mediaType.music') },
                         ]}
                     />
                     <CustomSelect
@@ -526,7 +528,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                 <div className="space-y-3">
                     {filteredRequests.map((item) => {
                         const busy = actionId === item.id;
-                        const TypeIcon = item.type === 'tv' ? Tv : Film;
+                        const TypeIcon = item.type === 'tv' ? Tv : item.type === 'music' ? Music : Film;
                         const isSelected = selectedIds.has(item.id);
                         return (
                             <RequestCardShell
@@ -672,8 +674,9 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                         </button>
                                     )}
                                     <OpenInArrButton
-                                        mediaType={item.type === 'tv' ? 'tv' : 'movie'}
+                                        mediaType={item.type}
                                         tmdbId={item.tmdbId}
+                                        mbid={item.mbid}
                                         title={item.title}
                                         year={item.year}
                                         is4k={!!item.is4k}

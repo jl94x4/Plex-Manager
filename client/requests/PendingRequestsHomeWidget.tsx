@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { Check, ChevronRight, Film, Loader2, Pencil, RefreshCw, Tv } from 'lucide-react';
+import { Check, ChevronRight, Film, Loader2, Music, Pencil, RefreshCw, Tv } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { usePoll } from '../shared/usePoll';
 import { RequestApprovalModal } from './RequestApprovalModal';
@@ -172,7 +172,7 @@ export const PendingRequestsHomeWidget: React.FC<{
     };
 
     const renderRequestRow = (item: PortalRequestItem, wide: boolean) => {
-        const TypeIcon = item.type === 'tv' ? Tv : Film;
+        const TypeIcon = item.type === 'tv' ? Tv : item.type === 'music' ? Music : Film;
         const busy = actionId === item.id;
         if (wide) {
             return (

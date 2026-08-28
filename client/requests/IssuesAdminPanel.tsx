@@ -6,6 +6,7 @@ import {
     LifeBuoy,
     Loader2,
     MessageSquare,
+    Music,
     RefreshCw,
     RotateCcw,
     Trash2,
@@ -17,6 +18,7 @@ import { formatDateTime } from '../shared/format';
 import { Loader, ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { dashboardPanelClass } from '../shared/dashboard/DashboardChrome';
 import { RequestCardActions, RequestCardShell, requestCardActionBtnClass } from './RequestCardShell';
+import { portalRequestTypeLabelKey } from './requestFilterUtils';
 import type { PortalIssueItem } from './types';
 import {
     formatIssueLocation,
@@ -30,7 +32,7 @@ type IssueFilter = 'open' | 'resolved';
 
 const IssueTypeBadge: React.FC<{ type: string; t: ReturnType<typeof useDiscoverI18n>['t'] }> = ({ type, t }) => (
     <span className="text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded-full bg-white/5 border border-border text-muted">
-        {type === 'tv' ? t('mediaType.tv') : t('mediaType.movie')}
+        {t(portalRequestTypeLabelKey(type))}
     </span>
 );
 
@@ -354,7 +356,7 @@ export const IssuesAdminPanel: React.FC<{ onCountsChange?: () => void }> = ({ on
                                                 href={portalUrl(`/discovery/${item.type}/${item.tmdbId}`)}
                                                 className={`${requestCardActionBtnClass} border border-border text-muted hover:bg-white/5 hover:text-text no-underline`}
                                             >
-                                                {item.type === 'tv' ? <Tv className="w-3.5 h-3.5" /> : <Film className="w-3.5 h-3.5" />}
+                                                {item.type === 'tv' ? <Tv className="w-3.5 h-3.5" /> : item.type === 'music' ? <Music className="w-3.5 h-3.5" /> : <Film className="w-3.5 h-3.5" />}
                                                 {t('common.view')}
                                             </a>
                                         )}
