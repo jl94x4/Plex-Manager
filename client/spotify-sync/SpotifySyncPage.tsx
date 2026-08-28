@@ -31,7 +31,9 @@ import {
     DashboardHero,
     DashboardPageShell,
     DashboardPanel,
+    DashboardStatCard,
     DashboardSubnav,
+    dashboardGlowClass,
     dashboardSubnavLinkClass,
 } from '../shared/dashboard/DashboardChrome';
 import { usePoll } from '../shared/usePoll';
@@ -310,43 +312,38 @@ export const SpotifySyncPage: React.FC = () => {
                 )}
             />
 
-            <div className="overflow-hidden rounded-xl border border-white/10 bg-black/30">
-                <div className="grid grid-cols-2 divide-x divide-white/10 sm:grid-cols-4">
-                    {[
-                        {
-                            label: 'Worker',
-                            value: workerOk ? 'Ready' : 'Offline',
-                            ok: workerOk,
-                            icon: workerOk ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" /> : <XCircle className="h-3.5 w-3.5 text-rose-300" />,
-                        },
-                        {
-                            label: 'Plex',
-                            value: plexOk ? 'Linked' : 'Not linked',
-                            ok: plexOk,
-                            icon: plexOk ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" /> : <Link2 className="h-3.5 w-3.5 text-amber-300" />,
-                        },
-                        {
-                            label: 'Last playlist sync',
-                            value: formatWhen(status?.lastSync?.playlists),
-                            ok: !!status?.lastSync?.playlists,
-                            icon: <ListMusic className="h-3.5 w-3.5 text-sky-300" />,
-                        },
-                        {
-                            label: 'Logged runs',
-                            value: String(status?.playlistRunCount ?? 0),
-                            ok: (status?.playlistRunCount || 0) > 0,
-                            icon: <ScrollText className="h-3.5 w-3.5 text-violet-300" />,
-                        },
-                    ].map((item) => (
-                        <div key={item.label} className="flex min-w-0 flex-col gap-1 px-3 py-3">
-                            <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
-                                {item.icon}
-                                <span>{item.label}</span>
-                            </div>
-                            <p className={`truncate text-sm font-semibold ${item.ok ? 'text-text' : 'text-amber-100'}`}>{item.value}</p>
-                        </div>
-                    ))}
-                </div>
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
+                <DashboardStatCard
+                    label="Worker"
+                    value={workerOk ? 'Ready' : 'Offline'}
+                    hint={workerOk ? 'Bundled Spotify Sync' : 'Not reachable'}
+                    icon={workerOk ? <CheckCircle2 className="h-4 w-4 text-emerald-300" /> : <XCircle className="h-4 w-4 text-rose-300" />}
+                    glow={dashboardGlowClass(workerOk ? 'emerald' : 'rose')}
+                    valueClassName={workerOk ? '' : 'text-rose-200'}
+                />
+                <DashboardStatCard
+                    label="Plex"
+                    value={plexOk ? 'Linked' : 'Not linked'}
+                    hint={plexOk ? 'Portal token' : 'Settings → Plex'}
+                    icon={plexOk ? <CheckCircle2 className="h-4 w-4 text-emerald-300" /> : <Link2 className="h-4 w-4 text-amber-300" />}
+                    glow={dashboardGlowClass(plexOk ? 'emerald' : 'amber')}
+                    valueClassName={plexOk ? '' : 'text-amber-200'}
+                />
+                <DashboardStatCard
+                    label="Last playlist sync"
+                    value={formatWhen(status?.lastSync?.playlists)}
+                    hint="Playlists to Plex"
+                    icon={<ListMusic className="h-4 w-4 text-sky-300" />}
+                    glow={dashboardGlowClass(status?.lastSync?.playlists ? 'sky' : 'muted')}
+                    valueClassName="!text-lg md:!text-xl leading-snug [overflow-wrap:anywhere]"
+                />
+                <DashboardStatCard
+                    label="Logged runs"
+                    value={String(status?.playlistRunCount ?? 0)}
+                    hint="Playlist sync jobs"
+                    icon={<ScrollText className="h-4 w-4 text-violet-300" />}
+                    glow={dashboardGlowClass((status?.playlistRunCount || 0) > 0 ? 'violet' : 'muted')}
+                />
             </div>
 
             {syncProgress ? (
