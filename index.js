@@ -7282,6 +7282,7 @@ app.post('/api/config/test-integration', setupRateLimit, async (req, res) => {
 
 let cachedPlexConnectionUri = null;
 let lastPlexConnectionUriFetch = 0;
+let plexConnectionUriInflight = null;
 
 const isLoopbackPlexUri = (uri = '') => {
     try {
@@ -7775,7 +7776,9 @@ const getPlexConnectionUri = async (config) => {
     if (cachedPlexConnectionUri && (Date.now() - lastPlexConnectionUriFetch < 60 * 60 * 1000)) {
         return cachedPlexConnectionUri;
     }
+    if (plexConnectionUriInflight) return plexConnectionUriInflight;
 
+    const pending = (async () => {
     let directUrl = resolveConfiguredPlexServerUrl(config);
     if (!directUrl || (isLoopbackPlexUri(directUrl) && shouldPreferRemotePlexConnection())) {
         directUrl = await resolvePlexServerUrlForVerification(config.plexToken, config, config.serverIdentifier);
@@ -7814,6 +7817,14 @@ const getPlexConnectionUri = async (config) => {
         log(`Using Plex connection URI for container runtime: ${cachedPlexConnectionUri}`);
     }
     return cachedPlexConnectionUri;
+    })();
+
+    plexConnectionUriInflight = pending;
+    try {
+        return await pending;
+    } finally {
+        if (plexConnectionUriInflight === pending) plexConnectionUriInflight = null;
+    }
 };
 
 const listPlexLibrariesForConfig = async (config) => {
@@ -7854,19 +7865,40 @@ app.get('/api/plex/image', requireAuth, requireMember, async (req, res) => {
     if (!isSafePlexMediaPath(thumbPath)) {
         return res.status(400).send('Invalid path');
     }
+    const failImage = (status = 500) => {
+        if (res.headersSent) {
+            if (!res.writableEnded) res.destroy();
+            return;
+        }
+        res.setHeader('Cache-Control', 'no-store');
+        res.status(status).send('');
+    };
     try {
         const config = await loadFile(CONFIG_PATH, {});
-        const uri = await getPlexConnectionUri(config);
         const transcodeWidth = Math.min(Math.max(parseInt(width, 10) || PLEX_POSTER_WIDTH, 16), 1200);
         const transcodeHeight = Math.min(Math.max(parseInt(height, 10) || PLEX_POSTER_HEIGHT, 16), 1800);
-        // Always transcode — original Plex art can be tens of MB each and was buffered in RAM.
-        const url = `${uri}/photo/:/transcode?url=${encodeURIComponent(thumbPath)}&width=${encodeURIComponent(transcodeWidth)}&height=${encodeURIComponent(transcodeHeight)}&minSize=1&X-Plex-Token=${config.plexToken}`;
-
-        const response = await fetchWithTimeout(url, { headers: plexClientHeaders(config.plexToken) }, 15000);
+        const fetchPoster = async () => {
+            const uri = await getPlexConnectionUri(config);
+            const url = `${uri}/photo/:/transcode?url=${encodeURIComponent(thumbPath)}&width=${encodeURIComponent(transcodeWidth)}&height=${encodeURIComponent(transcodeHeight)}&minSize=1&X-Plex-Token=${config.plexToken}`;
+            return fetchWithTimeout(url, { headers: plexClientHeaders(config.plexToken) }, 15000);
+        };
+        let response = null;
+        try {
+            response = await fetchPoster();
+        } catch {
+            response = null;
+        }
+        if (!response?.ok) {
+            if (response) discardFetchBody(response);
+            try {
+                response = await fetchPoster();
+            } catch {
+                return failImage(500);
+            }
+        }
         await sendFetchImage(res, response);
     } catch (e) {
-        if (!res.headersSent) res.status(500).send('');
-        else if (!res.writableEnded) res.destroy();
+        failImage(500);
     }
 });
 

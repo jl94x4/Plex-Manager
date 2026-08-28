@@ -20,6 +20,7 @@ import { Loader, Toast, ToastContainer, pushToast } from './shared/toast';
 import { usePoll } from './shared/usePoll';
 import { isActiveDownloadItem } from './shared/downloadStatus';
 import { NoPosterPlaceholder } from './shared/NoPosterPlaceholder';
+import { RetryablePoster } from './shared/RetryablePoster';
 import {
     ActivityGridSkeleton,
     DiscoverPageSkeleton,
@@ -6848,14 +6849,8 @@ export const DiscoverPosterCard: React.FC<{
     const fallbackPosterSrc = item.posterFallbackUrl
         ? resolvePortalAssetUrl(item.posterFallbackUrl)
         : '';
-    const [posterSrc, setPosterSrc] = useState(primaryPosterSrc);
-    const [posterFailed, setPosterFailed] = useState(false);
     const [quickActionsOpen, setQuickActionsOpen] = useState(false);
     const quickActionsRef = useRef<HTMLDivElement | null>(null);
-    useEffect(() => {
-        setPosterSrc(primaryPosterSrc);
-        setPosterFailed(false);
-    }, [primaryPosterSrc]);
     useEffect(() => {
         if (!quickActionsOpen) return;
         const onDocMouseDown = (event: MouseEvent) => {
@@ -6876,24 +6871,18 @@ export const DiscoverPosterCard: React.FC<{
     }, [quickActionsOpen]);
 
     const hasPoster = !!(primaryPosterSrc || fallbackPosterSrc);
-    const showPosterPlaceholder = !hasPoster || posterFailed;
     const hasQuickActions = Array.isArray(quickActions) && quickActions.length > 0;
     const posterInner = (
         <div className={`${posterShell} ${resolvedAspect === 'square' ? 'aspect-square' : 'aspect-[2/3]'} w-full`}>
-            {showPosterPlaceholder ? (
+            {!hasPoster ? (
                 <NoPosterPlaceholder />
             ) : (
-                <img
-                    src={posterSrc || fallbackPosterSrc}
+                <RetryablePoster
+                    src={primaryPosterSrc}
+                    fallbackSrc={fallbackPosterSrc}
                     alt={item.title}
                     loading="lazy"
-                    onError={() => {
-                        if (fallbackPosterSrc && posterSrc !== fallbackPosterSrc) {
-                            setPosterSrc(fallbackPosterSrc);
-                            return;
-                        }
-                        setPosterFailed(true);
-                    }}
+                    compactPlaceholder={false}
                     className={`w-full h-full object-cover ${variant === 'home' ? 'transition-[transform,opacity] duration-300 group-hover:scale-105 group-hover:opacity-80' : ''}`}
                 />
             )}
@@ -9314,7 +9303,9 @@ const StreamDetailsModal: React.FC<{ session: any, onClose: () => void, isAdmin?
     const [showKillConfirm, setShowKillConfirm] = useState(false);
     const sessionPosterSrc = session.thumbUrl
         ? resolvePortalAssetUrl(session.thumbUrl)
-        : portalUrl(`/api/plex/image?path=${encodeURIComponent(session.thumb)}&width=400&height=600`);
+        : (session.thumb
+            ? portalUrl(`/api/plex/image?path=${encodeURIComponent(session.thumb)}&width=400&height=600`)
+            : '');
     const sessionFallbackPosterSrc = session.posterFallbackUrl ? resolvePortalAssetUrl(session.posterFallbackUrl) : '';
     const sessionUserThumbSrc = session.userThumb ? resolvePortalAssetUrl(session.userThumb) : 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y';
     const geo = isAdmin && session.geo && Number.isFinite(Number(session.geo.latitude)) && Number.isFinite(Number(session.geo.longitude))
@@ -9430,16 +9421,13 @@ const StreamDetailsModal: React.FC<{ session: any, onClose: () => void, isAdmin?
                 {/* Header */}
                 <div className="flex items-start gap-4 p-5 border-b border-white/10 bg-black/20 shrink-0">
                     <div className="w-[4.5rem] h-[6.75rem] sm:w-24 sm:h-36 rounded-xl overflow-hidden flex-shrink-0 bg-black/40 border border-white/10 shadow-lg">
-                        {session.thumb || session.thumbUrl ? (
-                            <img
+                        {sessionPosterSrc || sessionFallbackPosterSrc ? (
+                            <RetryablePoster
                                 src={sessionPosterSrc}
+                                fallbackSrc={sessionFallbackPosterSrc}
                                 alt=""
+                                compactPlaceholder
                                 className="w-full h-full object-cover"
-                                onError={(e) => {
-                                    if (sessionFallbackPosterSrc && e.currentTarget.src !== sessionFallbackPosterSrc) {
-                                        e.currentTarget.src = sessionFallbackPosterSrc;
-                                    }
-                                }}
                             />
                         ) : (
                             <NoPosterPlaceholder compact />
@@ -10248,23 +10236,20 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
                                 {dashboardData.activeSessions.map((session, i) => {
                                     const sessionPosterSrc = session.thumbUrl
                                         ? resolvePortalAssetUrl(session.thumbUrl)
-                                        : portalUrl(`/api/plex/image?path=${encodeURIComponent(session.thumb)}&width=360&height=540`);
+                                        : (session.thumb
+                                            ? portalUrl(`/api/plex/image?path=${encodeURIComponent(session.thumb)}&width=360&height=540`)
+                                            : '');
                                     const sessionFallbackPosterSrc = session.posterFallbackUrl ? resolvePortalAssetUrl(session.posterFallbackUrl) : '';
                                     const sessionUserThumbSrc = session.userThumb ? resolvePortalAssetUrl(session.userThumb) : 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y';
                                     const posterColumnClass = 'grid-cols-[clamp(6rem,36%,8.5rem)_minmax(0,1fr)]';
                                     return (
                                         <div key={session.sessionId ?? i} onClick={() => setSelectedSession(session)} className="bg-card rounded-xl border border-border flex flex-col overflow-hidden shadow-lg hover:border-plex/50 hover:shadow-plex/20 transition-all cursor-pointer select-none h-full">
                                             <div className={`grid ${posterColumnClass} items-stretch flex-1 min-h-0`}>
-                                                <div className="relative aspect-[2/3] w-full overflow-hidden bg-black self-start rounded-tl-xl">
-                                                    <img
+                                                <div className="relative aspect-[2/3] w-full overflow-hidden bg-black self-start rounded-tl-xl pointer-events-none">
+                                                    <RetryablePoster
                                                         src={sessionPosterSrc}
+                                                        fallbackSrc={sessionFallbackPosterSrc}
                                                         alt={session.title}
-                                                        loading="lazy"
-                                                        onError={(e) => {
-                                                            if (sessionFallbackPosterSrc && e.currentTarget.src !== sessionFallbackPosterSrc) {
-                                                                e.currentTarget.src = sessionFallbackPosterSrc;
-                                                            }
-                                                        }}
                                                         className="absolute inset-0 w-full h-full object-cover object-top drop-shadow-[4px_0_15px_rgba(0,0,0,0.5)] rounded-tl-xl"
                                                     />
                                                 </div>
