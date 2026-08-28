@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ExternalLink, RefreshCw } from 'lucide-react';
 import { useDiscoverI18n } from '../discovery/i18n';
 import type { HomeCustomModule } from '../shared/types';
@@ -42,14 +42,51 @@ const readPortalHtmlTheme = (): PortalHtmlTheme => {
     };
 };
 
-const buildHomeHtmlSrcDoc = (html: string, css: string, theme: PortalHtmlTheme) => {
+const HOME_HTML_RESIZE_SOURCE = 'smp-home-html-resize';
+const MIN_HOME_HTML_FRAME_PX = 1;
+const MAX_HOME_HTML_FRAME_PX = 100_000;
+
+const clampHomeHtmlFrameHeight = (value: unknown) => {
+    const height = Math.ceil(Number(value));
+    if (!Number.isFinite(height) || height < 0) return null;
+    return Math.min(Math.max(height, MIN_HOME_HTML_FRAME_PX), MAX_HOME_HTML_FRAME_PX);
+};
+
+const buildHomeHtmlResizeScript = (moduleId: string) => {
+    const meta = JSON.stringify({ source: HOME_HTML_RESIZE_SOURCE, id: String(moduleId) });
+    return `<script>(function(){`
+        + `var meta=${meta};`
+        + `var last=-1;`
+        + `function measure(){`
+        + `var wrap=document.querySelector(".home-custom-module-html");`
+        + `var body=document.body;`
+        + `var root=document.documentElement;`
+        + `var height=Math.ceil(Math.max(wrap&&wrap.scrollHeight||0,wrap&&wrap.offsetHeight||0,body&&body.scrollHeight||0,body&&body.offsetHeight||0,root&&root.scrollHeight||0));`
+        + `if(!isFinite(height)||height<0) height=0;`
+        + `if(height===last) return;`
+        + `last=height;`
+        + `parent.postMessage({source:meta.source,id:meta.id,height:height},"*");`
+        + `}`
+        + `function schedule(){ if(typeof requestAnimationFrame==="function") requestAnimationFrame(measure); else measure(); }`
+        + `window.addEventListener("load",schedule);`
+        + `window.addEventListener("resize",schedule);`
+        + `document.addEventListener("click",function(){ setTimeout(schedule,50); setTimeout(schedule,320); });`
+        + `document.addEventListener("transitionend",schedule);`
+        + `if(typeof ResizeObserver!=="undefined"){ var ro=new ResizeObserver(schedule); if(document.documentElement) ro.observe(document.documentElement); if(document.body) ro.observe(document.body); var wrapEl=document.querySelector(".home-custom-module-html"); if(wrapEl) ro.observe(wrapEl); }`
+        + `if(typeof MutationObserver!=="undefined"&&document.body){ new MutationObserver(schedule).observe(document.body,{childList:true,subtree:true,attributes:true,characterData:true}); }`
+        + `schedule();`
+        + `})();</script>`;
+};
+
+const buildHomeHtmlSrcDoc = (html: string, css: string, theme: PortalHtmlTheme, moduleId: string) => {
     const safeCss = String(css || '').replace(/<\/style/gi, '<\\/style');
     return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>`
         + `:root{color-scheme:${theme.colorScheme};}`
         + `html,body{margin:0;padding:0;background:rgb(${theme.card});color:rgb(${theme.text});font-family:Inter,system-ui,sans-serif;}`
         + `.home-custom-module-html{box-sizing:border-box;min-width:0;}`
         + `${safeCss}`
-        + `</style></head><body><div class="home-custom-module-html">${html || ''}</div></body></html>`;
+        + `html,body,.home-custom-module-html{height:auto!important;max-height:none!important;overflow:visible!important;}`
+        + `</style></head><body><div class="home-custom-module-html">${html || ''}</div>${buildHomeHtmlResizeScript(moduleId)}</body></html>`;
 };
 
 export const HomeCustomModuleSection: React.FC<Props> = ({ module, isAdmin = false }) => {
@@ -57,12 +94,19 @@ export const HomeCustomModuleSection: React.FC<Props> = ({ module, isAdmin = fal
     const [iframeKey, setIframeKey] = useState(0);
     const [embedBlocked, setEmbedBlocked] = useState(false);
     const [portalTheme, setPortalTheme] = useState<PortalHtmlTheme>(DEFAULT_HTML_THEME);
+    const [htmlFrameHeight, setHtmlFrameHeight] = useState<number | null>(null);
+    const htmlIframeRef = useRef<HTMLIFrameElement>(null);
     const accessible = canAccessHomeCustomModule(module, isAdmin);
     const usesProxy = homeModuleUsesProxy(module);
     const predictedEmbedIssue = module.mode === 'iframe' ? homeModuleEmbedIssue(module) : null;
     const iframeSrc = useMemo(() => (
         module.mode === 'iframe' ? resolveHomeModuleIframeSrc(module) : ''
     ), [module]);
+    const htmlSrcDoc = useMemo(() => (
+        module.mode === 'html'
+            ? buildHomeHtmlSrcDoc(module.html || '', module.css || '', portalTheme, module.id)
+            : ''
+    ), [module.mode, module.html, module.css, module.id, portalTheme]);
 
     useEffect(() => {
         setEmbedBlocked(false);
@@ -76,6 +120,25 @@ export const HomeCustomModuleSection: React.FC<Props> = ({ module, isAdmin = fal
         observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style'] });
         return () => observer.disconnect();
     }, []);
+
+    useEffect(() => {
+        setHtmlFrameHeight(null);
+    }, [htmlSrcDoc]);
+
+    useEffect(() => {
+        if (module.mode !== 'html') return;
+        const onMessage = (event: MessageEvent) => {
+            const frame = htmlIframeRef.current;
+            if (!frame || event.source !== frame.contentWindow) return;
+            const data = event.data;
+            if (!data || data.source !== HOME_HTML_RESIZE_SOURCE || String(data.id) !== String(module.id)) return;
+            const next = clampHomeHtmlFrameHeight(data.height);
+            if (next == null) return;
+            setHtmlFrameHeight((prev) => (prev === next ? prev : next));
+        };
+        window.addEventListener('message', onMessage);
+        return () => window.removeEventListener('message', onMessage);
+    }, [module.id, module.mode]);
 
     if (!accessible) return null;
 
@@ -117,15 +180,22 @@ export const HomeCustomModuleSection: React.FC<Props> = ({ module, isAdmin = fal
     );
 
     if (module.mode === 'html') {
-        const srcDoc = buildHomeHtmlSrcDoc(module.html || '', module.css || '', portalTheme);
         return (
             <div className="glass-card p-4 md:p-5 shadow-xl w-full min-w-0">
                 {header}
                 <iframe
+                    ref={htmlIframeRef}
                     title={module.title}
-                    srcDoc={srcDoc}
-                    className="min-h-[16rem] w-full rounded-xl"
-                    style={{ colorScheme: portalTheme.colorScheme, backgroundColor: `rgb(${portalTheme.card})` }}
+                    srcDoc={htmlSrcDoc}
+                    className="block w-full rounded-xl border-0"
+                    style={{
+                        height: htmlFrameHeight ?? undefined,
+                        minHeight: htmlFrameHeight ? undefined : '16rem',
+                        overflow: 'hidden',
+                        colorScheme: portalTheme.colorScheme,
+                        backgroundColor: `rgb(${portalTheme.card})`,
+                    }}
+                    scrolling="no"
                     sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
                     referrerPolicy="no-referrer"
                 />
