@@ -15,6 +15,7 @@ Server Portal combines user onboarding, access management, analytics, requests, 
 | Analytics | Deeper personal / server analytics views |
 | ColleXions | Admin Plex collection automation (bundled worker) |
 | Scanner | Admin library refresh from ARR webhooks / manual paths |
+| Spotify Sync | Admin Plex playlist sync from Spotify (bundled worker, BETA) |
 | Upgrader | Library quality upgrades via Sonarr / Radarr |
 | Media Automation | Native FFmpeg jobs from manual or Sonarr/Radarr/Lidarr webhooks |
 | Cleaner | Library maintenance rules and candidates |
@@ -80,6 +81,7 @@ Users can choose among built-in dark themes, while admins can set the default th
 - [Calendar](/features/calendar)
 - [ColleXions](/features/collexions)
 - [Scanner](/features/scanner)
+- [Spotify Sync](/features/spotify-sync)
 - [Upgrader](/features/upgrader)
 - [Media Automation](/features/media-automation)
 - [Cleaner](/features/cleaner)

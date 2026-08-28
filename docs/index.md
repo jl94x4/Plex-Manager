@@ -29,6 +29,8 @@ features:
     details: Browse TMDB and submit requests with the built-in engine. Seerr is optional. Admins approve into Sonarr and Radarr.
   - title: ColleXions
     details: Admin Plex collection automation with a bundled worker — trending presets, import lists, and scheduled syncs inside the portal.
+  - title: Spotify Sync
+    details: Admin Plex tool (BETA) that matches Spotify playlists and albums to your library and writes Plex playlists with artwork.
 ---
 
 ## What Is Server Portal?

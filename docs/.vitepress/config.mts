@@ -41,6 +41,7 @@ export default defineConfig({
           { text: 'Calendar', link: '/features/calendar' },
           { text: 'ColleXions', link: '/features/collexions' },
           { text: 'Scanner', link: '/features/scanner' },
+          { text: 'Spotify Sync', link: '/features/spotify-sync' },
           { text: 'Upgrader', link: '/features/upgrader' },
           { text: 'Media Automation', link: '/features/media-automation' },
           { text: 'Cleaner', link: '/features/cleaner' },

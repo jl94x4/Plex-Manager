@@ -24,7 +24,7 @@ Built with Node.js · Express · React · Tailwind CSS
 
 ---
 
-Server Portal is a self-hosted web application that turns your Plex, Jellyfin, or Emby server into a fully managed streaming service. It covers user onboarding and access expiry, personal analytics and wrap-ups, a Seerr-style Discover & Request browser, live sessions, ARR calendars and downloads, plus admin tools for collections, poster overlays, library scans, quality upgrades, and native FFmpeg jobs — all from one polished, mobile-first dashboard.
+Server Portal is a self-hosted web application that turns your Plex, Jellyfin, or Emby server into a fully managed streaming service. It covers user onboarding and access expiry, personal analytics and wrap-ups, a Seerr-style Discover & Request browser, live sessions, ARR calendars and downloads, plus admin tools for collections, poster overlays, Spotify playlist sync, library scans, quality upgrades, and native FFmpeg jobs — all from one polished, mobile-first dashboard.
 
 Once set up, users sign in with Plex OAuth or Jellyfin / Emby authentication (Quick Connect where supported) to see their own portal, activity, requests, and achievements.
 
@@ -56,6 +56,7 @@ Once set up, users sign in with Plex OAuth or Jellyfin / Emby authentication (Qu
 | **Poster Sets** | Admin | MediUX / ThePosterDB artwork scrape and apply |
 | **Editions** | Admin | Plex edition tagging from file names and TRaSH-style paths |
 | **Scanner** | Admin | Autoscan-style library refresh from ARR webhooks |
+| **Spotify Sync** | Admin (Plex, BETA) | Sync Spotify playlists and albums into Plex playlists |
 | **Upgrader** | Admin | Find and upgrade non-HEVC / low-quality library titles |
 | **Media Automation** | Admin | Native FFmpeg jobs (CPU, NVENC, QSV, VAAPI) |
 | **Cleaner** | Admin | Missing / empty media maintenance |
@@ -80,6 +81,7 @@ Server Portal can connect to the apps that usually surround a Plex, Jellyfin, or
 | **Subtitles** | Bazarr | Multi-instance subtitle widgets, tools, version display, and connection tests |
 | **Download clients** | qBittorrent, Real-Debrid Client, Transmission, BitTorrent, Deluge, SABnzbd, NZBGet | Unified Downloads page with progress, speed, source filters, client health, and ARR matching |
 | **Lists & collections** | Trakt, MDBList, TMDB | ColleXions auto-sync jobs, trending presets, and random / smart collections |
+| **Music** | Spotify | Playlist and album import, Plex playlist matching (Spotify Sync, Plex mode, BETA) |
 | **Artwork** | TMDB, MediUX, ThePosterDB, Kometa image set | Discover posters, Poster Sets, Overlay Layer stamps |
 | **Notifications** | Gotify, SMTP email | Alert rules, access notifications, expiry warnings, inactivity notices, welcome emails, and newsletters |
 
@@ -181,13 +183,13 @@ A comprehensive control panel for the server owner:
 - **Server Leaderboard** - Server-wide play count rankings across all time periods, updated automatically in the background
 - **Audit Log** - Timestamped record of all system actions (access granted, revoked, extended, expired)
 - **Settings UI** - Configure every aspect of the portal from the browser without touching config files
-- **Customizable Home Layout** - Reorder home page sections and show or hide whole blocks (Personal Wrap-Up, Main grid, Pending Requests, Recently / Most Watched, Recently Added, Scanner) from **Settings → Layout**, with a live preview before saving. The main dashboard grid keeps a fixed balanced two-column layout so card heights stay aligned
+- **Customizable Home Layout** - Reorder home page sections and show or hide whole blocks (Personal Wrap-Up, Main grid, Pending Requests, Recently / Most Watched, Recently Added, Scanner, Spotify Sync) from **Settings → Layout**, with a live preview before saving. The main dashboard grid keeps a fixed balanced two-column layout so card heights stay aligned
 - **Customizable Navigation** - Drag-and-drop sidebar order and visibility for admins and members independently from **Settings → Layout → Navigation**
 - **Pending Requests Widget** - Surface open portal requests on the home dashboard with quick review actions, fanart-backed cards, and a count badge in the sidebar
 - **Library Maintenance (Cleaner)** - Scan libraries for missing or empty media, manage exclusions, and run cleanup tasks
 - **Library Upgrader (Plex / Jellyfin)** — Find non-HEVC titles, browse a poster grid with codec/HDR badges, drill into show episodes, open Plex/Jellyfin or Sonarr/Radarr deep links, snooze titles, and optionally switch ARR quality profiles with search triggers (dry-run preview, bulk select, history tab, rate limits). Enable in **Settings → Library Upgrader**.
 - **Native Media Automation** — Run opt-in FFmpeg/FFprobe jobs from manual, Sonarr, Radarr, or Lidarr selections. CPU, NVENC, QSV, Intel VAAPI, and AMD VAAPI adapters are included; dry-run, copy, atomic replace, and quarantine workflows protect source media. See the [feature guide](docs/features/media-automation.md).
-- **Bundled Python workers** — ColleXions, Overlays, Poster Sets, and Editions run inside the same Docker image. Enable each feature in Settings (no extra containers).
+- **Bundled workers** — ColleXions, Overlays, Poster Sets, Editions, and Spotify Sync run inside the same Docker image. Enable each feature in Settings (no extra containers).
 
 ---
 
@@ -197,7 +199,7 @@ Admins can tailor the home page for their community without editing code:
 
 | Control | What it does |
 |---|---|
-| **Section order** | Drag and drop the major home sections into any order, including Pending Requests and the Scanner strip |
+| **Section order** | Drag and drop the major home sections into any order, including Pending Requests, the Scanner strip, and Spotify Sync |
 | **Section visibility** | Toggle each section Shown or Hidden with one click |
 | **Live preview** | See exactly how the layout will look before you save |
 | **Locked main grid** | Left and right dashboard columns stay balanced; individual widget order inside the grid is fixed to prevent uneven card heights |
@@ -345,6 +347,25 @@ Plex scans use the **direct server URL and token** from Settings → Plex (`http
 
 ---
 
+### Spotify Sync
+
+Admin-only **Plex** tool (BETA) that syncs Spotify playlists, albums, and artists into Plex playlists. The portal ships a native UI (`client/spotify-sync/`) and **bundles** the [spotify-to-plex](https://github.com/jjdenhertog/spotify-to-plex) worker in the same Docker image. Enable under **Settings → Spotify Sync**.
+
+| Area | Purpose |
+|---|---|
+| **Playlists** | Pull saved Spotify playlists and albums, paste a playlist / album / artist link, then **Sync to Plex** |
+| **Users** | Connect Spotify accounts (OAuth via the portal callback) |
+| **Sync** | Run playlist-to-Plex jobs plus optional worker jobs (albums, users, Lidarr, SLSKD, MQTT) |
+| **Matching / Integrations / Logs** | Match filters, Lidarr / Tidal / SLSKD status, and sync history |
+
+**Sync to Plex** matches tracks already in your Plex library and creates or updates a Plex playlist in Spotify track order. Unmatched tracks are skipped; the Spotify cover is applied as the Plex playlist poster. Plex URL and token from **Settings → Plex** are pushed into the worker automatically.
+
+Pick **one** schedule in Settings: the worker’s built-in cron (daily ~02:00 UTC) or a portal **Background Tasks** interval. Optional Home dashboard widget and `spotify_sync_failed` admin notifications. Worker state lives under `config/spotify-to-plex/` on the portal volume.
+
+You need a Spotify Developer app (Client ID, Client Secret, and an encryption key) and must register the redirect URI shown in Settings. Feature guide: [Spotify Sync](docs/features/spotify-sync.md).
+
+---
+
 ### Overlays
 
 Admin-only Plex artwork overlays (Plex mode). The Python worker is bundled in the image. Enable in **Settings → Overlays**.
@@ -476,7 +497,7 @@ The UI can be switched per user from the language menu. Catalogs currently inclu
 
 | Layer | Technology |
 |---|---|
-| **Backend** | Node.js, Express.js, bundled Python workers (ColleXions, Overlays, Poster Sets, Editions) |
+| **Backend** | Node.js, Express.js, bundled workers (ColleXions, Overlays, Poster Sets, Editions, Spotify Sync) |
 | **Frontend** | React 18 (bundled via esbuild), TypeScript |
 | **Styling** | Tailwind CSS v3 |
 | **Auth** | JWT (httpOnly cookies) + Plex.tv OAuth or Jellyfin / Emby authentication |
@@ -636,15 +657,15 @@ Worker Test runs a short synthetic encode for each non-CPU adapter when matching
 
 Version 1 accepts manual plus Sonarr/Radarr/Lidarr webhook jobs, uses only the built-in native executor, and does not expose a plugin API or promise scheduled filesystem discovery. Full setup and safety notes: [Native Media Automation](docs/features/media-automation.md).
 
-### Bundled Python workers
+### Bundled workers
 
-**ColleXions, Overlays, Poster Sets, and Editions** are built into the portal image. No extra containers are required.
+**ColleXions, Overlays, Poster Sets, Editions, and Spotify Sync** are built into the portal image. No extra containers are required.
 
-1. Rebuild/redeploy the portal image so it includes the Python workers.
+1. Rebuild/redeploy the portal image so it includes the bundled workers.
 2. In Settings, turn **Enable** ON for each feature you want and click **Save Settings**.
-3. Open the matching nav item — ColleXions can import an old `config.json` if you are migrating.
+3. Open the matching nav item — ColleXions can import an old `config.json` if you are migrating. Spotify Sync is Plex-only and needs Spotify API credentials on its Settings tab.
 
-Worker data persists under `./config/collexions/`, `./config/overlays/`, `./config/poster-sets/`, and `./config/editions/`. Advanced: set `COLLEXIONS_EMBEDDED_PORT` if you need a different localhost port for ColleXions (default `15755`).
+Worker data persists under `./config/collexions/`, `./config/overlays/`, `./config/poster-sets/`, `./config/editions/`, and `./config/spotify-to-plex/`. Advanced: set `COLLEXIONS_EMBEDDED_PORT` if you need a different localhost port for ColleXions (default `15755`).
 
 ### Build the image manually
 
@@ -807,6 +828,7 @@ All configuration is managed through the **Settings UI** in the browser. Key opt
 | Stream User Privacy | Default identity policy for non-admins: show names, show as Anonymous, or hide completely. Members override their own profile in Preferences when names are allowed |
 | Show usernames in Analytics | Whether non-admins see real names on Analytics (otherwise Viewer 1 / Device 1) |
 | Scanner | Autoscan-style library refresh, ARR webhooks, path rewrites |
+| Spotify Sync | Enable bundled Spotify-to-Plex worker, Spotify API credentials, sync schedule (Plex mode, BETA) |
 | ColleXions / Overlays / Poster Sets / Editions | Enable bundled Plex workers (collections, Layer stamps, artwork sets, edition tags) |
 | Achievements / Support | XP/badges/leaderboard, and in-portal tickets |
 | Alerts | Gotify connection and alert rules |
@@ -829,6 +851,7 @@ The **Settings → Background Tasks** page shows the active scheduler and lets a
 | Maintenance index | Builds media/request index for cleanup rules | Same |
 | Media quality index | Also powers Library Upgrader when enabled (Plex or Jellyfin codec scan) | Episode stats for shows when Upgrader enabled |
 | Auto rolling backup | Creates rolling config backups | Same |
+| Spotify Sync | Calls the bundled worker on your Settings interval when schedule mode is Portal Background Tasks | Hidden in Jellyfin / Emby mode |
 
 The **Settings → System** diagnostics page uses the same media-aware task list so Jellyfin portals are not penalized for Plex-only jobs.
 
@@ -851,6 +874,7 @@ Server-Manager-Portal/
 │   ├── support/        # In-portal tickets
 │   ├── upgrader/       # Library Upgrader poster browse
 │   ├── scanner/        # Autoscan-style library refresh UI
+│   ├── spotify-sync/   # Spotify Sync admin UI (playlists to Plex)
 │   ├── collexions/     # ColleXions admin UI (proxied to bundled worker)
 │   ├── overlays/       # Overlay preview / placement UI
 │   ├── poster-sets/    # MediUX / ThePosterDB UI
