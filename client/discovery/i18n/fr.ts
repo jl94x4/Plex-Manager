@@ -357,7 +357,7 @@ export const fr: DeepPartial<EnCatalog> = {
     },
     home: {
         forYou: 'Pour vous',
-        libraryQueue: 'Votre file bibliothèque',
+        libraryQueue: 'Votre watchlist et demandes',
         libraryQueueHint: 'D’abord demandes et watchlist — puis les nouveautés.',
         hideLibraryQueue: 'Masquer la file',
         showLibraryQueue: 'Afficher la file',

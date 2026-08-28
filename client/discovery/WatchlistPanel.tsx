@@ -163,7 +163,17 @@ export const WatchlistPanel: React.FC<Props> = ({
     const header = showHeader ? (
         <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-2 ${variant === 'row' ? 'pr-16' : ''}`}>
             <div>
-                <h2 className="text-xl font-bold text-text">{t('watchlist.title', { provider: providerLabel })}</h2>
+                {variant === 'row' && navigate ? (
+                    <button
+                        type="button"
+                        onClick={() => navigate('/discovery/watchlist')}
+                        className="text-xl font-bold text-text text-left hover:text-plex transition-colors"
+                    >
+                        {t('watchlist.title', { provider: providerLabel })}
+                    </button>
+                ) : (
+                    <h2 className="text-xl font-bold text-text">{t('watchlist.title', { provider: providerLabel })}</h2>
+                )}
                 <p className="text-xs text-muted mt-1">
                     {t('watchlist.syncedBody', { provider: providerLabel })}
                     {quotaSummary ? ` ${quotaSummary}.` : ''}

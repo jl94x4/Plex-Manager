@@ -10,6 +10,7 @@ import { DiscoverStatusOverlay } from './DiscoverStatusOverlay';
 import { resolveMediaAvailabilityState } from './discoverAvailability';
 import { resolvePortalAssetUrl } from '../shared/basePath';
 import { useDiscoverI18n } from './i18n';
+import { DiscoverSectionHeader } from './DiscoverSectionHeader';
 
 type ArtistHit = {
     mbid: string;
@@ -140,11 +141,17 @@ export const MusicGenreRail: React.FC<{
     genres: MusicGenreItem[];
     activeGenreId?: number | null;
     navigate: (path: string) => void;
-}> = ({ title, genres, activeGenreId = null, navigate }) => {
+    viewAllLabel?: string;
+    onViewAll?: () => void;
+}> = ({ title, genres, activeGenreId = null, navigate, viewAllLabel, onViewAll }) => {
     if (!genres.length) return null;
     return (
         <section className="flex flex-col gap-2">
-            <h3 className={`${discoveryTheme.sectionTitle} pr-16`}>{title}</h3>
+            <DiscoverSectionHeader
+                title={title}
+                onViewAll={onViewAll || (() => navigate('/discovery/music'))}
+                viewAllLabel={viewAllLabel}
+            />
             <Carousel>
                 {genres.map((g) => (
                     <button
@@ -175,11 +182,13 @@ export const MusicChartRail: React.FC<{
     kind: 'artist' | 'album';
     resolvingKey: string | null;
     onPick: (item: MusicChartItem, key: string) => void;
-}> = ({ title, items, kind, resolvingKey, onPick }) => {
+    viewAllLabel?: string;
+    onViewAll?: () => void;
+}> = ({ title, items, kind, resolvingKey, onPick, viewAllLabel, onViewAll }) => {
     if (!items.length) return null;
     return (
         <section className="flex flex-col gap-2">
-            <h3 className={`${discoveryTheme.sectionTitle} pr-16`}>{title}</h3>
+            <DiscoverSectionHeader title={title} onViewAll={onViewAll} viewAllLabel={viewAllLabel} />
             <Carousel>
                 {items.map((item, idx) => {
                     const key = `${kind}-${item.deezerId ?? idx}`;

@@ -184,7 +184,7 @@ export const es: DeepPartial<EnCatalog> = {
     },
     home: {
         forYou: 'Para ti',
-        libraryQueue: 'Tu cola de biblioteca',
+        libraryQueue: 'Tu watchlist y solicitudes',
         libraryQueueHint: 'Primero solicitudes y watchlist — luego lo nuevo.',
         hideLibraryQueue: 'Ocultar cola',
         showLibraryQueue: 'Mostrar cola',

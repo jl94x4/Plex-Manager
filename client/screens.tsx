@@ -6902,7 +6902,7 @@ export const DiscoverPosterCard: React.FC<{
                     ref={quickActionsRef}
                     className="absolute inset-0 z-10 pointer-events-none"
                 >
-                    <div className="absolute top-1.5 left-1.5 pointer-events-auto">
+                    <div className="absolute top-1 left-1 sm:top-1.5 sm:left-1.5 pointer-events-auto">
                         <button
                             type="button"
                             onClick={(event) => {
@@ -6910,11 +6910,11 @@ export const DiscoverPosterCard: React.FC<{
                                 event.stopPropagation();
                                 setQuickActionsOpen((open) => !open);
                             }}
-                            className="inline-flex items-center justify-center w-7 h-7 rounded-md bg-black/65 text-white/90 border border-white/20 hover:bg-black/80 hover:text-white transition-colors"
+                            className="inline-flex items-center justify-center p-0.5 leading-none rounded-md bg-black/65 text-white/90 border border-white/20 hover:bg-black/80 hover:text-white transition-colors"
                             aria-label={t('quickActions.menuLabel')}
                             aria-expanded={quickActionsOpen}
                         >
-                            <MoreHorizontal className="w-4 h-4" />
+                            <MoreHorizontal className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                         </button>
                     </div>
                     {quickActionsOpen && (

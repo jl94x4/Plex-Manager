@@ -184,7 +184,7 @@ export const de: DeepPartial<EnCatalog> = {
     },
     home: {
         forYou: 'Für dich',
-        libraryQueue: 'Deine Bibliotheks-Warteschlange',
+        libraryQueue: 'Deine Watchlist & Anfragen',
         libraryQueueHint: 'Zuerst Anfragen und Watchlist — dann Neues entdecken.',
         hideLibraryQueue: 'Warteschlange ausblenden',
         showLibraryQueue: 'Warteschlange einblenden',

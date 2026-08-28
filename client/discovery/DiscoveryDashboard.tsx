@@ -4,6 +4,7 @@ import { DiscoverHome } from './DiscoverHome';
 import { DiscoverMovies } from './DiscoverMovies';
 import { DiscoverSeries } from './DiscoverSeries';
 import { DiscoverCategoryPage } from './DiscoverCategoryPage';
+import { DiscoverRailPage } from './DiscoverRailPage';
 import { MediaDetailsPage } from './MediaDetailsPage';
 import { PersonDetailsPage } from './PersonDetailsPage';
 import { Film, Tv, Compass, ClipboardList, AlertTriangle, ChevronDown, Music, ShieldCheck } from 'lucide-react';
@@ -501,6 +502,21 @@ const DiscoveryDashboardInner: React.FC<{
 
     const routeParts = stripBasePath(path).split('/').filter(Boolean);
     const subRoute = routeParts[1] || 'home';
+
+    if (routeParts.length >= 3 && routeParts[1] === 'row' && routeParts[2]) {
+        return (
+            <div className="discovery-theme w-full flex flex-col gap-4 pb-8">
+                <DiscoverRailPage
+                    slug={routeParts[2]}
+                    onBack={() => navigate('/discovery')}
+                    onSelect={openMedia}
+                    formatItem={formatItem}
+                    navigate={navigate}
+                    getQuickActions={getQuickActions}
+                />
+            </div>
+        );
+    }
 
     if (routeParts.length >= 4 && routeParts[1] === 'movies' && routeParts[2] === 'studio') {
         const id = parseInt(routeParts[3], 10);

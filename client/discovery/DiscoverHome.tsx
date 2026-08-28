@@ -16,8 +16,14 @@ import { portalRequestsToDiscoveryRowItems } from './myRequestUtils';
 import { filterHiddenAvailableItems, useDiscoveryPreferences } from './useDiscoveryPreferences';
 import { fetchDiscoverHomeRowResults } from './discoverFetchUtils';
 import { enrichDiscoverItemsWithAvailability } from './discoverAvailabilityEnrich';
-import { resolveMediaAvailabilityState } from './discoverAvailability';
 import { WatchlistPanel } from './WatchlistPanel';
+import { DiscoverSectionHeader } from './DiscoverSectionHeader';
+import {
+    EXTRA_MOVIE_RAILS,
+    EXTRA_SERIES_RAILS,
+    discoverRowPath,
+    rankContentGapItems,
+} from './discoverHomeRails';
 import { DiscoverHomeSkeleton } from '../shared/skeletons';
 import { discoveryTheme } from './discoveryThemeClasses';
 import { useLibraryQueueToggle } from './useLibraryQueueToggle';
@@ -120,14 +126,7 @@ const DiscoverHomeRow: React.FC<{
         return (
             <div className="flex flex-col gap-2 relative">
                 {!hideTitle && (
-                    <div className="flex items-center gap-3 min-w-0 pr-16">
-                        <h2 className={`${discoveryTheme.sectionTitle} truncate`}>{title}</h2>
-                        {onViewAll && (
-                            <button type="button" onClick={onViewAll} className="shrink-0 text-xs font-bold text-plex hover:underline">
-                                {viewAllLabel}
-                            </button>
-                        )}
-                    </div>
+                    <DiscoverSectionHeader title={title} onViewAll={onViewAll} viewAllLabel={viewAllLabel} />
                 )}
                 {empty}
             </div>
@@ -136,14 +135,7 @@ const DiscoverHomeRow: React.FC<{
     return (
         <div className="flex flex-col gap-2 relative">
             {!hideTitle && (
-                <div className="flex items-center gap-3 min-w-0 pr-16">
-                    <h2 className={`${discoveryTheme.sectionTitle} truncate`}>{title}</h2>
-                    {onViewAll && (
-                        <button type="button" onClick={onViewAll} className="shrink-0 text-xs font-bold text-plex hover:underline">
-                            {viewAllLabel}
-                        </button>
-                    )}
-                </div>
+                <DiscoverSectionHeader title={title} onViewAll={onViewAll} viewAllLabel={viewAllLabel} />
             )}
             <Carousel>
                 {visibleItems.map((formatted, idx) => {
@@ -176,7 +168,9 @@ const DiscoverGenreSliderRow: React.FC<{
     fallbackGenres: typeof MOVIE_GENRES;
     basePath: '/discovery/movies' | '/discovery/series';
     navigate: (path: string) => void;
-}> = ({ title, apiGenres, fallbackGenres, basePath, navigate }) => {
+    viewAllLabel: string;
+    onViewAll?: () => void;
+}> = ({ title, apiGenres, fallbackGenres, basePath, navigate, viewAllLabel, onViewAll }) => {
     const items = (apiGenres?.length ?? 0)
         ? apiGenres
         : fallbackGenres.map((g) => ({
@@ -187,7 +181,7 @@ const DiscoverGenreSliderRow: React.FC<{
 
     return (
         <div className="flex flex-col gap-2 relative">
-            <h2 className={`${discoveryTheme.sectionTitle} pr-16`}>{title}</h2>
+            <DiscoverSectionHeader title={title} onViewAll={onViewAll} viewAllLabel={viewAllLabel} />
             <Carousel>
                 {items.map((g) => {
                     const fallback = fallbackGenres.find((fg) => fg.id === g.id);
@@ -236,6 +230,7 @@ export const DiscoverHome: React.FC<{
         popularSeries: [] as any[],
         upcomingSeries: [] as any[],
     });
+    const [extraRows, setExtraRows] = useState<Record<string, any[]>>({});
     const [movieGenres, setMovieGenres] = useState<GenreSliderItem[]>(() => (
         MOVIE_GENRES.map((g) => ({ id: g.id, name: g.name, image: buildGenreSliderImage(g.id) }))
     ));
@@ -320,6 +315,7 @@ export const DiscoverHome: React.FC<{
 
             if (gen !== loadGenRef.current) return;
 
+            setExtraRows({});
             setRows((prev) => ({
                 ...prev,
                 recentlyAdded: [],
@@ -337,6 +333,36 @@ export const DiscoverHome: React.FC<{
             setLoading(false);
             // Stagger enter only on the first successful paint.
             window.setTimeout(() => setEnterAnim(false), 700);
+
+            const extraRowOpts = {
+                needsBackfill: hideAvailable,
+                maxPages: hideAvailable ? 3 : 1,
+                maxItems: 24,
+                minItems: hideAvailable ? 12 : 20,
+                hideRequested: false,
+                trustAttachedAvailability: true,
+                pageConcurrency: 1,
+                requirePoster: true,
+            };
+            void (async () => {
+                const extraRails = [...EXTRA_MOVIE_RAILS, ...EXTRA_SERIES_RAILS];
+                const batchSize = 4;
+                for (let i = 0; i < extraRails.length; i += batchSize) {
+                    if (gen !== loadGenRef.current) return;
+                    const batch = extraRails.slice(i, i + batchSize);
+                    const fetched = await Promise.all(batch.map((rail) => (
+                        fetchDiscoverHomeRowResults(rail.buildUrl, hideAvailable, extraRowOpts).catch(() => [])
+                    )));
+                    if (gen !== loadGenRef.current) return;
+                    setExtraRows((prev) => {
+                        const next = { ...prev };
+                        batch.forEach((rail, idx) => {
+                            next[rail.id] = filterHiddenAvailableItems(fetched[idx], hideAvailable);
+                        });
+                        return next;
+                    });
+                }
+            })();
 
             // Side rails + poster enrich after first paint (never block the skeleton).
             void (async () => {
@@ -419,51 +445,12 @@ export const DiscoverHome: React.FC<{
         };
     }, [loadData]);
 
-    const contentGapItems = useMemo(() => {
-        const sources: Array<{ item: any; boost: number }> = [
-            ...(rows.becauseYouWatched || []).map((item) => ({ item, boost: 20 })),
-            ...(rows.trending || []).map((item) => ({ item, boost: 12 })),
-            ...(rows.popularMovies || []).map((item) => ({ item, boost: 8 })),
-            ...(rows.popularSeries || []).map((item) => ({ item, boost: 8 })),
-        ];
-        const ranked = new Map<string, { item: any; score: number }>();
-        const now = Date.now();
-        const futureWindowMs = 21 * 24 * 60 * 60 * 1000;
-
-        for (const entry of sources) {
-            const item = entry?.item;
-            if (!item) continue;
-            const availability = resolveMediaAvailabilityState(item);
-            if (!['none', 'pending', 'requested'].includes(availability.kind)) continue;
-
-            const hasPoster = !!(item?.posterPath || item?.posterUrl || item?.poster);
-            if (!hasPoster) continue;
-
-            const releaseRaw = String(item?.releaseDate || item?.firstAirDate || '').trim();
-            const releaseAt = releaseRaw ? Date.parse(releaseRaw) : Number.NaN;
-            if (Number.isFinite(releaseAt) && releaseAt > now + futureWindowMs) continue;
-
-            const vote = Number(item?.voteAverage ?? item?.vote_average ?? 0);
-            const popularity = Number(item?.popularity ?? 0);
-            const score = entry.boost
-                + (Number.isFinite(vote) ? vote * 5 : 0)
-                + (Number.isFinite(popularity) ? Math.min(popularity, 120) / 12 : 0);
-
-            const mediaType = String(item?.mediaType || item?.type || (item?.firstAirDate ? 'tv' : 'movie')).toLowerCase();
-            const numericId = Number(item?.tmdbId || item?.id || item?.mediaId || 0);
-            const fallbackId = String(item?.title || item?.name || '').toLowerCase();
-            const key = `${mediaType}:${numericId > 0 ? numericId : fallbackId}`;
-            if (!key || key.endsWith(':')) continue;
-
-            const current = ranked.get(key);
-            if (!current || score > current.score) ranked.set(key, { item, score });
-        }
-
-        return Array.from(ranked.values())
-            .sort((a, b) => b.score - a.score)
-            .slice(0, 30)
-            .map((entry) => entry.item);
-    }, [rows.becauseYouWatched, rows.trending, rows.popularMovies, rows.popularSeries]);
+    const contentGapItems = useMemo(() => rankContentGapItems([
+        ...(rows.becauseYouWatched || []).map((item) => ({ item, boost: 20 })),
+        ...(rows.trending || []).map((item) => ({ item, boost: 12 })),
+        ...(rows.popularMovies || []).map((item) => ({ item, boost: 8 })),
+        ...(rows.popularSeries || []).map((item) => ({ item, boost: 8 })),
+    ], 30), [rows.becauseYouWatched, rows.trending, rows.popularMovies, rows.popularSeries]);
 
     if (loading) {
         return (
@@ -478,7 +465,7 @@ export const DiscoverHome: React.FC<{
             <section className={discoveryTheme.personalPanel}>
                 <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                        <p className={discoveryTheme.personalEyebrow}>{t('home.forYou')}</p>
+                        <p className="text-[10px] font-black text-plex">{t('home.forYou')}</p>
                         <h2 className="text-lg sm:text-xl font-black text-text mt-1">{t('home.libraryQueue')}</h2>
                         {showLibraryQueue && (
                             <p className="text-sm text-muted mt-1">{t('home.libraryQueueHint')}</p>
@@ -536,7 +523,11 @@ export const DiscoverHome: React.FC<{
                             />
                         ) : preferences.showWatchlist !== false ? (
                             <div className="flex flex-col gap-2">
-                                <h2 className={discoveryTheme.sectionTitle}>{t('watchlist.title', { provider: providerLabel })}</h2>
+                                <DiscoverSectionHeader
+                                    title={t('watchlist.title', { provider: providerLabel })}
+                                    onViewAll={() => navigate('/discovery/watchlist')}
+                                    viewAllLabel={t('common.viewAll')}
+                                />
                                 <EmptyRail
                                     title={t('home.watchlistEmptyTitle')}
                                     body={t('home.watchlistEmptyBody', { provider: providerLabel })}
@@ -561,6 +552,7 @@ export const DiscoverHome: React.FC<{
                                 onSelect={onSelect}
                                 animateEnter={enterAnim}
                                 getQuickActions={getQuickActions}
+                                onViewAll={() => navigate(discoverRowPath('because-you-watched'))}
                             />
                         )}
                     </div>
@@ -595,6 +587,7 @@ export const DiscoverHome: React.FC<{
                         onSelect={onSelect}
                         animateEnter={enterAnim}
                         getQuickActions={getQuickActions}
+                        onViewAll={() => navigate(discoverRowPath('recently-added'))}
                     />
                 )}
                 <div id="discover-trending">
@@ -607,6 +600,7 @@ export const DiscoverHome: React.FC<{
                         onSelect={onSelect}
                         animateEnter={enterAnim}
                         getQuickActions={getQuickActions}
+                        onViewAll={() => navigate(discoverRowPath('trending'))}
                     />
                 </div>
                 <DiscoverHomeRow
@@ -618,7 +612,7 @@ export const DiscoverHome: React.FC<{
                     onSelect={onSelect}
                     animateEnter={enterAnim}
                     getQuickActions={getQuickActions}
-                    onViewAll={() => navigate('/discovery/movies')}
+                    onViewAll={() => navigate(discoverRowPath('content-gap'))}
                     empty={(
                         <EmptyRail
                             title={t('home.contentGapEmptyTitle')}
@@ -646,6 +640,8 @@ export const DiscoverHome: React.FC<{
                     fallbackGenres={MOVIE_GENRES}
                     basePath="/discovery/movies"
                     navigate={navigate}
+                    viewAllLabel={t('common.viewAll')}
+                    onViewAll={() => navigate(discoverRowPath('movie-genres'))}
                 />
                 <DiscoverHomeRow
                     title={t('home.upcomingMovies')}
@@ -656,10 +652,29 @@ export const DiscoverHome: React.FC<{
                     onSelect={onSelect}
                     animateEnter={enterAnim}
                     getQuickActions={getQuickActions}
+                    onViewAll={() => navigate(discoverRowPath('upcoming-movies'))}
                 />
+                {EXTRA_MOVIE_RAILS.map((rail) => (
+                    <DiscoverHomeRow
+                        key={rail.id}
+                        title={t(rail.titleKey, rail.titleVars)}
+                        items={extraRows[rail.id] || []}
+                        posterCardClass={posterCardClass}
+                        viewAllLabel={t('common.viewAll')}
+                        formatItem={formatItem}
+                        onSelect={onSelect}
+                        animateEnter={enterAnim}
+                        getQuickActions={getQuickActions}
+                        onViewAll={() => navigate(rail.viewAllPath())}
+                    />
+                ))}
 
                 <div className="flex flex-col gap-2 relative rounded-2xl border border-border/60 bg-white/[0.02] p-3 sm:p-4">
-                    <h2 className={`${discoveryTheme.sectionTitle} pr-16`}>{t('home.studios')}</h2>
+                    <DiscoverSectionHeader
+                        title={t('home.studios')}
+                        onViewAll={() => navigate(discoverRowPath('studios'))}
+                        viewAllLabel={t('common.viewAll')}
+                    />
                     <Carousel>
                         {DISCOVER_STUDIOS.map((studio) => (
                             <CompanyCard
@@ -689,6 +704,8 @@ export const DiscoverHome: React.FC<{
                     fallbackGenres={TV_GENRES}
                     basePath="/discovery/series"
                     navigate={navigate}
+                    viewAllLabel={t('common.viewAll')}
+                    onViewAll={() => navigate(discoverRowPath('series-genres'))}
                 />
                 <DiscoverHomeRow
                     title={t('home.upcomingSeries')}
@@ -699,10 +716,29 @@ export const DiscoverHome: React.FC<{
                     onSelect={onSelect}
                     animateEnter={enterAnim}
                     getQuickActions={getQuickActions}
+                    onViewAll={() => navigate(discoverRowPath('upcoming-series'))}
                 />
+                {EXTRA_SERIES_RAILS.map((rail) => (
+                    <DiscoverHomeRow
+                        key={rail.id}
+                        title={t(rail.titleKey, rail.titleVars)}
+                        items={extraRows[rail.id] || []}
+                        posterCardClass={posterCardClass}
+                        viewAllLabel={t('common.viewAll')}
+                        formatItem={formatItem}
+                        onSelect={onSelect}
+                        animateEnter={enterAnim}
+                        getQuickActions={getQuickActions}
+                        onViewAll={() => navigate(rail.viewAllPath())}
+                    />
+                ))}
 
                 <div className="flex flex-col gap-2 relative rounded-2xl border border-border/60 bg-white/[0.02] p-3 sm:p-4">
-                    <h2 className={`${discoveryTheme.sectionTitle} pr-16`}>{t('home.networks')}</h2>
+                    <DiscoverSectionHeader
+                        title={t('home.networks')}
+                        onViewAll={() => navigate(discoverRowPath('networks'))}
+                        viewAllLabel={t('common.viewAll')}
+                    />
                     <Carousel>
                         {DISCOVER_NETWORKS.map((network) => (
                             <CompanyCard
@@ -720,7 +756,13 @@ export const DiscoverHome: React.FC<{
                         <div className="flex items-end justify-between gap-3 flex-wrap mt-2">
                             <div>
                                 <p className={discoveryTheme.personalEyebrow}>{t('home.browse')}</p>
-                                <h2 className="text-lg sm:text-xl font-black text-text mt-1">{t('home.musicSection')}</h2>
+                                <button
+                                    type="button"
+                                    onClick={() => navigate('/discovery/music')}
+                                    className="text-lg sm:text-xl font-black text-text mt-1 text-left hover:text-plex transition-colors"
+                                >
+                                    {t('home.musicSection')}
+                                </button>
                             </div>
                             <button
                                 type="button"
@@ -736,11 +778,15 @@ export const DiscoverHome: React.FC<{
                             kind="artist"
                             resolvingKey={musicResolvingKey}
                             onPick={openMusicChartItem}
+                            viewAllLabel={t('common.viewAll')}
+                            onViewAll={() => navigate('/discovery/music')}
                         />
                         <MusicGenreRail
                             title={t('music.genres')}
                             genres={musicRows.genres}
                             navigate={navigate}
+                            viewAllLabel={t('common.viewAll')}
+                            onViewAll={() => navigate('/discovery/music')}
                         />
                         <MusicChartRail
                             title={t('music.topAlbums')}
@@ -748,6 +794,8 @@ export const DiscoverHome: React.FC<{
                             kind="album"
                             resolvingKey={musicResolvingKey}
                             onPick={openMusicChartItem}
+                            viewAllLabel={t('common.viewAll')}
+                            onViewAll={() => navigate('/discovery/music')}
                         />
                         {musicRows.genreRows.slice(0, 4).map((row) => (
                             <MusicChartRail
@@ -757,6 +805,8 @@ export const DiscoverHome: React.FC<{
                                 kind="album"
                                 resolvingKey={musicResolvingKey}
                                 onPick={openMusicChartItem}
+                                viewAllLabel={t('common.viewAll')}
+                                onViewAll={() => navigate(`/discovery/music?genre=${row.id}&genreName=${encodeURIComponent(row.name)}`)}
                             />
                         ))}
                     </>
