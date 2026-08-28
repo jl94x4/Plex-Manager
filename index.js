@@ -2896,6 +2896,14 @@ const requireAdmin = async (req, res, next) => {
     next();
 };
 
+const requireAdminOrInitialSetup = async (req, res, next) => {
+    const config = await loadFile(CONFIG_PATH, {});
+    if (!isPortalConfigured(config) && canRunInitialSetup(req)) {
+        return next();
+    }
+    return requireAdmin(req, res, next);
+};
+
 const syncUsers = async (config) => {
     log('Starting user sync from Plex...');
     config = await syncAdminPlexIdFromConfigToken(config, { persist: true });
@@ -6830,7 +6838,7 @@ app.post('/api/config/background', requireLogoUploadAccess, express.raw({ type: 
     await saveUploadedBrandingImage(req, res, 'background', 'backgroundImageUrl');
 });
 
-app.post('/api/config/test-email', requireAdmin, async (req, res) => {
+app.post('/api/config/test-email', requireAdminOrInitialSetup, async (req, res) => {
     const { smtpHost, smtpPort, smtpUser, smtpPass, smtpFrom, smtpSecure, testRecipient } = req.body;
 
     if (!smtpHost || !smtpUser || !smtpPass || !testRecipient) {
@@ -6894,7 +6902,7 @@ app.post('/api/config/test-email', requireAdmin, async (req, res) => {
     }
 });
 
-app.post('/api/config/test-gotify', requireAdmin, async (req, res) => {
+app.post('/api/config/test-gotify', requireAdminOrInitialSetup, async (req, res) => {
     const { gotifyUrl, gotifyToken, gotifyPriority } = req.body || {};
     if (!gotifyUrl || !gotifyToken) {
         return res.status(400).json({ error: 'Gotify URL and application token are required.' });
