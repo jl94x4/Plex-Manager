@@ -11,6 +11,12 @@ import {
     type DiscoverView,
 } from './urlState';
 import {
+    capturePortalScroll,
+    restorePortalScroll,
+    scheduleScrollRestore,
+    type PortalScrollSnapshot,
+} from './shared/posterSetsScroll';
+import {
     DEFAULT_UPGRADER_GRID_SIZE,
     normalizeUpgraderGridSize,
     upgraderLandscapeGridStyle,
@@ -211,6 +217,7 @@ export function usePosterSetsDashboardState() {
     const librarySearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const libraryLoadGenRef = useRef(0);
     const scrollPreviewAfterLoadRef = useRef(false);
+    const resultsScrollTopRef = useRef<PortalScrollSnapshot | null>(null);
     const syncedSetUrlRef = useRef<string | null>(initialLocation.setUrl);
     const titleCardsOnlyRef = useRef(Boolean(initialLocation.titleCardsOnly));
     const deepLinkHandledRef = useRef(false);
@@ -407,6 +414,7 @@ export function usePosterSetsDashboardState() {
 
     /** Collapse the inline set inspector without wiping search/browse results. */
     const collapseSetInspector = useCallback((options?: { scrollToSets?: boolean }) => {
+        const saved = resultsScrollTopRef.current || capturePortalScroll();
         setPreview(null);
         setSelectedSearchSet(null);
         setSelectedAssetIds([]);
@@ -426,6 +434,8 @@ export function usePosterSetsDashboardState() {
             requestAnimationFrame(() => {
                 searchSetsSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
             });
+        } else {
+            scheduleScrollRestore(() => restorePortalScroll(saved));
         }
     }, [browseSeeAllId, searchMode, searchQuery, tab]);
 
@@ -968,6 +978,9 @@ export function usePosterSetsDashboardState() {
 
         const restrictTitleCards = isTitleCardSet(set);
         const stayOnTab = Boolean(options?.stayOnTab);
+        if (!selectedSearchSet || !(preview || busy === 'preview')) {
+            resultsScrollTopRef.current = capturePortalScroll();
+        }
         setShowInspectorAssets(false);
         setSelectedSearchSet(set);
         setUrl(target);

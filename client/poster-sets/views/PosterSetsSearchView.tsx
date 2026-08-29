@@ -425,9 +425,9 @@ export const PosterSetsSearchView: React.FC = () => {
                                             <button
                                                 type="button"
                                                 className="rounded-full p-0.5 text-plex/80 hover:bg-plex/20 hover:text-plex"
-                                                onClick={clearSearch}
-                                                title="Clear selection"
-                                                aria-label="Clear selection"
+                                                onClick={() => collapseSetInspector({ scrollToSets: false })}
+                                                title="Close set"
+                                                aria-label="Close set"
                                             >
                                                 <X className="h-3 w-3" />
                                             </button>

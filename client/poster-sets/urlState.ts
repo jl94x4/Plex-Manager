@@ -1,5 +1,7 @@
 /** Hash routing for Poster Sets — library-first with Discover sub-views. */
 
+import { withPreservedPortalScroll } from './shared/posterSetsScroll';
+
 export const POSTER_SETS_PRIMARY_TABS = ['library', 'collections', 'discover', 'queue', 'watches', 'logs', 'paste', 'settings'] as const;
 export type PosterSetsPrimaryTab = (typeof POSTER_SETS_PRIMARY_TABS)[number];
 
@@ -289,18 +291,22 @@ export function writePosterSetsUrl(state: PosterSetsUrlState, mode: 'push' | 're
     const desired = buildPosterSetsHash(state);
     const current = window.location.hash || '';
     if (current === desired) return;
-    if (mode === 'replace' && !current && desired === '#library') {
-        const next = `${window.location.pathname}${window.location.search}${desired}`;
-        window.history.replaceState({ posterSets: true }, '', next);
-        return;
-    }
+    const apply = () => {
+        if (mode === 'replace' && !current && desired === '#library') {
+            const next = `${window.location.pathname}${window.location.search}${desired}`;
+            window.history.replaceState({ posterSets: true }, '', next);
+            return;
+        }
 
-    const next = `${window.location.pathname}${window.location.search}${desired}`;
-    if (mode === 'push') {
-        window.history.pushState({ posterSets: true }, '', next);
-    } else {
-        window.history.replaceState({ posterSets: true }, '', next);
-    }
+        const next = `${window.location.pathname}${window.location.search}${desired}`;
+        if (mode === 'push') {
+            window.history.pushState({ posterSets: true }, '', next);
+        } else {
+            window.history.replaceState({ posterSets: true }, '', next);
+        }
+    };
+    // Changing `#discover?url=` ↔ `#discover` makes Safari/iOS jump to the top.
+    withPreservedPortalScroll(apply);
 }
 
 export function posterSetsUrlEquals(a: PosterSetsUrlState, b: PosterSetsUrlState): boolean {

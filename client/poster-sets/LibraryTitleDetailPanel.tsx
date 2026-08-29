@@ -41,6 +41,11 @@ import {
     SEARCH_SET_CATEGORY_ORDER,
 } from './shared/posterSetsRecent';
 import type { LibraryDetailLayout } from './shared/posterSetsUi';
+import {
+    captureElementScroll,
+    restoreElementScroll,
+    scheduleScrollRestore,
+} from './shared/posterSetsScroll';
 
 const TITLE_CARD_ONLY_FILTERS = ['title_card'];
 const SETS_PAGE_SIZE_DRAWER = 16;
@@ -195,6 +200,8 @@ export function LibraryTitleDetailPanel({
     const [titleCardsOnly, setTitleCardsOnly] = useState(false);
     const [setsPage, setSetsPage] = useState(1);
     const panelRef = useRef<HTMLDivElement | null>(null);
+    const scrollBodyRef = useRef<HTMLDivElement | null>(null);
+    const setsScrollTopRef = useRef(0);
     const loadGenRef = useRef(0);
 
     const watchedUrlSet = useMemo(() => {
@@ -245,6 +252,8 @@ export function LibraryTitleDetailPanel({
         setSelectedAssetIds([]);
         setShowAssets(false);
         setTitleCardsOnly(false);
+        const top = setsScrollTopRef.current;
+        scheduleScrollRestore(() => restoreElementScroll(scrollBodyRef.current, top));
     }, []);
 
     const loadSetsForTitle = useCallback(async (
@@ -628,6 +637,7 @@ export function LibraryTitleDetailPanel({
             return;
         }
         const restrictTitleCards = isTitleCardSet(set, { mediaType: item?.mediaType });
+        setsScrollTopRef.current = captureElementScroll(scrollBodyRef.current);
         setSelectedSet(set);
         setTitleCardsOnly(restrictTitleCards);
         setShowAssets(false);
@@ -686,8 +696,7 @@ export function LibraryTitleDetailPanel({
                 : `Queued ${ids.length} poster${ids.length === 1 ? '' : 's'}.`);
             onApplied?.();
             await refreshTitleStatus();
-            setPreview(null);
-            setSelectedSet(null);
+            backToSets();
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to queue apply', 'error');
         } finally {
@@ -730,8 +739,7 @@ export function LibraryTitleDetailPanel({
                 : `Queued ${ids.length} selected asset(s).`);
             onApplied?.();
             await refreshTitleStatus();
-            setPreview(null);
-            setSelectedSet(null);
+            backToSets();
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to queue apply', 'error');
         } finally {
@@ -770,8 +778,7 @@ export function LibraryTitleDetailPanel({
                 : 'Queued full set apply.');
             onApplied?.();
             await refreshTitleStatus();
-            setPreview(null);
-            setSelectedSet(null);
+            backToSets();
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to queue apply', 'error');
         } finally {
@@ -815,8 +822,7 @@ export function LibraryTitleDetailPanel({
                 : `Queued ${unmatchedIds.length} unmatched poster(s).`);
             onApplied?.();
             await refreshTitleStatus();
-            setPreview(null);
-            setSelectedSet(null);
+            backToSets();
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to queue apply', 'error');
         } finally {
@@ -968,7 +974,7 @@ export function LibraryTitleDetailPanel({
                     </div>
                 </div>
 
-                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-4 sm:p-5 custom-scrollbar">
+                <div ref={scrollBodyRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 pb-4 sm:p-5 custom-scrollbar">
                     {statusLoading ? (
                         <div className="mb-4 flex items-center gap-2 text-xs text-muted">
                             <Loader2 className="h-3.5 w-3.5 animate-spin" />
