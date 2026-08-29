@@ -47,6 +47,7 @@ import { InvitesSettings } from './InvitesSettings';
 import { StatusMonitorSettings } from './StatusMonitorSettings';
 import { ScannerSettingsPanel, defaultScannerSettings, type ScannerSettings } from './ScannerSettingsPanel';
 import { BroadcastSettingsTab } from './BroadcastSettingsTab';
+import { CleanupInactivePreview } from './CleanupInactivePreview';
 import { NotificationsSettingsTab } from './NotificationsSettingsTab';
 import { IntegrationTestButton } from '../shared/IntegrationTestButton';
 import { HomeLayoutSettings } from './HomeLayoutSettings';
@@ -3125,28 +3126,28 @@ export const SettingsDashboard: React.FC = () => {
                     )}
                     {activeTab === 'cleanup' && (
                         <div className="mb-8 animate-fade-in">
-                            <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">Automated User Cleanup</h3>
+                            <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">{t('settings.cleanup.title')}</h3>
                             <div className="mb-6 bg-yellow-500/10 border border-yellow-500/20 p-4 rounded-lg">
-                                <p className="text-sm text-yellow-500 font-bold mb-1">Warning</p>
-                                <p className="text-xs text-muted">When enabled, the server will automatically revoke portal access for users who have not watched anything for the specified number of days. You can exempt specific users from this rule by editing them in the Users table.</p>
+                                <p className="text-sm text-yellow-500 font-bold mb-1">{t('settings.cleanup.warningTitle')}</p>
+                                <p className="text-xs text-muted">{t('settings.cleanup.warningBody')}</p>
                             </div>
 
                             <SettingsToggleRow
-                                title="Enable Automated Cleanup"
-                                description="Run cleanup job automatically in the background"
+                                title={t('settings.cleanup.enableTitle')}
+                                description={t('settings.cleanup.enableDescription')}
                                 checked={inactiveCleanupEnabled}
                                 onChange={setInactiveCleanupEnabled}
                                 border={false}
                                 className="mb-6"
                             />
 
-                            <div className={`transition-all ${!inactiveCleanupEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
+                            <div>
                                 <div className="mb-4">
                                     <SettingFieldLabel
                                         htmlFor="inactiveCleanupDays"
-                                        hint={<SettingHint>Revoke access if a user has not watched anything in this many days.</SettingHint>}
+                                        hint={<SettingHint>{t('settings.cleanup.thresholdHint')}</SettingHint>}
                                     >
-                                        Inactivity Threshold (Days)
+                                        {t('settings.cleanup.thresholdLabel')}
                                     </SettingFieldLabel>
                                     <input
                                         className="w-full appearance-none p-3 rounded-lg border border-border bg-background text-[16px] leading-5 text-text outline-none focus:border-plex focus:ring-1 focus:ring-plex transition-all"
@@ -3158,6 +3159,7 @@ export const SettingsDashboard: React.FC = () => {
                                     />
                                 </div>
                             </div>
+                            <CleanupInactivePreview days={inactiveCleanupDays} addToast={addToast} />
                         </div>
                     )}
                     {activeTab === 'mediastack' && (

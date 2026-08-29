@@ -40,6 +40,7 @@ export const InvitesSettings: React.FC<{
     const [durationDays, setDurationDays] = useState(30);
     const [maxUses, setMaxUses] = useState<string | number>(1);
     const [emailInvite, setEmailInvite] = useState('');
+    const [emailNote, setEmailNote] = useState('');
     const [emailing, setEmailing] = useState(false);
     const [libraries, setLibraries] = useState<any[]>([]);
     const [selectedLibraries, setSelectedLibraries] = useState<string[]>([]);
@@ -86,10 +87,11 @@ export const InvitesSettings: React.FC<{
             const libraryIds = allSelected || selectedLibraries.length === 0 ? [] : selectedLibraries;
             await apiFetch('/api/invites/email', {
                 method: 'POST',
-                body: JSON.stringify({ email: emailInvite, durationDays, libraryIds })
+                body: JSON.stringify({ email: emailInvite, durationDays, libraryIds, note: emailNote.trim() || undefined })
             });
             addToast(t('settings.invites.emailSent'), 'success');
             setEmailInvite('');
+            setEmailNote('');
             fetchInvites();
         } catch (e: any) {
             addToast(e.message || t('settings.invites.emailFailed'), 'error');
@@ -204,6 +206,18 @@ export const InvitesSettings: React.FC<{
                         <button disabled={emailing} className="w-full md:w-auto px-6 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors shadow-lg disabled:opacity-50" onClick={handleEmailInvite}>
                             {emailing ? t('settings.invites.sending') : t('settings.invites.sendEmailInvite')}
                         </button>
+                    </div>
+                    <div className="mt-4">
+                        <label className="block text-sm mb-1 font-medium">{t('settings.invites.personalNote')}</label>
+                        <p className="text-xs text-muted mb-2">{t('settings.invites.personalNoteHint')}</p>
+                        <textarea
+                            value={emailNote}
+                            onChange={(e) => setEmailNote(e.target.value)}
+                            maxLength={2000}
+                            rows={4}
+                            placeholder={t('settings.invites.personalNotePlaceholder')}
+                            className="w-full p-2.5 rounded-lg bg-background border border-border text-text outline-none focus:border-plex resize-y"
+                        />
                     </div>
                 </div>
             </div>

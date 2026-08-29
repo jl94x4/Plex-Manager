@@ -6,7 +6,7 @@ import { ResponsiveContainer, LineChart, Line, BarChart, Bar, AreaChart, Area, X
 import { SettingsDashboard } from './settings/SettingsDashboard';
 import { EmailSelectedUsersModal } from './settings/EmailSelectedUsersModal';
 import { LibraryMaintenancePanel } from './maintenance/LibraryMaintenancePanel';
-import { appConfirm } from './shared/confirm';
+import { appConfirm, askConfirm } from './shared/confirm';
 import { apiFetch, apiFetchShared } from './shared/api';
 import { InAppNotificationsBell } from './shared/InAppNotificationsBell';
 import { IN_APP_NOTIFICATIONS_CHANGED_EVENT } from './shared/inAppNotificationsRefresh';
@@ -256,8 +256,10 @@ const UserCard: React.FC<{
     isSelected: boolean;
     onSelect: (id: string) => void;
     onEmail?: () => void;
+    onResendInvite?: () => void;
+    onCopied?: (message: string) => void;
     providerLabel?: string;
-}> = ({ user, onEdit, onDelete, onRevoke, onViewAs, onViewAnalytics, onViewProfile, isConfigured, isSelected, onSelect, onEmail, providerLabel = 'Plex' }) => {
+}> = ({ user, onEdit, onDelete, onRevoke, onViewAs, onViewAnalytics, onViewProfile, isConfigured, isSelected, onSelect, onEmail, onResendInvite, onCopied, providerLabel = 'Plex' }) => {
     const { t } = useDiscoverI18n();
     const isPlexRevoked = user.plexAccessStatus === 'revoked' && !(user.isServerOwner || user.isAdmin);
     const plexAccessStatus = (user.isServerOwner || user.isAdmin)
@@ -333,8 +335,50 @@ const UserCard: React.FC<{
                         </div>
                     )}
                     <div className="flex flex-col min-w-0 pr-1">
-                        <h3 className="text-sm font-bold truncate leading-tight" title={user.username}>{user.username}</h3>
-                        {user.email && <span className="text-[10px] text-muted truncate mt-0.5" title={user.email}>{user.email}</span>}
+                        <div className="flex items-center gap-1 min-w-0">
+                            <h3 className="text-sm font-bold truncate leading-tight" title={user.username}>{user.username}</h3>
+                            {onCopied && (
+                                <button
+                                    type="button"
+                                    className="text-muted hover:text-plex p-0.5 shrink-0"
+                                    title={t('usersAdmin.actions.copyUsername')}
+                                    onClick={async (e) => {
+                                        e.stopPropagation();
+                                        try {
+                                            await copyTextToClipboard(user.username);
+                                            onCopied(t('usersAdmin.actions.copiedUsername'));
+                                        } catch {
+                                            onCopied(t('usersAdmin.actions.copyFailed'));
+                                        }
+                                    }}
+                                >
+                                    <Copy className="w-3 h-3" />
+                                </button>
+                            )}
+                        </div>
+                        {user.email && (
+                            <div className="flex items-center gap-1 min-w-0 mt-0.5">
+                                <span className="text-[10px] text-muted truncate" title={user.email}>{user.email}</span>
+                                {onCopied && (
+                                    <button
+                                        type="button"
+                                        className="text-muted hover:text-plex p-0.5 shrink-0"
+                                        title={t('usersAdmin.actions.copyEmail')}
+                                        onClick={async (e) => {
+                                            e.stopPropagation();
+                                            try {
+                                                await copyTextToClipboard(user.email || '');
+                                                onCopied(t('usersAdmin.actions.copiedEmail'));
+                                            } catch {
+                                                onCopied(t('usersAdmin.actions.copyFailed'));
+                                            }
+                                        }}
+                                    >
+                                        <Copy className="w-3 h-3" />
+                                    </button>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
                 <span
@@ -405,6 +449,16 @@ const UserCard: React.FC<{
                     >
                         <Mail className="w-3.5 h-3.5" />
                         {t('usersAdmin.actions.emailUser')}
+                    </button>
+                )}
+                {onResendInvite && (
+                    <button
+                        className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5"
+                        onClick={onResendInvite}
+                        title={t('usersAdmin.actions.resendInvite')}
+                    >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        {t('usersAdmin.actions.resendInvite')}
                     </button>
                 )}
                 <button className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5" onClick={onEdit}>{isPlexRevoked ? t('usersAdmin.actions.restoreAccess') : t('usersAdmin.actions.edit')}</button>
@@ -5454,8 +5508,9 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
             return '';
         }
     });
-    const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'trial' | 'expiring' | 'expired' | 'revoked'>('all');
-    const [sortBy, setSortBy] = useState<'username-asc' | 'username-desc' | 'expiry-asc' | 'expiry-desc' | 'joined-desc'>('username-asc');
+    const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'trial' | 'expiring' | 'expired' | 'revoked' | 'pending'>('all');
+    const [extraFilters, setExtraFilters] = useState<Array<'noEmail' | 'neverLoggedIn' | 'exempt' | 'newsletterOff'>>([]);
+    const [sortBy, setSortBy] = useState<'username-asc' | 'username-desc' | 'expiry-asc' | 'expiry-desc' | 'joined-desc' | 'lastLogin-desc' | 'lastLogin-asc'>('username-asc');
     const mediaServerType = String(configSettings.mediaServerType || 'plex').toLowerCase();
     const mediaServerLabel = mediaServerType === 'emby' ? 'Emby' : mediaServerType === 'jellyfin' ? 'Jellyfin' : 'Plex';
 
@@ -5606,15 +5661,47 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
         }
     };
 
-    const revokePlexAccess = async (userId: string) => {
+    const revokePlexAccess = async (user: User) => {
+        const ok = await askConfirm(
+            t('usersAdmin.dialogs.revokeUser', { username: user.username, provider: mediaServerLabel }),
+            {
+                title: t('usersAdmin.actions.revoke'),
+                confirmLabel: t('usersAdmin.actions.revoke'),
+                cancelLabel: t('common.cancel'),
+                danger: true,
+            },
+        );
+        if (!ok) return;
         setLoading(true);
         try {
-            const updatedUser = await apiFetch(`/api/users/${userId}/revoke`, { method: 'POST' });
-            setUsers(currentUsers => currentUsers.map(u => u.id === userId ? updatedUser : u));
+            const updatedUser = await apiFetch(`/api/users/${user.id}/revoke`, { method: 'POST' });
+            setUsers(currentUsers => currentUsers.map(u => u.id === user.id ? updatedUser : u));
             addToast(t('usersAdmin.toasts.accessRevoked'));
             await fetchSecurityData();
         } catch (error) {
             addToast(error instanceof Error ? error.message : t('usersAdmin.errors.revokeAccess'), 'error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const resendUserInvite = async (user: User) => {
+        const ok = await askConfirm(
+            t('usersAdmin.dialogs.resendInvite', { username: user.username }),
+            {
+                title: t('usersAdmin.actions.resendInvite'),
+                confirmLabel: t('usersAdmin.actions.resendInvite'),
+                cancelLabel: t('common.cancel'),
+            },
+        );
+        if (!ok) return;
+        setLoading(true);
+        try {
+            const updatedUser = await apiFetch(`/api/users/${user.id}/resend-invite`, { method: 'POST' });
+            setUsers(currentUsers => currentUsers.map(u => u.id === user.id ? updatedUser : u));
+            addToast(t('usersAdmin.toasts.inviteResent', { username: user.username }));
+        } catch (error) {
+            addToast(error instanceof Error ? error.message : t('usersAdmin.errors.resendInvite'), 'error');
         } finally {
             setLoading(false);
         }
@@ -5700,6 +5787,24 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
     };
 
     const handleBulkUpdate = async (action: 'addMonth' | 'addYear' | 'unlimited' | 'custom', customDate?: string) => {
+        if (action === 'custom' && !customDate) {
+            addToast(t('usersAdmin.errors.selectCustomDate'), 'error');
+            return;
+        }
+        const message = action === 'addMonth'
+            ? t('usersAdmin.dialogs.bulkAddMonth', { count: selectedUserIds.length })
+            : action === 'addYear'
+                ? t('usersAdmin.dialogs.bulkAddYear', { count: selectedUserIds.length })
+                : action === 'unlimited'
+                    ? t('usersAdmin.dialogs.bulkUnlimited', { count: selectedUserIds.length })
+                    : t('usersAdmin.dialogs.bulkCustom', { count: selectedUserIds.length, date: customDate || '' });
+        const ok = await askConfirm(message, {
+            title: t('usersAdmin.dialogs.bulkExpiryTitle'),
+            confirmLabel: t('usersAdmin.dialogs.bulkExpiryConfirm'),
+            cancelLabel: t('common.cancel'),
+            danger: action === 'unlimited',
+        });
+        if (!ok) return;
         setLoading(true);
         try {
             await apiFetch('/api/users/bulk-update', {
@@ -5714,6 +5819,38 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
             await fetchSecurityData();
         } catch (error) {
             addToast(error instanceof Error ? error.message : t('usersAdmin.errors.bulkUpdate'), 'error');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleBulkFlags = async (patch: { exemptFromCleanup?: boolean; optOutNewsletter?: boolean }) => {
+        const count = selectedUserIds.length;
+        const message = patch.exemptFromCleanup === true
+            ? t('usersAdmin.dialogs.bulkExempt', { count })
+            : patch.exemptFromCleanup === false
+                ? t('usersAdmin.dialogs.bulkIncludeCleanup', { count })
+                : patch.optOutNewsletter === true
+                    ? t('usersAdmin.dialogs.bulkNewsletterOff', { count })
+                    : t('usersAdmin.dialogs.bulkNewsletterOn', { count });
+        const ok = await askConfirm(message, {
+            title: t('usersAdmin.dialogs.flagsTitle'),
+            confirmLabel: t('usersAdmin.dialogs.bulkExpiryConfirm'),
+            cancelLabel: t('common.cancel'),
+        });
+        if (!ok) return;
+        setLoading(true);
+        try {
+            const result = await apiFetch('/api/users/bulk-flags', {
+                method: 'POST',
+                body: JSON.stringify({ userIds: selectedUserIds, ...patch }),
+            });
+            addToast(result.message || t('usersAdmin.toasts.flagsUpdated', { count }));
+            setSelectedUserIds([]);
+            setBulkLibrariesOpen(false);
+            await fetchUsers();
+        } catch (error) {
+            addToast(error instanceof Error ? error.message : t('usersAdmin.errors.bulkFlags'), 'error');
         } finally {
             setLoading(false);
         }
@@ -5809,25 +5946,33 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                     if (!matchesName && !matchesEmail) return false;
                 }
 
-                if (statusFilter === 'all') return true;
+                if (statusFilter === 'all') {
+                    // continue to extra filters
+                } else {
+                    const days = getDaysUntilExpiry(user.expiryDate);
+                    const isRevoked = user.plexAccessStatus === 'revoked' && !(user.isServerOwner || user.isAdmin);
+                    const isTrial = user.isTrial === true;
+                    const isPending = user.plexAccessStatus === 'pending' && !(user.isServerOwner || user.isAdmin);
 
-                const days = getDaysUntilExpiry(user.expiryDate);
-                const isRevoked = user.plexAccessStatus === 'revoked' && !(user.isServerOwner || user.isAdmin);
-                const isTrial = user.isTrial === true;
+                    if (statusFilter === 'trial') {
+                        if (!isTrial) return false;
+                    } else if (statusFilter === 'revoked') {
+                        if (!isRevoked) return false;
+                    } else if (statusFilter === 'pending') {
+                        if (!isPending) return false;
+                    } else {
+                        if (isRevoked) return false;
+                        if (statusFilter === 'active' && !(days === null || days > 30)) return false;
+                        if (statusFilter === 'expiring' && !(days !== null && days >= 0 && days <= 30)) return false;
+                        if (statusFilter === 'expired' && !(days !== null && days < 0)) return false;
+                    }
+                }
 
-                if (statusFilter === 'trial') return isTrial;
-                if (statusFilter === 'revoked') return isRevoked;
-                if (isRevoked) return false; // Hide revoked from active/expiring/expired lists
+                if (extraFilters.includes('noEmail') && String(user.email || '').trim()) return false;
+                if (extraFilters.includes('neverLoggedIn') && user.lastLogin) return false;
+                if (extraFilters.includes('exempt') && !user.exemptFromCleanup) return false;
+                if (extraFilters.includes('newsletterOff') && !user.optOutNewsletter) return false;
 
-                if (statusFilter === 'active') {
-                    return days === null || days > 30;
-                }
-                if (statusFilter === 'expiring') {
-                    return days !== null && days >= 0 && days <= 30;
-                }
-                if (statusFilter === 'expired') {
-                    return days !== null && days < 0;
-                }
                 return true;
             })
             .sort((a, b) => {
@@ -5839,6 +5984,11 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                 }
                 if (sortBy === 'joined-desc') {
                     return new Date(b.joiningDate).getTime() - new Date(a.joiningDate).getTime();
+                }
+                if (sortBy === 'lastLogin-desc' || sortBy === 'lastLogin-asc') {
+                    const aMs = a.lastLogin ? new Date(a.lastLogin).getTime() : 0;
+                    const bMs = b.lastLogin ? new Date(b.lastLogin).getTime() : 0;
+                    return sortBy === 'lastLogin-desc' ? bMs - aMs : aMs - bMs;
                 }
                 if (sortBy === 'expiry-asc') {
                     if (a.expiryDate === null) return 1;
@@ -5852,7 +6002,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                 }
                 return 0;
             });
-    }, [users, searchQuery, statusFilter, sortBy]);
+    }, [users, searchQuery, statusFilter, extraFilters, sortBy]);
 
     const filteredUserIds = useMemo(() => filteredAndSortedUsers.map(u => u.id), [filteredAndSortedUsers]);
     const allFilteredSelected = filteredUserIds.length > 0 && filteredUserIds.every(id => selectedUserIds.includes(id));
@@ -6013,6 +6163,8 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                                     { label: t('usersAdmin.filters.expiryAsc'), value: 'expiry-asc' },
                                     { label: t('usersAdmin.filters.expiryDesc'), value: 'expiry-desc' },
                                     { label: t('usersAdmin.filters.joinedDesc'), value: 'joined-desc' },
+                                    { label: t('usersAdmin.filters.lastLoginDesc'), value: 'lastLogin-desc' },
+                                    { label: t('usersAdmin.filters.lastLoginAsc'), value: 'lastLogin-asc' },
                                 ]}
                             />
                         )}
@@ -6040,7 +6192,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                             </div>
 
                             <div className="flex flex-wrap gap-1 rounded-xl border border-white/10 bg-black/20 p-1">
-                                {(['all', 'active', 'trial', 'expiring', 'expired', 'revoked'] as const).map((status) => (
+                                {(['all', 'active', 'trial', 'expiring', 'expired', 'revoked', 'pending'] as const).map((status) => (
                                     <button
                                         key={status}
                                         type="button"
@@ -6052,9 +6204,30 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                                     </button>
                                 ))}
                             </div>
-                            {statusFilter !== 'all' && (
+                            <div>
+                                <p className="text-[10px] uppercase tracking-wider font-bold text-muted mb-1.5">{t('usersAdmin.filters.extraTitle')}</p>
+                                <div className="flex flex-wrap gap-1 rounded-xl border border-white/10 bg-black/20 p-1">
+                                    {(['noEmail', 'neverLoggedIn', 'exempt', 'newsletterOff'] as const).map((key) => {
+                                        const selected = extraFilters.includes(key);
+                                        return (
+                                            <button
+                                                key={key}
+                                                type="button"
+                                                title={t(`usersAdmin.filters.extraHints.${key}` as any)}
+                                                className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors border-none outline-none cursor-pointer sm:text-sm ${dashboardSubnavLinkClass(selected)}`}
+                                                onClick={() => setExtraFilters((prev) => (
+                                                    prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]
+                                                ))}
+                                            >
+                                                {t(`usersAdmin.filters.${key}` as any)}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                            {(statusFilter !== 'all' || extraFilters.length > 0) && (
                                 <p className="text-xs text-muted leading-relaxed">
-                                    {t(`usersAdmin.statusHints.${statusFilter}` as any)}
+                                    {statusFilter !== 'all' ? t(`usersAdmin.statusHints.${statusFilter}` as any) : t('usersAdmin.filters.subtitle')}
                                 </p>
                             )}
                         </div>
@@ -6130,6 +6303,10 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                                     <Mail className="w-4 h-4" />
                                     {t('usersAdmin.bulk.emailSelected')}
                                 </button>
+                                <button type="button" className="rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-white/5" onClick={() => handleBulkFlags({ exemptFromCleanup: true })}>{t('usersAdmin.bulk.exemptCleanup')}</button>
+                                <button type="button" className="rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-white/5" onClick={() => handleBulkFlags({ exemptFromCleanup: false })}>{t('usersAdmin.bulk.includeCleanup')}</button>
+                                <button type="button" className="rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-white/5" onClick={() => handleBulkFlags({ optOutNewsletter: true })}>{t('usersAdmin.bulk.newsletterOff')}</button>
+                                <button type="button" className="rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-white/5" onClick={() => handleBulkFlags({ optOutNewsletter: false })}>{t('usersAdmin.bulk.newsletterOn')}</button>
                             </div>
                             {bulkLibrariesOpen && (
                                 <div className="border-t border-white/10 pt-4">
@@ -6200,7 +6377,7 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                                     user={user}
                                     onEdit={() => handleOpenUserModal(user)}
                                     onDelete={() => handleDeleteUser(user.id)}
-                                    onRevoke={() => revokePlexAccess(user.id)}
+                                    onRevoke={() => revokePlexAccess(user)}
                                     onViewAs={() => handleViewAsUser(user)}
                                     onViewAnalytics={() => {
                                         window.location.assign(portalUrl(`/analytics#user=${encodeURIComponent(user.username)}`));
@@ -6213,6 +6390,10 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                                         setEmailUserIds([user.id]);
                                         setEmailModalOpen(true);
                                     } : undefined}
+                                    onResendInvite={user.plexAccessStatus === 'pending' && !(user.isServerOwner || user.isAdmin)
+                                        ? () => resendUserInvite(user)
+                                        : undefined}
+                                    onCopied={(message) => addToast(message)}
                                     providerLabel={mediaServerLabel}
                                 />
                             ))}

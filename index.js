@@ -9226,7 +9226,7 @@ app.post('/api/invites', requireAdmin, async (req, res) => {
 });
 
 app.post('/api/invites/email', requireAdmin, async (req, res) => {
-    const { email, durationDays, libraryIds } = req.body;
+    const { email, durationDays, libraryIds, note } = req.body;
     if (!email) return res.status(400).json({ error: 'Email is required' });
 
     const config = await loadFile(CONFIG_PATH, {});
@@ -9263,6 +9263,18 @@ app.post('/api/invites/email', requireAdmin, async (req, res) => {
         try { await fs.access(logoPath); hasLogo = true; } catch (e) { }
 
         const subject = `You've been invited to ${serverName}!`;
+        const escapeInviteText = (value = '') => String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        const personalNote = String(note || '').trim().slice(0, 2000);
+        const noteHtml = personalNote
+            ? escapeInviteText(personalNote)
+                .replace(/\{\{\s*EMAIL\s*\}\}/gi, escapeInviteText(email))
+                .replace(/\r\n|\n|\r/g, '<br>')
+            : '';
         const html = `
             <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; padding: 30px; color: #333333; line-height: 1.6;">
                 <div style="max-width: 600px; margin: auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-top: 6px solid #e5a00d;">
@@ -9273,6 +9285,7 @@ app.post('/api/invites/email', requireAdmin, async (req, res) => {
                     <div style="padding: 30px 40px;">
                         <h2 style="color: #e5a00d; font-size: 20px; margin-top: 0; font-weight: 600; text-align: center;">Welcome to the Server!</h2>
                         <p style="text-align: center; font-size: 16px;">You have been invited to join our private media server.</p>
+                        ${noteHtml ? `<div style="margin: 24px 0 0 0; padding: 16px 18px; background-color: #fcf8f2; border-radius: 8px; font-size: 15px; color: #2d3748;">${noteHtml}</div>` : ''}
                         
                         <div style="text-align: center; margin: 35px 0;">
                             <a href="${inviteUrl}" style="background-color: #e5a00d; color: #ffffff; text-decoration: none; padding: 14px 35px; font-weight: bold; border-radius: 6px; display: inline-block; font-size: 16px; box-shadow: 0 4px 6px rgba(229, 160, 13, 0.2);">Claim Your Access</a>
@@ -14230,6 +14243,37 @@ app.post('/api/users/bulk-libraries', requireAdmin, async (req, res) => {
     }
 });
 
+app.post('/api/users/bulk-flags', requireAdmin, async (req, res) => {
+    const { userIds, exemptFromCleanup, optOutNewsletter } = req.body || {};
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+        return res.status(400).json({ error: 'userIds is required.' });
+    }
+    if (exemptFromCleanup === undefined && optOutNewsletter === undefined) {
+        return res.status(400).json({ error: 'Set exemptFromCleanup and/or optOutNewsletter.' });
+    }
+
+    try {
+        const users = await loadFile(USERS_PATH, []);
+        const idSet = new Set(userIds.map(String));
+        let updatedCount = 0;
+        for (const user of users) {
+            if (!idSet.has(String(user.id))) continue;
+            if (exemptFromCleanup !== undefined) user.exemptFromCleanup = !!exemptFromCleanup;
+            if (optOutNewsletter !== undefined) user.optOutNewsletter = !!optOutNewsletter;
+            updatedCount++;
+            await appendAuditLog('user_bulk_flags_updated', req.user, user, {
+                exemptFromCleanup: exemptFromCleanup !== undefined ? !!exemptFromCleanup : undefined,
+                optOutNewsletter: optOutNewsletter !== undefined ? !!optOutNewsletter : undefined,
+            });
+        }
+        await saveFile(USERS_PATH, users);
+        res.json({ message: `Updated flags for ${updatedCount} user${updatedCount === 1 ? '' : 's'}.`, updatedCount });
+    } catch (error) {
+        log(`POST /api/users/bulk-flags failed: ${error.message}`);
+        res.status(500).json({ error: 'Failed to update user flags.' });
+    }
+});
+
 app.delete('/api/users/:id', requireAdmin, async (req, res) => {
     const { id } = req.params;
     const config = await loadFile(CONFIG_PATH, null);
@@ -14248,6 +14292,27 @@ app.delete('/api/users/:id', requireAdmin, async (req, res) => {
     await saveFile(USERS_PATH, users.filter(u => u.id !== id));
     await appendAuditLog('user_deleted_blocked', req.user, user, { plexAccessRevoked: !!(config && config.serverIdentifier && config.plexToken) });
     res.status(204).send();
+});
+
+app.post('/api/users/:id/resend-invite', requireAdmin, async (req, res) => {
+    const { id } = req.params;
+    const config = await loadFile(CONFIG_PATH, null);
+    if (!config) return res.status(400).json({ error: 'App not configured.' });
+    const users = await loadFile(USERS_PATH, []);
+    const user = users.find((u) => u.id === id);
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+
+    const inviteLibs = resolveInviteLibraryIds(user, config);
+    const invited = await inviteUserToPlex(user, config, inviteLibs.length > 0 ? inviteLibs : null);
+    if (!invited) {
+        return res.status(500).json({ error: 'Failed to send share invite. Check that this user has a Plex account id or email.' });
+    }
+    if (user.plexAccessStatus !== 'active') {
+        user.plexAccessStatus = 'pending';
+        await saveFile(USERS_PATH, users);
+    }
+    await appendAuditLog('relink_invite_sent', req.user, user, { resend: true });
+    res.json(sanitizeUserForApi(user));
 });
 
 app.post('/api/users/:id/revoke', requireAdmin, async (req, res) => {
@@ -19933,23 +19998,21 @@ const checkAndSendNewsletter = async (config, force = false) => {
     }
 };
 
-const checkAndCleanupInactive = async (config) => {
-    if (!config.inactiveCleanupEnabled) return;
-
-    const thresholdDays = parseInt(config.inactiveCleanupDays) || 90;
+const collectInactiveCleanupCandidates = async (config, thresholdDaysOverride) => {
+    const thresholdDays = parseInt(thresholdDaysOverride, 10) || parseInt(config.inactiveCleanupDays, 10) || 90;
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - thresholdDays);
     const cutoffMs = cutoffDate.getTime();
 
-    log(`Running automated inactive cleanup check (threshold: ${thresholdDays} days)...`);
-
-    let users = await loadFile(USERS_PATH, []);
-    let usersUpdated = false;
+    const users = await loadFile(USERS_PATH, []);
+    const skipped = { exempt: 0, notActive: 0, noAccountId: 0, historyError: 0 };
+    const candidates = [];
 
     const uri = await getPlexConnectionUri(config);
-    if (!uri) return;
+    if (!uri) {
+        return { error: 'Media server is not reachable. Check the connection in Settings.', thresholdDays, cutoff: cutoffDate.toISOString(), candidates, skipped };
+    }
 
-    // History queries need the *local* Plex account id, not plex.tv user id.
     const { list: plexAccounts } = await fetchPlexServerAccounts(uri, config);
     const norm = (v) => String(v || '').trim().toLowerCase();
     const resolveHistoryAccountId = (user) => {
@@ -19965,26 +20028,23 @@ const checkAndCleanupInactive = async (config) => {
         return null;
     };
 
-    const logoPath = path.join(process.cwd(), 'static', 'logo.png');
-    let hasLogo = false;
-    try {
-        await fs.access(logoPath);
-        hasLogo = true;
-    } catch (e) { /* optional logo */ }
-
     for (const user of users) {
-        if (isServerOwnerUser(user, config) || user.isAdmin || user.exemptFromCleanup) continue;
-        // Only consider users with active access; pending/revoked users aren't relevant.
-        if (user.plexAccessStatus !== 'active') continue;
+        if (isServerOwnerUser(user, config) || user.isAdmin || user.exemptFromCleanup) {
+            skipped.exempt += 1;
+            continue;
+        }
+        if (user.plexAccessStatus !== 'active') {
+            skipped.notActive += 1;
+            continue;
+        }
 
         const accountId = resolveHistoryAccountId(user);
         if (!accountId) {
-            log(`[INACTIVE CLEANUP] Skipping ${user.email || user.username}: no local Plex account id for history lookup.`);
+            skipped.noAccountId += 1;
             continue;
         }
 
         try {
-            // Get last session from Plex directly
             const historyRes = await fetch(`${uri}/status/sessions/history/all?X-Plex-Token=${config.plexToken}&accountID=${accountId}&sort=viewedAt:desc&limit=1`, { headers: plexClientHeaders(config.plexToken) }).then(r => r.json()).catch(() => null);
 
             let lastWatchedMs = 0;
@@ -19993,58 +20053,92 @@ const checkAndCleanupInactive = async (config) => {
                 lastWatchedMs = session.viewedAt * 1000;
             }
 
-            // Only act if we know they have a lastWatched date AND it's older than cutoff
-            // (If they've literally never watched anything ever, lastWatchedMs is 0. We'll count that as inactive too if they've been on the server long enough)
             const joinedAtMs = new Date(user.joiningDate || user.linkedAt || user.createdAt || Date.now()).getTime();
-
-            if ((lastWatchedMs > 0 && lastWatchedMs < cutoffMs) || (lastWatchedMs === 0 && joinedAtMs < cutoffMs)) {
-                log(`[INACTIVE CLEANUP] User ${user.email} last watched: ${lastWatchedMs > 0 ? new Date(lastWatchedMs).toISOString() : 'Never'}. Removing access.`);
-
-                // Revoke immediately. Previously we stamped expiryDate=now and relied on
-                // checkAndRevoke (days < 0 only, and it runs *before* this job), which left
-                // users active forever while the displayed expiry rolled forward each day.
-                const revoked = await revokePlexAccess(user, config);
-                if (!revoked) {
-                    log(`[INACTIVE CLEANUP] Failed to revoke Plex access for ${user.email || user.username}; will retry next run.`);
-                    continue;
-                }
-
-                user.plexAccessStatus = 'revoked';
-                // Show as expired in the Users list without re-stamping every run.
-                const days = getDaysUntilExpiry(user.expiryDate);
-                if (days === null || days >= 0) {
-                    const past = new Date();
-                    past.setHours(0, 0, 0, 0);
-                    past.setDate(past.getDate() - 1);
-                    const y = past.getFullYear();
-                    const m = String(past.getMonth() + 1).padStart(2, '0');
-                    const d = String(past.getDate()).padStart(2, '0');
-                    user.expiryDate = `${y}-${m}-${d}T12:00:00.000Z`;
-                }
-                usersUpdated = true;
-
-                await appendAuditLog('user_inactive_cleanup', { username: 'System', email: 'system@local' }, user, {
-                    reason: `Inactive for > ${thresholdDays} days`,
-                    lastWatched: lastWatchedMs > 0 ? new Date(lastWatchedMs).toISOString() : 'Never',
+            const neverWatched = lastWatchedMs === 0;
+            if ((lastWatchedMs > 0 && lastWatchedMs < cutoffMs) || (neverWatched && joinedAtMs < cutoffMs)) {
+                candidates.push({
+                    user,
                     accountId,
+                    lastWatchedMs,
+                    neverWatched,
+                    joinedAt: Number.isFinite(joinedAtMs) ? new Date(joinedAtMs).toISOString() : null,
                 });
-
-                if (alertRuleEnabled(config, 'accessRevoked')) {
-                    await sendGotifyAlert(
-                        config,
-                        'Portal access revoked',
-                        `${user.username || user.email} was revoked after inactive cleanup.`,
-                        8,
-                    ).catch((e) => log(`Failed to send Gotify inactive-cleanup alert: ${e.message}`));
-                }
-
-                if (!user.expiryEmailSent) {
-                    const emailSent = await sendExpiryEmail(config, user, hasLogo);
-                    if (emailSent) user.expiryEmailSent = true;
-                }
             }
         } catch (e) {
-            log(`Failed to check history for user ${user.email}: ${e.message}`);
+            skipped.historyError += 1;
+            log(`Failed to check history for user ${user.email || user.username}: ${e.message}`);
+        }
+    }
+
+    return { thresholdDays, cutoff: cutoffDate.toISOString(), users, candidates, skipped };
+};
+
+const checkAndCleanupInactive = async (config) => {
+    if (!config.inactiveCleanupEnabled) return;
+
+    const collected = await collectInactiveCleanupCandidates(config);
+    if (collected.error) {
+        log(`[INACTIVE CLEANUP] ${collected.error}`);
+        return;
+    }
+
+    const { users, candidates, thresholdDays } = collected;
+    if (candidates.length === 0) {
+        log(`Running automated inactive cleanup check (threshold: ${thresholdDays} days)... no matching users.`);
+        return;
+    }
+
+    log(`Running automated inactive cleanup check (threshold: ${thresholdDays} days)... ${candidates.length} user(s) to revoke.`);
+
+    const logoPath = path.join(process.cwd(), 'static', 'logo.png');
+    let hasLogo = false;
+    try {
+        await fs.access(logoPath);
+        hasLogo = true;
+    } catch (e) { /* optional logo */ }
+
+    let usersUpdated = false;
+
+    for (const { user, lastWatchedMs, accountId } of candidates) {
+        log(`[INACTIVE CLEANUP] User ${user.email || user.username} last watched: ${lastWatchedMs > 0 ? new Date(lastWatchedMs).toISOString() : 'Never'}. Removing access.`);
+
+        const revoked = await revokePlexAccess(user, config);
+        if (!revoked) {
+            log(`[INACTIVE CLEANUP] Failed to revoke Plex access for ${user.email || user.username}; will retry next run.`);
+            continue;
+        }
+
+        user.plexAccessStatus = 'revoked';
+        const days = getDaysUntilExpiry(user.expiryDate);
+        if (days === null || days >= 0) {
+            const past = new Date();
+            past.setHours(0, 0, 0, 0);
+            past.setDate(past.getDate() - 1);
+            const y = past.getFullYear();
+            const m = String(past.getMonth() + 1).padStart(2, '0');
+            const d = String(past.getDate()).padStart(2, '0');
+            user.expiryDate = `${y}-${m}-${d}T12:00:00.000Z`;
+        }
+        usersUpdated = true;
+
+        await appendAuditLog('user_inactive_cleanup', { username: 'System', email: 'system@local' }, user, {
+            reason: `Inactive for > ${thresholdDays} days`,
+            lastWatched: lastWatchedMs > 0 ? new Date(lastWatchedMs).toISOString() : 'Never',
+            accountId,
+        });
+
+        if (alertRuleEnabled(config, 'accessRevoked')) {
+            await sendGotifyAlert(
+                config,
+                'Portal access revoked',
+                `${user.username || user.email} was revoked after inactive cleanup.`,
+                8,
+            ).catch((e) => log(`Failed to send Gotify inactive-cleanup alert: ${e.message}`));
+        }
+
+        if (!user.expiryEmailSent) {
+            const emailSent = await sendExpiryEmail(config, user, hasLogo);
+            if (emailSent) user.expiryEmailSent = true;
         }
     }
 
@@ -20052,6 +20146,35 @@ const checkAndCleanupInactive = async (config) => {
         await saveFile(USERS_PATH, users);
     }
 };
+
+app.get('/api/cleanup/inactive/preview', requireAdmin, async (req, res) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        const days = req.query.days != null && String(req.query.days).trim() !== ''
+            ? parseInt(req.query.days, 10)
+            : undefined;
+        const collected = await collectInactiveCleanupCandidates(config, days);
+        if (collected.error) {
+            return res.status(400).json({ error: collected.error, thresholdDays: collected.thresholdDays, candidates: [], skipped: collected.skipped });
+        }
+        res.json({
+            thresholdDays: collected.thresholdDays,
+            cutoff: collected.cutoff,
+            skipped: collected.skipped,
+            candidates: collected.candidates.map(({ user, lastWatchedMs, neverWatched, joinedAt }) => ({
+                id: user.id,
+                username: user.username,
+                email: user.email || '',
+                lastWatched: lastWatchedMs > 0 ? new Date(lastWatchedMs).toISOString() : null,
+                neverWatched: !!neverWatched,
+                joinedAt,
+            })),
+        });
+    } catch (error) {
+        log(`GET /api/cleanup/inactive/preview failed: ${error.message}`);
+        res.status(500).json({ error: 'Failed to preview inactive cleanup.' });
+    }
+});
 
 let tasksInfo = [
     { id: 'syncPlexUsers', name: 'Sync Plex Users', description: 'Fetches latest user data from Plex.', lastRun: null, nextRun: null, running: false, lastDurationMs: null, lastError: null },
