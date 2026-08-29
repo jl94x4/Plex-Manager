@@ -19,6 +19,7 @@ import { PeriodDropdown } from './shared/PeriodDropdown';
 import { ActivityHeatmap } from './shared/ActivityHeatmap';
 import { Loader, Toast, ToastContainer, pushToast } from './shared/toast';
 import { usePoll } from './shared/usePoll';
+import { usePullToRefresh } from './shared/usePullToRefresh';
 import { isActiveDownloadItem } from './shared/downloadStatus';
 import { NoPosterPlaceholder } from './shared/NoPosterPlaceholder';
 import { RetryablePoster } from './shared/RetryablePoster';
@@ -7700,6 +7701,9 @@ export const UserDashboard: React.FC<{
     const [wrapUpAchievements, setWrapUpAchievements] = useState<any>(null);
     const [wrapUpAchievementsRank, setWrapUpAchievementsRank] = useState<number | null>(null);
     const [wrapUpAchievementsSeed, setWrapUpAchievementsSeed] = useState(() => Date.now());
+    const [homeRefreshing, setHomeRefreshing] = useState(false);
+    const [homeLastUpdatedAt, setHomeLastUpdatedAt] = useState<number | null>(null);
+    const homeRefreshingRef = useRef(false);
 
     const user = sessionInfo.account;
     const wrapUpSubjectId = String(
@@ -7712,10 +7716,8 @@ export const UserDashboard: React.FC<{
     const [showNowPlayingCompanion, setShowNowPlayingCompanion] = useState<boolean>(() => (
         readNowPlayingCompanionEnabled(wrapUpSubjectId)
     ));
-    // Admin home hero should always attempt now-playing; members can opt out per preference.
-    const nowPlayingEnabled = sessionInfo?.session?.isAdmin
-        ? true
-        : (!user || user.showDiscoverNowPlaying !== false);
+    // Members can hide Now Playing in Preferences; admins honor the same switch.
+    const nowPlayingEnabled = !user || user.showDiscoverNowPlaying !== false;
     const { session: nowPlaying, others: nowPlayingOthers } = useNowPlaying(nowPlayingEnabled);
     const showQualityBadges = publicConfig?.showPosterQualityBadges !== false;
     const mediaServerType = String(publicConfig?.mediaServerType || 'plex').toLowerCase();
@@ -8139,6 +8141,7 @@ export const UserDashboard: React.FC<{
             ]);
             setDashboardData(dashboardRes);
             if (bazarrRes) setBazarrWidgets(bazarrRes);
+            setHomeLastUpdatedAt(Date.now());
         } catch (e) {
             console.error('Failed to refresh dashboard data', e);
         }
@@ -8168,6 +8171,24 @@ export const UserDashboard: React.FC<{
     usePoll(() => { void fetchHomeDashboard(); }, 5 * 60 * 1000, { immediate: false });
 
     usePoll(() => { void fetchServerStats(); }, serverStats?.isBuilding ? 5000 : null, { immediate: false });
+
+    const refreshHome = useCallback(async () => {
+        if (homeRefreshingRef.current) return;
+        homeRefreshingRef.current = true;
+        setHomeRefreshing(true);
+        try {
+            await Promise.all([
+                fetchHomeDashboard(),
+                fetchServerStats(),
+                fetchAnalytics({ silent: true }),
+            ]);
+        } finally {
+            homeRefreshingRef.current = false;
+            setHomeRefreshing(false);
+        }
+    }, [fetchHomeDashboard, fetchServerStats, fetchAnalytics]);
+
+    const { pullPx } = usePullToRefresh(refreshHome, { enabled: true, busy: homeRefreshing });
 
     useEffect(() => {
         if (!isJellyfinPortal || !analytics?.libraryHealth) return;
@@ -8364,6 +8385,15 @@ export const UserDashboard: React.FC<{
         <div className="w-full flex flex-col gap-3 md:gap-4">
             <Loader isLoading={isLoading} isCinematic={!!publicConfig?.useCinematicLoading} />
             {toast && <Toast message={toast.message} type={toast.type} onDismiss={() => setToast(null)} />}
+            {(pullPx > 0 || homeRefreshing) ? (
+                <div
+                    className="flex items-center justify-center overflow-hidden transition-[height] duration-150"
+                    style={{ height: homeRefreshing ? 36 : Math.max(24, pullPx) }}
+                    aria-hidden="true"
+                >
+                    <RefreshCw className={`w-5 h-5 text-plex ${homeRefreshing || pullPx >= 72 ? 'animate-spin' : ''}`} />
+                </div>
+            ) : null}
             {layoutEditorOpen && (
                 <PortalWidgetEditorModal
                     layout={dashboardLayoutDraft}
@@ -8443,7 +8473,25 @@ export const UserDashboard: React.FC<{
                     </div>
                 )}
 
-                <div className={`relative pt-8 px-4 md:pt-32 md:px-12 flex flex-col items-center md:items-start text-center md:text-left z-10 ${nowPlaying ? 'pb-12 md:pb-16' : 'pb-5 md:pb-12'}`}>
+                <div className="absolute top-3 right-3 md:top-4 md:right-4 z-20 flex flex-col items-end gap-1">
+                    <button
+                        type="button"
+                        onClick={() => { void refreshHome(); }}
+                        disabled={homeRefreshing}
+                        aria-label={t('homeDashboard.refreshAria')}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-white/15 bg-black/45 text-text text-xs md:text-sm font-bold backdrop-blur-md hover:border-plex/50 hover:text-plex disabled:opacity-60 transition-colors shadow-lg"
+                    >
+                        <RefreshCw className={`w-3.5 h-3.5 ${homeRefreshing ? 'animate-spin' : ''}`} />
+                        {t('homeDashboard.refresh')}
+                    </button>
+                    {homeLastUpdatedAt ? (
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-white/70 drop-shadow-md px-1">
+                            {t('homeDashboard.updatedAt', { time: formatTime(new Date(homeLastUpdatedAt)) })}
+                        </span>
+                    ) : null}
+                </div>
+
+                <div className={`relative pt-14 px-4 md:pt-32 md:px-12 flex flex-col items-center md:items-start text-center md:text-left z-10 ${nowPlaying ? 'pb-12 md:pb-16' : 'pb-5 md:pb-12'}`}>
                     <div className="flex flex-col md:flex-row items-center md:items-center gap-3 md:gap-6">
                         {/* Avatar */}
                         {(() => {
@@ -8696,7 +8744,22 @@ export const UserDashboard: React.FC<{
                 )}
                 renderWatchRowLeft={() => {
                     if (!(sessionInfo.session.isAdmin || user)) return null;
-                    if (analyticsLoading || !analytics?.recentHistory?.length) return null;
+                    if (analyticsLoading && !analytics?.recentHistory?.length) {
+                        return (
+                            <div className="glass-card p-4 md:p-5 shadow-xl flex flex-col justify-center min-h-[11rem] w-full" aria-busy="true">
+                                <h3 className="text-lg md:text-xl font-bold text-text">{t('wrapUp.recentlyWatched')}</h3>
+                                <p className="text-sm text-muted mt-2">{t('common.refreshing')}</p>
+                            </div>
+                        );
+                    }
+                    if (!analytics?.recentHistory?.length) {
+                        return (
+                            <div className="glass-card p-4 md:p-5 shadow-xl flex flex-col justify-center min-h-[11rem] w-full">
+                                <h3 className="text-lg md:text-xl font-bold text-text">{t('wrapUp.recentlyWatched')}</h3>
+                                <p className="text-sm text-muted mt-2 leading-relaxed">{t('homeDashboard.emptyRecentlyWatched')}</p>
+                            </div>
+                        );
+                    }
                     return (
                         <div className="glass-card p-4 md:p-5 shadow-xl flex flex-col h-full w-full min-h-0">
                             <div className="flex items-center justify-between mb-3 md:mb-4 flex-shrink-0">
@@ -8776,13 +8839,20 @@ export const UserDashboard: React.FC<{
                 renderWatchRowRight={() => {
                     if (!(sessionInfo.session.isAdmin || user)) return null;
                     if (analyticsLoading) return <TopWatchedGridSkeleton />;
-                    if (!(analytics && analytics.totalPlays > 0 && analytics.topWatched && analytics.topWatched.length > 0)) return null;
+                    if (!(analytics && analytics.totalPlays > 0 && analytics.topWatched && analytics.topWatched.length > 0)) {
+                        return (
+                            <div className="glass-card p-4 md:p-5 shadow-xl flex flex-col justify-center min-h-[11rem] w-full">
+                                <h3 className="text-lg md:text-xl font-bold text-text">{t('homeDashboard.mostWatched')}</h3>
+                                <p className="text-sm text-muted mt-2 leading-relaxed">{t('homeDashboard.emptyMostWatched')}</p>
+                            </div>
+                        );
+                    }
                     return (
                         <div className="glass-card p-4 md:p-5 shadow-xl flex flex-col h-full w-full min-h-0">
                             <div className="flex flex-wrap items-center justify-between gap-3 mb-3 md:mb-4 flex-shrink-0">
                                 <div>
-                                    <h3 className="text-lg md:text-xl font-bold text-text mb-0.5">Your Most Watched</h3>
-                                    <p className="text-muted text-sm">Based on your {analytics.totalPlays} total plays</p>
+                                    <h3 className="text-lg md:text-xl font-bold text-text mb-0.5">{t('homeDashboard.mostWatched')}</h3>
+                                    <p className="text-muted text-sm">{t('homeDashboard.mostWatchedSubtitle', { count: analytics.totalPlays })}</p>
                                 </div>
                                 <div className="flex flex-wrap items-center gap-2">
                                     {analytics.topWatched.length > topWatchedPageSize && (

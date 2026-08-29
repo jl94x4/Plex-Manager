@@ -105,6 +105,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
     const [notifyChatMentionInApp, setNotifyChatMentionInApp] = useState(user?.notifyChatMentionInApp !== false);
     const [notifyWebPush, setNotifyWebPush] = useState(user?.notifyWebPush !== false);
     const [notifySummaryDigest, setNotifySummaryDigest] = useState(user?.notifySummaryDigest !== false);
+    const [showDiscoverNowPlaying, setShowDiscoverNowPlaying] = useState(user?.showDiscoverNowPlaying !== false);
     const [browserPushReady, setBrowserPushReady] = useState(false);
     const browserPushSupportedFlag = webPushSupported();
     const iosPushBlock = typeof window !== 'undefined' ? getIosWebPushBlockReason() : null;
@@ -156,6 +157,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
         setNotifyChatMentionInApp(user?.notifyChatMentionInApp !== false);
         setNotifyWebPush(user?.notifyWebPush !== false);
         setNotifySummaryDigest(user?.notifySummaryDigest !== false);
+        setShowDiscoverNowPlaying(user?.showDiscoverNowPlaying !== false);
         setOptOutNewsletter(!!user?.optOutNewsletter);
         setPrivacyShowName(user?.privacyShowName !== false);
         setPrivacyShowPlayer(user?.privacyShowPlayer !== false);
@@ -199,6 +201,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
         user?.notifyChatMentionInApp,
         user?.notifyWebPush,
         user?.notifySummaryDigest,
+        user?.showDiscoverNowPlaying,
         user?.optOutNewsletter,
         user?.privacyShowName,
         user?.privacyShowPlayer,
@@ -307,6 +310,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                     notifyChatMentionInApp,
                     notifyWebPush,
                     notifySummaryDigest,
+                    showDiscoverNowPlaying,
                 }),
             });
             await Promise.resolve(refreshSession());
@@ -348,6 +352,16 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                 <div className="space-y-4">
                     <DashboardPanel title={t('common.language')}>
                         <DiscoverLocaleSelect />
+                    </DashboardPanel>
+                    <DashboardPanel title={t('preferencesPage.homeTitle')} subtitle={t('preferencesPage.homeSubtitle')}>
+                        <PrefToggle
+                            title={t('preferencesPage.showNowPlaying')}
+                            hint={t('preferencesPage.showNowPlayingHint')}
+                            on={showDiscoverNowPlaying}
+                            onToggle={flip(setShowDiscoverNowPlaying)}
+                            ariaLabel={t('preferencesPage.showNowPlaying')}
+                            disabled={busy}
+                        />
                     </DashboardPanel>
                     <DashboardPanel title={t('preferencesPage.installTitle')} subtitle={t('preferencesPage.installSubtitle')}>
                         <div className="flex flex-col sm:flex-row sm:items-center gap-3">

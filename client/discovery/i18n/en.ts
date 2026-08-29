@@ -665,6 +665,10 @@ export const en = {
         installSubtitle: 'Add this portal to your home screen for a faster, app-like experience.',
         installButton: 'Install / Add to Home Screen',
         installInstalled: 'Already installed on this device',
+        homeTitle: 'Home',
+        homeSubtitle: 'What appears on your portal Home.',
+        showNowPlaying: 'Now Playing on Home',
+        showNowPlayingHint: 'Show what you are watching on Home and Discover. Turn off to hide the Now Playing strip.',
     },
     pwa: {
         install: {
@@ -2929,3 +2933,16 @@ Object.assign(en, { settings: { ...en.settings, arrIntegrations: {
     titles: { sonarrInstances: 'Sonarr Instances', radarrInstances: 'Radarr Instances', lidarrInstances: 'Lidarr Instances', bazarrInstances: 'Bazarr Instances' },
     subtitles: { sonarr: 'TV series automation', radarr: 'Movie automation', lidarr: 'Music automation', bazarr: 'Subtitle automation' },
 } } });
+
+Object.assign(en, { homeDashboard: { ...en.homeDashboard,
+    refresh: 'Refresh',
+    refreshAria: 'Refresh Home',
+    updatedAt: 'Updated {time}',
+    mostWatched: 'Your Most Watched',
+    mostWatchedSubtitle: 'Based on your {count} total plays',
+    emptyRecentlyWatched: 'Nothing watched in this period yet. Play something and it will show up here.',
+    emptyMostWatched: 'No most-watched titles for this period yet.',
+    emptyRecentMovies: 'No movies added recently.',
+    emptyRecentShows: 'No shows added recently.',
+    emptyRecentMusic: 'No music added recently.',
+} });

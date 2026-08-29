@@ -713,10 +713,12 @@ export const createPendingRequestsSectionRenderer = (deps: UserDashboardWidgetDe
     };
 };
 
-const RecentlyAddedScrollRow: React.FC<{ title: string; children: React.ReactNode; t: DiscoverTranslate }> = ({ title, children, t }) => {
+const RecentlyAddedScrollRow: React.FC<{ title: string; children: React.ReactNode; t: DiscoverTranslate; emptyMessage?: string }> = ({ title, children, t, emptyMessage }) => {
     const scrollRef = useRef<HTMLDivElement>(null);
     const [canScrollLeft, setCanScrollLeft] = useState(false);
     const [canScrollRight, setCanScrollRight] = useState(false);
+    const childItems = React.Children.toArray(children);
+    const isEmpty = childItems.length === 0;
 
     const updateScrollState = useCallback(() => {
         const el = scrollRef.current;
@@ -748,6 +750,9 @@ const RecentlyAddedScrollRow: React.FC<{ title: string; children: React.ReactNod
     return (
         <div className="glass-card p-4 md:p-5 shadow-xl overflow-hidden w-full">
             <h3 className="text-lg md:text-xl font-bold text-text mb-3">{title}</h3>
+            {isEmpty ? (
+                <p className="text-sm text-muted py-4">{emptyMessage || t('homeDashboard.emptyRecentMovies')}</p>
+            ) : (
             <div className="relative">
                 <button
                     type="button"
@@ -774,6 +779,7 @@ const RecentlyAddedScrollRow: React.FC<{ title: string; children: React.ReactNod
                     <ChevronRight className="w-5 h-5" />
                 </button>
             </div>
+            )}
         </div>
     );
 };
