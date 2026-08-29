@@ -4094,7 +4094,8 @@ export const SettingsDashboard: React.FC = () => {
 
                     {activeTab === 'broadcast' && (
                         <div className="mb-8 animate-fade-in">
-                            <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">Broadcast Email</h3>
+                            <h3 className="text-xl font-bold text-plex mb-2 border-b border-border pb-2">{t('settings.navigation.tabs.broadcast')}</h3>
+                            <p className="text-sm text-muted mb-6">{t('settings.broadcast.pageHint')}</p>
                             <BroadcastSettingsTab users={users} selectedUserIds={[]} />
                         </div>
                     )}

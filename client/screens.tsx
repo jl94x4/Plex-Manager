@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react';
 import ReactDOM from 'react-dom';
-import { Home, Film, Activity, Sparkles, LogOut, Settings, FileText, BarChart3, Users, PlaySquare, TrendingUp, X, Star, Layers, HardDrive, Calendar, Tv, Clock, DownloadCloud, MonitorSmartphone, Copy, ChevronUp, ChevronDown, List, Palette, Music, Play, Pause, Upload, Shield, CheckCircle, AlertCircle, RefreshCw, ChevronLeft, ChevronRight, Trophy, PlayCircle, Coffee, Compass, PieChart, Clapperboard, AlertTriangle, Check, Cpu, Monitor, LineChart as LucideLineChart, Share2, Search, BookOpen, Loader2, Eye, EyeOff, ClipboardList, ArrowUpCircle, MoreHorizontal, ExternalLink, Info, GitFork, MapPin, Radar, Image as ImageIcon, SlidersHorizontal, LifeBuoy, MessageSquare, User } from 'lucide-react';
+import { Home, Film, Activity, Sparkles, LogOut, Settings, FileText, BarChart3, Users, PlaySquare, TrendingUp, X, Star, Layers, HardDrive, Calendar, Tv, Clock, DownloadCloud, MonitorSmartphone, Copy, ChevronUp, ChevronDown, List, Palette, Music, Play, Pause, Upload, Shield, CheckCircle, AlertCircle, RefreshCw, ChevronLeft, ChevronRight, Trophy, PlayCircle, Coffee, Compass, PieChart, Clapperboard, AlertTriangle, Check, Cpu, Monitor, LineChart as LucideLineChart, Share2, Search, BookOpen, Loader2, Eye, EyeOff, ClipboardList, ArrowUpCircle, MoreHorizontal, ExternalLink, Info, GitFork, MapPin, Radar, Image as ImageIcon, SlidersHorizontal, LifeBuoy, MessageSquare, User, Mail } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
 
 import { SettingsDashboard } from './settings/SettingsDashboard';
+import { EmailSelectedUsersModal } from './settings/EmailSelectedUsersModal';
 import { LibraryMaintenancePanel } from './maintenance/LibraryMaintenancePanel';
 import { appConfirm } from './shared/confirm';
 import { apiFetch, apiFetchShared } from './shared/api';
@@ -254,8 +255,9 @@ const UserCard: React.FC<{
     isConfigured: boolean;
     isSelected: boolean;
     onSelect: (id: string) => void;
+    onEmail?: () => void;
     providerLabel?: string;
-}> = ({ user, onEdit, onDelete, onRevoke, onViewAs, onViewAnalytics, onViewProfile, isConfigured, isSelected, onSelect, providerLabel = 'Plex' }) => {
+}> = ({ user, onEdit, onDelete, onRevoke, onViewAs, onViewAnalytics, onViewProfile, isConfigured, isSelected, onSelect, onEmail, providerLabel = 'Plex' }) => {
     const { t } = useDiscoverI18n();
     const isPlexRevoked = user.plexAccessStatus === 'revoked' && !(user.isServerOwner || user.isAdmin);
     const plexAccessStatus = (user.isServerOwner || user.isAdmin)
@@ -393,6 +395,16 @@ const UserCard: React.FC<{
                     <button className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5" onClick={onViewAs} title={t('usersAdmin.actions.viewAsTitle')}>
                         <Eye className="w-3.5 h-3.5" />
                         {t('usersAdmin.actions.viewAs')}
+                    </button>
+                )}
+                {onEmail && (
+                    <button
+                        className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5"
+                        onClick={onEmail}
+                        title={t('usersAdmin.actions.emailUser')}
+                    >
+                        <Mail className="w-3.5 h-3.5" />
+                        {t('usersAdmin.actions.emailUser')}
                     </button>
                 )}
                 <button className="rounded-lg border border-white/10 bg-black/20 px-3 py-1.5 text-xs font-semibold text-text transition-colors hover:bg-white/5 flex items-center justify-center gap-1.5" onClick={onEdit}>{isPlexRevoked ? t('usersAdmin.actions.restoreAccess') : t('usersAdmin.actions.edit')}</button>
@@ -5428,6 +5440,8 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
     const [bulkLibraries, setBulkLibraries] = useState<Array<{ id: string; title: string }>>([]);
     const [bulkSelectedLibraries, setBulkSelectedLibraries] = useState<string[]>([]);
     const [bulkLibrariesLoading, setBulkLibrariesLoading] = useState(false);
+    const [emailModalOpen, setEmailModalOpen] = useState(false);
+    const [emailUserIds, setEmailUserIds] = useState<string[]>([]);
     const [deletedUsers, setDeletedUsers] = useState<DeletedUser[]>([]);
     const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
 
@@ -6105,6 +6119,17 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                                 >
                                     {t('usersAdmin.bulk.libraries')}
                                 </button>
+                                <button
+                                    type="button"
+                                    className="rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-sm font-medium text-text transition-colors hover:bg-white/5 inline-flex items-center gap-2"
+                                    onClick={() => {
+                                        setEmailUserIds(selectedUserIds);
+                                        setEmailModalOpen(true);
+                                    }}
+                                >
+                                    <Mail className="w-4 h-4" />
+                                    {t('usersAdmin.bulk.emailSelected')}
+                                </button>
                             </div>
                             {bulkLibrariesOpen && (
                                 <div className="border-t border-white/10 pt-4">
@@ -6184,6 +6209,10 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                                     isConfigured={isConfigured}
                                     isSelected={selectedUserIds.includes(user.id)}
                                     onSelect={handleToggleSelection}
+                                    onEmail={user.email ? () => {
+                                        setEmailUserIds([user.id]);
+                                        setEmailModalOpen(true);
+                                    } : undefined}
                                     providerLabel={mediaServerLabel}
                                 />
                             ))}
@@ -6196,6 +6225,12 @@ export const AdminDashboard: React.FC<{ onLogout: () => void, onViewUserPortal: 
                 onClose={handleCloseModal}
                 onSave={handleSaveUser}
                 user={editingUser}
+            />
+            <EmailSelectedUsersModal
+                open={emailModalOpen}
+                onClose={() => setEmailModalOpen(false)}
+                users={users}
+                selectedUserIds={emailUserIds}
             />
         </DashboardPageShell>
     );

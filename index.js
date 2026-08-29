@@ -3747,6 +3747,47 @@ const sanitizeBroadcastHtml = (html) => {
         .replace(/(href|src|xlink:href|action|formaction)\s*=\s*(["']?)\s*(javascript|vbscript|data)\s*:/gi, ' $1=$2#');
 };
 
+const personalizeBroadcastField = (text, user, { html } = {}) => {
+    const rawName = String(user?.username || user?.name || 'there').replace(/[\r\n]+/g, ' ').trim();
+    const rawEmail = String(user?.email || '').replace(/[\r\n]+/g, ' ').trim();
+    const escape = (value) => String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    const username = html ? escape(rawName) : rawName;
+    const email = html ? escape(rawEmail) : rawEmail;
+    return String(text || '')
+        .replace(/\{\{\s*USERNAME\s*\}\}/gi, username)
+        .replace(/\{\{\s*EMAIL\s*\}\}/gi, email);
+};
+
+const resolveBroadcastTargets = (users, recipientFilter, selectedUserIds) => {
+    const now = Date.now();
+    const selected = new Set(
+        Array.isArray(selectedUserIds) ? selectedUserIds.map((id) => String(id)) : [],
+    );
+    return (Array.isArray(users) ? users : []).filter((user) => {
+        if (!user?.email) return false;
+        if (recipientFilter === 'all') return true;
+        if (recipientFilter === 'selected') return selected.has(String(user.id));
+        if (recipientFilter === 'active') return user.plexAccessStatus === 'active';
+        if (recipientFilter === 'trial') return !!user.isTrial;
+        if (recipientFilter === 'expiring') {
+            if (!user.expiryDate) return false;
+            const exp = new Date(user.expiryDate).getTime();
+            if (!Number.isFinite(exp) || exp <= now) return false;
+            return Math.ceil((exp - now) / (1000 * 60 * 60 * 24)) <= 7;
+        }
+        if (recipientFilter === 'expired') {
+            const exp = user.expiryDate ? new Date(user.expiryDate).getTime() : NaN;
+            return Number.isFinite(exp) && exp < now;
+        }
+        return false;
+    });
+};
+
 // --- API Routes ---
 
 app.post('/api/users/broadcast', requireAdmin, async (req, res) => {
@@ -3755,33 +3796,7 @@ app.post('/api/users/broadcast', requireAdmin, async (req, res) => {
 
     try {
         const users = await loadFile(USERS_PATH, []);
-        let targetUsers = [];
-        const now = new Date();
-
-        for (const user of users) {
-            let include = false;
-            if (recipientFilter === 'all') {
-                include = true;
-            } else if (recipientFilter === 'selected') {
-                include = selectedUserIds && selectedUserIds.includes(user.id);
-            } else if (recipientFilter === 'active') {
-                include = user.plexAccessStatus === 'active';
-            } else if (recipientFilter === 'trial') {
-                include = user.isTrial;
-            } else if (recipientFilter === 'expiring') {
-                if (user.expiryDate && new Date(user.expiryDate) > now) {
-                    const diffTime = Math.abs(new Date(user.expiryDate) - now);
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-                    include = diffDays <= 7;
-                }
-            } else if (recipientFilter === 'expired') {
-                include = user.expiryDate && new Date(user.expiryDate) < now;
-            }
-
-            if (include && user.email) {
-                targetUsers.push(user);
-            }
-        }
+        const targetUsers = resolveBroadcastTargets(users, recipientFilter, selectedUserIds);
 
         if (targetUsers.length === 0) {
             return res.status(400).json({ error: 'No users found matching the selected criteria (with valid emails).' });
@@ -3808,7 +3823,9 @@ app.post('/api/users/broadcast', requireAdmin, async (req, res) => {
 
             for (const user of targetUsers) {
                 try {
-                    await sendEmail(config, user.email, subject, sanitizeBroadcastHtml(body), bulkTransporter);
+                    const personalizedSubject = personalizeBroadcastField(subject, user);
+                    const personalizedBody = sanitizeBroadcastHtml(personalizeBroadcastField(body, user, { html: true }));
+                    await sendEmail(config, user.email, personalizedSubject, personalizedBody, bulkTransporter);
                     // Add a tiny throttle so it doesn't look like a burst attack
                     await new Promise(resolve => setTimeout(resolve, 2000));
                 } catch (e) {
@@ -3840,7 +3857,12 @@ app.post('/api/users/broadcast/test', requireAdmin, async (req, res) => {
         }
 
         log(`Sending test broadcast email to ${adminEmail}...`);
-        await sendEmail(config, adminEmail, subject, sanitizeBroadcastHtml(body));
+        await sendEmail(
+            config,
+            adminEmail,
+            personalizeBroadcastField(subject, req.user),
+            sanitizeBroadcastHtml(personalizeBroadcastField(body, req.user, { html: true })),
+        );
         res.json({ message: `Test email sent successfully to ${adminEmail}` });
     } catch (error) {
         log(`Error sending test broadcast: ${error.message}`);
