@@ -601,3 +601,4 @@ Object.assign(ja, { homeDashboard: { ...ja.homeDashboard, nowPlayingCompanion: {
     header: { ...ja.homeDashboard.nowPlayingCompanion.header, playbackProgress: '{type}・{progress}% 視聴済み' },
     summary: { progress: '進行状況 {progress}%', throughSession: 'このセッションで {progress}% 視聴済み' },
 } } });
+Object.assign(ja, { notifications: { ...ja.notifications, repeat: { expand: '{count} 件の更新を表示', expand_plural: '{count} 件の更新を表示', collapse: '繰り返された更新を非表示', legacyHint: '{count} 件の類似アラートのうち最新のものを表示しています。' } } });

@@ -601,3 +601,4 @@ Object.assign(ru, { homeDashboard: { ...ru.homeDashboard, nowPlayingCompanion: {
     header: { ...ru.homeDashboard.nowPlayingCompanion.header, playbackProgress: '{type} · просмотрено {progress}%' },
     summary: { progress: 'прогресс: {progress}%', throughSession: 'Просмотрено {progress}% этой сессии' },
 } } });
+Object.assign(ru, { notifications: { ...ru.notifications, repeat: { expand: 'Показать {count} обновлений', expand_plural: 'Показать {count} обновлений', collapse: 'Скрыть повторяющиеся обновления', legacyHint: 'Показано последнее из {count} похожих уведомлений.' } } });

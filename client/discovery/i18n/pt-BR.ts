@@ -602,3 +602,4 @@ Object.assign(ptBR, { homeDashboard: { ...ptBR.homeDashboard, nowPlayingCompanio
     header: { ...ptBR.homeDashboard.nowPlayingCompanion.header, playbackProgress: '{type} · {progress}% assistido' },
     summary: { progress: 'progresso {progress}%', throughSession: '{progress}% desta sessão' },
 } } });
+Object.assign(ptBR, { notifications: { ...ptBR.notifications, repeat: { expand: 'Mostrar {count} atualizações', expand_plural: 'Mostrar {count} atualizações', collapse: 'Ocultar atualizações repetidas', legacyHint: 'Mostrando a mais recente de {count} alertas semelhantes.' } } });

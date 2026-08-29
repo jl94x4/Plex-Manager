@@ -997,3 +997,4 @@ Object.assign(es, { homeDashboard: { ...es.homeDashboard, nowPlayingCompanion: {
     header: { ...es.homeDashboard.nowPlayingCompanion.header, playbackProgress: '{type} · {progress}% visto' },
     summary: { progress: 'progreso {progress}%', throughSession: '{progress}% de esta sesión' },
 } } });
+Object.assign(es, { notifications: { ...es.notifications, repeat: { expand: 'Mostrar {count} actualizaciones', expand_plural: 'Mostrar {count} actualizaciones', collapse: 'Ocultar actualizaciones repetidas', legacyHint: 'Se muestra la más reciente de {count} alertas similares.' } } });

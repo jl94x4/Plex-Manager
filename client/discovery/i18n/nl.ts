@@ -601,3 +601,4 @@ Object.assign(nl, { homeDashboard: { ...nl.homeDashboard, nowPlayingCompanion: {
     header: { ...nl.homeDashboard.nowPlayingCompanion.header, playbackProgress: '{type} · {progress}% bekeken' },
     summary: { progress: 'voortgang {progress}%', throughSession: '{progress}% van deze sessie bekeken' },
 } } });
+Object.assign(nl, { notifications: { ...nl.notifications, repeat: { expand: 'Toon {count} updates', expand_plural: 'Toon {count} updates', collapse: 'Herhaalde updates verbergen', legacyHint: 'De nieuwste van {count} vergelijkbare meldingen wordt getoond.' } } });
