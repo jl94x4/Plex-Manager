@@ -1446,12 +1446,26 @@ import {
     MEDIA_AUTOMATION_ACTIVITY_PATH,
     migrateConfigFiles,
 } from './lib/data-paths.js';
+import {
+    JOB_IDS,
+    applyJobToTask,
+    decideBootRun,
+    formatDelay,
+    getJob,
+    markJobComplete,
+    markJobFail,
+    markJobStart,
+    mergeJobWithExternal,
+    setJobCheckpoint,
+    updateJob,
+} from './lib/boot-schedule.js';
 
 const BRANDING_DIR = path.join(CONFIG_DIR, 'branding');
 import {
     applyCollexionsBundledDefaults,
     getCollexionsEmbeddedStatus,
     isCollexionsBundledAvailable,
+    readCollexionsRunHints,
     setCollexionsUnexpectedExitHandler,
     syncCollexionsEmbeddedWorker,
     COLLEXIONS_LONG_PROXY_MS,
@@ -18740,15 +18754,25 @@ const runPersonalAnalyticsWarmJob = async (reason = 'scheduled') => {
 };
 
 const startAchievementsBackfillBackgroundTask = () => {
-    systemJobs.achievementsBackfill.nextRun = new Date(Date.now() + 45_000).toISOString();
-    setTimeout(() => { void runAchievementsBackfillJob('startup'); }, 45_000);
-    setInterval(() => { void runAchievementsBackfillJob('scheduled'); }, ACHIEVEMENTS_BACKFILL_INTERVAL_MS);
+    scheduleBootAwareRepeatingJob({
+        jobId: JOB_IDS.achievementsBackfill,
+        task: systemJobs.achievementsBackfill,
+        intervalMs: ACHIEVEMENTS_BACKFILL_INTERVAL_MS,
+        staggerMs: 45_000,
+        logPrefix: 'achievementsBackfill',
+        run: (reason) => runAchievementsBackfillJob(reason),
+    });
 };
 
 const startPersonalAnalyticsWarmBackgroundTask = () => {
-    systemJobs.personalAnalyticsWarm.nextRun = new Date(Date.now() + 90_000).toISOString();
-    setTimeout(() => { void runPersonalAnalyticsWarmJob('startup'); }, 90_000);
-    setInterval(() => { void runPersonalAnalyticsWarmJob('scheduled'); }, PERSONAL_ANALYTICS_WARM_INTERVAL_MS);
+    scheduleBootAwareRepeatingJob({
+        jobId: JOB_IDS.personalAnalyticsWarm,
+        task: systemJobs.personalAnalyticsWarm,
+        intervalMs: PERSONAL_ANALYTICS_WARM_INTERVAL_MS,
+        staggerMs: 90_000,
+        logPrefix: 'personalAnalyticsWarm',
+        run: (reason) => runPersonalAnalyticsWarmJob(reason),
+    });
 };
 
 const fetchJellyfinPlayedItems = async (config, accountId) => {
@@ -20399,6 +20423,9 @@ const markTaskStart = (task) => {
     task.lastWarning = null;
     task._startedAt = Date.now();
     task.lastRun = new Date(task._startedAt).toISOString();
+    if (task?.id) {
+        void markJobStart(task.id).catch(() => {});
+    }
 };
 
 const markTaskEnd = (task, error = null, extras = {}) => {
@@ -20411,6 +20438,37 @@ const markTaskEnd = (task, error = null, extras = {}) => {
     task.lastError = error ? (error.message || String(error)) : null;
     // Incomplete-but-kept work is a warning, not a failed job (health score / Failed badge).
     task.lastWarning = warning ? (warning.message || String(warning)) : null;
+    if (task?.id) {
+        void (error ? markJobFail(task.id, error) : markJobComplete(task.id)).catch(() => {});
+    }
+};
+
+const scheduleBootAwareRepeatingJob = ({
+    jobId,
+    task,
+    intervalMs,
+    staggerMs,
+    run,
+    logPrefix,
+}) => {
+    void (async () => {
+        const stored = await getJob(jobId);
+        const decision = decideBootRun(stored, { intervalMs });
+        applyJobToTask(task, stored, { intervalMs });
+        const delay = decision.action === 'skip' ? decision.delayMs : staggerMs;
+        const label = logPrefix || jobId;
+        if (decision.action === 'skip') {
+            log(`boot: skipping ${label}, next in ${formatDelay(decision.delayMs)}`);
+        } else if (decision.action === 'resume') {
+            log(`boot: resuming ${label}`);
+        }
+        if (task) task.nextRun = new Date(Date.now() + delay).toISOString();
+        const firstReason = decision.action === 'skip'
+            ? 'scheduled'
+            : (decision.action === 'resume' ? 'resume' : 'startup');
+        setTimeout(() => { void run(firstReason); }, delay);
+        setInterval(() => { void run('scheduled'); }, intervalMs);
+    })();
 };
 
 const spotifySyncJobDeps = () => ({
@@ -20610,33 +20668,36 @@ const runSeerrHistoryImport = async (reason = 'manual') => {
 };
 
 const startPortalRequestStatusSyncBackgroundTask = () => {
-    systemJobs.requestStatusSync.nextRun = new Date(Date.now() + 15 * 1000).toISOString();
-    setTimeout(() => {
-        runPortalRequestStatusSync('startup').catch(() => {});
-    }, 15 * 1000);
-    setInterval(() => {
-        runPortalRequestStatusSync('scheduled').catch(() => {});
-    }, REQUEST_STATUS_SYNC_INTERVAL_MS);
+    scheduleBootAwareRepeatingJob({
+        jobId: JOB_IDS.requestStatusSync,
+        task: systemJobs.requestStatusSync,
+        intervalMs: REQUEST_STATUS_SYNC_INTERVAL_MS,
+        staggerMs: 15 * 1000,
+        logPrefix: 'requestStatusSync',
+        run: (reason) => runPortalRequestStatusSync(reason).catch(() => {}),
+    });
 };
 
 const startSeerrPendingNotifyBackgroundTask = () => {
-    systemJobs.seerrPendingNotify.nextRun = new Date(Date.now() + 10 * 1000).toISOString();
-    setTimeout(() => {
-        runSeerrPendingNotify('startup').catch(() => {});
-    }, 10 * 1000);
-    setInterval(() => {
-        runSeerrPendingNotify('scheduled').catch(() => {});
-    }, SEERR_PENDING_NOTIFY_INTERVAL_MS);
+    scheduleBootAwareRepeatingJob({
+        jobId: JOB_IDS.seerrPendingNotify,
+        task: systemJobs.seerrPendingNotify,
+        intervalMs: SEERR_PENDING_NOTIFY_INTERVAL_MS,
+        staggerMs: 10 * 1000,
+        logPrefix: 'seerrPendingNotify',
+        run: (reason) => runSeerrPendingNotify(reason).catch(() => {}),
+    });
 };
 
 const startSeerrAvailableNotifyBackgroundTask = () => {
-    systemJobs.seerrAvailableNotify.nextRun = new Date(Date.now() + 12 * 1000).toISOString();
-    setTimeout(() => {
-        runSeerrAvailableNotify('startup').catch(() => {});
-    }, 12 * 1000);
-    setInterval(() => {
-        runSeerrAvailableNotify('scheduled').catch(() => {});
-    }, SEERR_AVAILABLE_NOTIFY_INTERVAL_MS);
+    scheduleBootAwareRepeatingJob({
+        jobId: JOB_IDS.seerrAvailableNotify,
+        task: systemJobs.seerrAvailableNotify,
+        intervalMs: SEERR_AVAILABLE_NOTIFY_INTERVAL_MS,
+        staggerMs: 12 * 1000,
+        logPrefix: 'seerrAvailableNotify',
+        run: (reason) => runSeerrAvailableNotify(reason).catch(() => {}),
+    });
 };
 
 const startSpotifySyncBackgroundTask = () => {
@@ -20753,7 +20814,11 @@ const runAutoBackupCycle = async (reason = 'auto', { force = false } = {}) => {
 };
 
 const startBackgroundService = async () => {
-    if (serviceIntervalId) clearInterval(serviceIntervalId);
+    if (serviceIntervalId) {
+        clearInterval(serviceIntervalId);
+        clearTimeout(serviceIntervalId);
+        serviceIntervalId = null;
+    }
     clearSummaryDigestTimer();
 
     const config = await loadFile(CONFIG_PATH, null);
@@ -20764,9 +20829,17 @@ const startBackgroundService = async () => {
 
     const intervalMinutes = config.checkIntervalMinutes || 60;
     const intervalMs = intervalMinutes * 60 * 1000;
+    const batchTaskIds = [
+        'syncPlexUsers',
+        'checkAndSendNotifications',
+        'checkAndRevoke',
+        'checkAndSendNewsletter',
+        'checkAndCleanupInactive',
+        'maintenanceRuleRun',
+    ];
 
-    const updateNextRun = (currentConfig) => {
-        const nextRun = new Date(Date.now() + intervalMs).toISOString();
+    const updateNextRun = (currentConfig, nextRunAt = null) => {
+        const nextRun = nextRunAt || new Date(Date.now() + intervalMs).toISOString();
         tasksInfo.forEach(t => {
             if (t.id === 'checkAndSendNewsletter') {
                 if (!currentConfig.newsletterFrequency || currentConfig.newsletterFrequency === 'disabled') {
@@ -20812,16 +20885,28 @@ const startBackgroundService = async () => {
     };
 
     let batchRunning = false;
-    const runBatch = async (currentConfig) => {
+    const runBatch = async (currentConfig, { resume = false } = {}) => {
         if (batchRunning) {
             log('Skipping scheduled check: a previous run is still in progress.');
             return;
         }
         batchRunning = true;
+        const stored = resume ? await getJob(JOB_IDS.backgroundBatch) : null;
+        const completedTaskIds = resume && Array.isArray(stored?.checkpoint?.completedTaskIds)
+            ? [...stored.checkpoint.completedTaskIds]
+            : [];
+        await markJobStart(JOB_IDS.backgroundBatch, {
+            intervalMs,
+            checkpoint: { completedTaskIds },
+        }).catch(() => {});
         try {
         const runManagedTask = async (taskId, runner, logPrefix) => {
             const task = tasksInfo.find(t => t.id === taskId);
             if (!task) return;
+            if (completedTaskIds.includes(taskId)) {
+                log(`boot: skipping ${taskId} (already completed this batch)`);
+                return;
+            }
             markTaskStart(task);
             try {
                 await runner();
@@ -20830,6 +20915,8 @@ const startBackgroundService = async () => {
                 markTaskEnd(task, e);
                 log(`Error during ${logPrefix}: ${e.message}`);
             }
+            completedTaskIds.push(taskId);
+            await setJobCheckpoint(JOB_IDS.backgroundBatch, { completedTaskIds }).catch(() => {});
         };
 
         // Catch-up only: the dedicated timer owns on-time delivery so this
@@ -20860,6 +20947,10 @@ const startBackgroundService = async () => {
         }
 
         updateNextRun(currentConfig);
+        await markJobComplete(JOB_IDS.backgroundBatch, { intervalMs }).catch(() => {});
+        } catch (error) {
+            await markJobFail(JOB_IDS.backgroundBatch, error, { intervalMs }).catch(() => {});
+            throw error;
         } finally {
             batchRunning = false;
         }
@@ -20867,19 +20958,44 @@ const startBackgroundService = async () => {
 
     log(`Service started successfully. Checks will run every ${intervalMinutes} minute(s).`);
     scheduleSummaryDigestTimer(config);
-    updateNextRun(config);
 
-    // Initial run
-    await runBatch(config);
+    for (const task of tasksInfo) {
+        const stored = await getJob(task.id);
+        applyJobToTask(task, stored, { intervalMs });
+    }
+    const batchJob = await getJob(JOB_IDS.backgroundBatch);
+    const decision = decideBootRun(batchJob, { intervalMs });
+    updateNextRun(config, decision.action === 'skip' ? decision.nextRunAt : null);
 
-    serviceIntervalId = setInterval(async () => {
-        try {
-            const currentConfig = await loadFile(CONFIG_PATH, config);
-            await runBatch(currentConfig);
-        } catch (e) {
-            log(`Error during hourly check: ${e.message}`);
+    const armNextBatch = (delayMs, { resume = false } = {}) => {
+        serviceIntervalId = setTimeout(async () => {
+            try {
+                const currentConfig = await loadFile(CONFIG_PATH, config);
+                await runBatch(currentConfig, { resume });
+            } catch (e) {
+                log(`Error during hourly check: ${e.message}`);
+            }
+            armNextBatch(intervalMs);
+        }, Math.max(0, delayMs));
+    };
+
+    if (decision.action === 'skip') {
+        log(`boot: skipping syncPlexUsers, next in ${formatDelay(decision.delayMs)}`);
+        armNextBatch(decision.delayMs);
+    } else {
+        if (decision.action === 'resume') {
+            const done = Array.isArray(batchJob.checkpoint?.completedTaskIds)
+                ? batchJob.checkpoint.completedTaskIds.filter((id) => batchTaskIds.includes(id))
+                : [];
+            log(done.length
+                ? `boot: resuming background batch after ${done.join(', ')}`
+                : 'boot: resuming background batch');
+            await runBatch(config, { resume: true });
+        } else {
+            await runBatch(config);
         }
-    }, intervalMs);
+        armNextBatch(intervalMs);
+    }
 };
 
 // --- Status App Functions ---
@@ -30615,7 +30731,53 @@ app.listen(PORT, BIND_HOST, async () => {
             if (changed) {
                 await saveFile(CONFIG_PATH, withCollexions);
             }
-            await syncCollexionsEmbeddedWorker(withCollexions, { configDir: CONFIG_DIR, log });
+            let autostartRun = !!withCollexions.collexionsAutostart;
+            let collexionsIntervalMs = 180 * 60 * 1000;
+            if (autostartRun) {
+                try {
+                    const hints = await readCollexionsRunHints(CONFIG_DIR);
+                    collexionsIntervalMs = hints.intervalMs || collexionsIntervalMs;
+                    const stored = await getJob(JOB_IDS.collexionsPinning);
+                    const merged = mergeJobWithExternal(stored, hints);
+                    let decision = decideBootRun(merged, { intervalMs: collexionsIntervalMs });
+                    if (decision.action !== 'resume' && !hints.interrupted && hints.nextRunTs) {
+                        const dueMs = hints.nextRunTs * 1000;
+                        if (dueMs > Date.now()) {
+                            decision = {
+                                action: 'skip',
+                                delayMs: dueMs - Date.now(),
+                                reason: 'worker-next-run',
+                                nextRunAt: new Date(dueMs).toISOString(),
+                            };
+                        }
+                    }
+                    autostartRun = decision.action !== 'skip';
+                    if (decision.action === 'skip') {
+                        log(`[collexions] boot: skipping pinning run, next in ${formatDelay(decision.delayMs)}`);
+                        if (merged.lastCompletedAt) {
+                            await updateJob(JOB_IDS.collexionsPinning, {
+                                status: 'completed',
+                                lastCompletedAt: merged.lastCompletedAt,
+                                lastStartedAt: merged.lastStartedAt,
+                                intervalMs: hints.intervalMs,
+                                checkpoint: null,
+                            }).catch(() => {});
+                        }
+                    } else if (decision.action === 'resume') {
+                        log('[collexions] boot: resuming interrupted pinning run');
+                    }
+                } catch (hintError) {
+                    log(`[collexions] boot schedule check failed: ${hintError.message}`);
+                }
+            }
+            await syncCollexionsEmbeddedWorker(withCollexions, {
+                configDir: CONFIG_DIR,
+                log,
+                autostartRun,
+            });
+            if (autostartRun) {
+                await markJobStart(JOB_IDS.collexionsPinning, { intervalMs: collexionsIntervalMs }).catch(() => {});
+            }
         } catch (e) {
             log(`[collexions] Startup embedded worker sync failed: ${e.message}`);
         }
@@ -30733,7 +30895,21 @@ app.listen(PORT, BIND_HOST, async () => {
             const config = await loadFile(CONFIG_PATH, {});
             await sendGotifyAlert(config, title || 'Poster Sets watcher', message || '');
         });
-        startPosterSetsWatcher();
+        startPosterSetsWatcher({
+            resolveFirstPassDelayMs: async () => {
+                const stored = await getJob(JOB_IDS.posterSetsWatcher);
+                const intervalMs = stored.intervalMs || 6 * 60 * 60 * 1000;
+                const decision = decideBootRun(stored, { intervalMs });
+                if (decision.action === 'skip') {
+                    log(`[poster-sets] boot: skipping watcher pass, next in ${formatDelay(decision.delayMs)}`);
+                    return decision.delayMs;
+                }
+                if (decision.action === 'resume') {
+                    log('[poster-sets] boot: resuming watcher pass');
+                }
+                return 20_000;
+            },
+        });
         startTpdbCacheDailyRefresh();
         log('[poster-sets] Watcher scheduled');
         log('[poster-sets] TPDB cache refresh scheduler started');
@@ -30787,26 +30963,40 @@ app.listen(PORT, BIND_HOST, async () => {
     if (!mediaAutomationWatchOptIn()) {
         log('[media-automation] Filesystem watcher disabled unless MEDIA_AUTOMATION_ENABLE_WATCH=1');
     }
-    systemJobs.maintenanceIndex.nextRun = new Date(Date.now() + (20 * 1000)).toISOString();
-    setTimeout(async () => {
+    const MAINTENANCE_INDEX_INTERVAL_MS = 6 * 60 * 60 * 1000;
+    const runMaintenanceIndexIfEnabled = async (reason) => {
         try {
             const cfg = await loadFile(CONFIG_PATH, {});
             if (!isMediaQualityIndexEnabled(cfg)) return;
             await buildMaintenanceMediaIndex({ actor: { username: 'System', email: 'system@local' }, force: false });
         } catch (e) {
-            log(`Initial media quality index build failed: ${e.message}`);
+            log(`${reason === 'startup' || reason === 'resume' ? 'Initial' : 'Scheduled'} media quality index build failed: ${e.message}`);
         }
-    }, 20000);
-    setInterval(async () => {
-        systemJobs.maintenanceIndex.nextRun = new Date(Date.now() + (6 * 60 * 60 * 1000)).toISOString();
+    };
+    void (async () => {
+        let existingGeneratedAt = null;
         try {
-            const cfg = await loadFile(CONFIG_PATH, {});
-            if (!isMediaQualityIndexEnabled(cfg)) return;
-            await buildMaintenanceMediaIndex({ actor: { username: 'System', email: 'system@local' }, force: false });
-        } catch (e) {
-            log(`Scheduled media quality index build failed: ${e.message}`);
+            const existing = await loadFile(MAINTENANCE_MEDIA_INDEX_PATH, null);
+            existingGeneratedAt = existing?.generatedAt || null;
+        } catch { /* no index yet */ }
+        const stored = mergeJobWithExternal(await getJob(JOB_IDS.maintenanceIndex), {
+            lastCompletedAt: existingGeneratedAt,
+        });
+        const decision = decideBootRun(stored, { intervalMs: MAINTENANCE_INDEX_INTERVAL_MS });
+        applyJobToTask(systemJobs.maintenanceIndex, stored, { intervalMs: MAINTENANCE_INDEX_INTERVAL_MS });
+        const delay = decision.action === 'skip' ? decision.delayMs : 20_000;
+        if (decision.action === 'skip') {
+            log(`boot: skipping maintenanceIndex, next in ${formatDelay(decision.delayMs)}`);
+        } else if (decision.action === 'resume') {
+            log('boot: resuming maintenanceIndex');
         }
-    }, 6 * 60 * 60 * 1000);
+        systemJobs.maintenanceIndex.nextRun = new Date(Date.now() + delay).toISOString();
+        setTimeout(() => { void runMaintenanceIndexIfEnabled(decision.action === 'skip' ? 'scheduled' : decision.action); }, delay);
+        setInterval(() => {
+            systemJobs.maintenanceIndex.nextRun = new Date(Date.now() + MAINTENANCE_INDEX_INTERVAL_MS).toISOString();
+            void runMaintenanceIndexIfEnabled('scheduled');
+        }, MAINTENANCE_INDEX_INTERVAL_MS);
+    })();
 
     const backupConfig = await loadFile(CONFIG_PATH, {});
     systemJobs.autoBackup.nextRun = backupConfig.autoBackupEnabled ? computeNextBackupRun(backupConfig) : null;
