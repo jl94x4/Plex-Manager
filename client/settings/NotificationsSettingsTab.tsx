@@ -976,6 +976,9 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
                                 value={summaryNotifyTime}
                                 onChange={(e) => setSummaryNotifyTime(e.target.value || '23:00')}
                             />
+                            <SettingHint>
+                                Sent at this exact time. Building the digest can take a short moment after that.
+                            </SettingHint>
                         </div>
                     </div>
                     <div className="flex flex-wrap gap-4">

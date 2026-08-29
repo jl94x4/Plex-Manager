@@ -1635,6 +1635,9 @@ import {
     normalizeSummaryMetrics,
     normalizeSummaryFrequency,
     normalizeSummaryTime,
+    getNextSummaryFireAt,
+    getSummaryLocalDateKey,
+    shouldSendSummaryNow,
 } from './lib/notifications/summaryDigest.js';
 import { createJsonRequestStore } from './lib/portal-request/requestStore.js';
 import { notifyRequestAvailableDiscord } from './lib/notifications/discordWebhook.js';
@@ -8964,7 +8967,7 @@ app.post('/api/admin/summary-digest/preview', requireAdmin, async (req, res) => 
 app.post('/api/admin/summary-digest/send-now', requireAdmin, async (req, res) => {
     try {
         const config = await loadFile(CONFIG_PATH, {});
-        const result = await checkAndSendSummaryDigest(config, true);
+        const result = await runSummaryDigestTask(config, true);
         return res.json({ success: true, ...result });
     } catch (e) {
         return res.status(500).json({ error: e.message || 'Failed to send summary digest.' });
@@ -19862,6 +19865,77 @@ app.get(/^\/(?!api\/|static\/|manifest\.(?:webmanifest|json)|site\.webmanifest|s
 
 // --- API Routes ---Service ---
 let serviceIntervalId = null;
+let summaryDigestTimerId = null;
+let summaryDigestInFlight = false;
+const SUMMARY_TIMER_MAX_DELAY_MS = 6 * 60 * 60 * 1000;
+
+const clearSummaryDigestTimer = () => {
+    if (summaryDigestTimerId) {
+        clearTimeout(summaryDigestTimerId);
+        summaryDigestTimerId = null;
+    }
+};
+
+const scheduleSummaryDigestTimer = (config) => {
+    clearSummaryDigestTimer();
+    if (!config?.summaryNotifyEnabled || normalizeSummaryFrequency(config.summaryNotifyFrequency) === 'disabled') {
+        return;
+    }
+    const next = getNextSummaryFireAt(config);
+    if (!next) return;
+    const delay = Math.max(0, next.getTime() - Date.now());
+    const wait = Math.min(delay, SUMMARY_TIMER_MAX_DELAY_MS);
+    log(`Smart summary next send at ${next.toISOString()} (waking in ${Math.round(wait / 1000)}s)`);
+    summaryDigestTimerId = setTimeout(async () => {
+        summaryDigestTimerId = null;
+        let retryMs = 0;
+        try {
+            const current = await loadFile(CONFIG_PATH, config);
+            if (shouldSendSummaryNow(current)) {
+                const result = await runSummaryDigestTask(current);
+                if (!result?.markedSent && result?.skipped !== 'in-flight' && result?.skipped !== 'disabled') {
+                    retryMs = 60 * 1000;
+                }
+            }
+        } catch (e) {
+            log(`Smart summary timer failed: ${e.message}`);
+            retryMs = 60 * 1000;
+        } finally {
+            try {
+                const latest = await loadFile(CONFIG_PATH, config);
+                if (retryMs > 0 && shouldSendSummaryNow(latest)) {
+                    log(`Smart summary still due; retrying in ${Math.round(retryMs / 1000)}s`);
+                    summaryDigestTimerId = setTimeout(() => {
+                        summaryDigestTimerId = null;
+                        scheduleSummaryDigestTimer(latest);
+                    }, retryMs);
+                } else {
+                    scheduleSummaryDigestTimer(latest);
+                }
+            } catch (e) {
+                log(`Smart summary reschedule failed: ${e.message}`);
+            }
+        }
+    }, wait);
+};
+
+const runSummaryDigestTask = async (currentConfig, force = false) => {
+    if (summaryDigestInFlight && !force) return { skipped: 'in-flight' };
+    summaryDigestInFlight = true;
+    const task = tasksInfo.find((t) => t.id === 'checkAndSendSummaryDigest');
+    if (task && !task.running) markTaskStart(task);
+    try {
+        const result = await checkAndSendSummaryDigest(currentConfig, force);
+        if (task) markTaskEnd(task, null);
+        return result;
+    } catch (e) {
+        if (task) markTaskEnd(task, e);
+        log(`Error during summary digest: ${e.message}`);
+        throw e;
+    } finally {
+        summaryDigestInFlight = false;
+    }
+};
 
 const fetchCollexionsHistoryInternal = async (config, limit = 100) => {
     if (!config?.collexionsEnabled) return { events: [] };
@@ -19920,9 +19994,11 @@ const checkAndSendSummaryDigest = async (config, force = false) => {
     const result = await runSummaryDigestCycle(config, deps);
     if (result?.markedSent) {
         const now = new Date();
-        config.lastSummarySent = now.toISOString().split('T')[0];
+        config.lastSummarySent = getSummaryLocalDateKey(config, now);
+        config.lastSummarySentAt = now.toISOString();
         config.lastSummaryPeriodEnd = now.toISOString();
         await saveFile(CONFIG_PATH, config);
+        scheduleSummaryDigestTimer(config);
     }
     return result;
 };
@@ -20677,6 +20753,7 @@ const runAutoBackupCycle = async (reason = 'auto', { force = false } = {}) => {
 
 const startBackgroundService = async () => {
     if (serviceIntervalId) clearInterval(serviceIntervalId);
+    clearSummaryDigestTimer();
 
     const config = await loadFile(CONFIG_PATH, null);
     if (!config || !config.plexToken || !config.serverIdentifier) {
@@ -20719,35 +20796,8 @@ const startBackgroundService = async () => {
                     t.nextRun = nextDate.toISOString();
                 }
             } else if (t.id === 'checkAndSendSummaryDigest') {
-                if (!currentConfig.summaryNotifyEnabled || !currentConfig.summaryNotifyFrequency || currentConfig.summaryNotifyFrequency === 'disabled') {
-                    t.nextRun = null;
-                } else {
-                    const now = new Date();
-                    const nextDate = new Date(now);
-                    const todayStr = now.toISOString().split('T')[0];
-                    if (currentConfig.summaryNotifyFrequency === 'weekly') {
-                        const targetDay = Number(currentConfig.summaryNotifyDay);
-                        const currentDay = now.getDay();
-                        let daysUntil = targetDay - currentDay;
-                        if (daysUntil < 0 || (daysUntil === 0 && currentConfig.lastSummarySent === todayStr)) {
-                            daysUntil += 7;
-                        }
-                        nextDate.setDate(now.getDate() + daysUntil);
-                    } else if (currentConfig.summaryNotifyFrequency === 'monthly') {
-                        const targetDay = Number(currentConfig.summaryNotifyDay);
-                        const currentDay = now.getDate();
-                        if (currentDay > targetDay || (currentDay === targetDay && currentConfig.lastSummarySent === todayStr)) {
-                            nextDate.setMonth(now.getMonth() + 1);
-                        }
-                        const daysInMonth = new Date(nextDate.getFullYear(), nextDate.getMonth() + 1, 0).getDate();
-                        nextDate.setDate(Math.min(targetDay, daysInMonth));
-                    } else if (currentConfig.summaryNotifyFrequency === 'daily' && currentConfig.lastSummarySent === todayStr) {
-                        nextDate.setDate(now.getDate() + 1);
-                    }
-                    const [hour, minute] = normalizeSummaryTime(currentConfig.summaryNotifyTime).split(':').map(Number);
-                    nextDate.setHours(hour, minute, 0, 0);
-                    t.nextRun = nextDate.toISOString();
-                }
+                const next = getNextSummaryFireAt(currentConfig);
+                t.nextRun = next ? next.toISOString() : null;
             } else if (t.id === 'checkAndCleanupInactive' && !currentConfig.inactiveCleanupEnabled) {
                 t.nextRun = null;
             } else if (t.id === 'checkAndSendNotifications' && (!currentConfig.smtpHost || !currentConfig.smtpUser || !currentConfig.smtpPass)) {
@@ -20781,6 +20831,14 @@ const startBackgroundService = async () => {
             }
         };
 
+        // Catch-up only: the dedicated timer owns on-time delivery so this
+        // must not wait behind sync / newsletter / cleanup.
+        if (shouldSendSummaryNow(currentConfig)) {
+            void runSummaryDigestTask(currentConfig).catch((e) => {
+                log(`Error during summary digest catch-up: ${e.message}`);
+            });
+        }
+
         await runManagedTask('syncPlexUsers', () => {
             const mediaServerType = String(currentConfig.mediaServerType || 'plex').toLowerCase();
             return mediaServerType === 'jellyfin' || mediaServerType === 'emby'
@@ -20790,7 +20848,6 @@ const startBackgroundService = async () => {
         await runManagedTask('checkAndSendNotifications', () => checkAndSendNotifications(currentConfig), 'notifications');
         await runManagedTask('checkAndRevoke', () => checkAndRevoke(currentConfig), 'revoke');
         await runManagedTask('checkAndSendNewsletter', () => checkAndSendNewsletter(currentConfig), 'newsletter');
-        await runManagedTask('checkAndSendSummaryDigest', () => checkAndSendSummaryDigest(currentConfig), 'summary digest');
         await runManagedTask('checkAndCleanupInactive', () => checkAndCleanupInactive(currentConfig), 'inactive cleanup');
         if (isMaintenanceExperimentalEnabled(currentConfig)) {
             await runManagedTask('maintenanceRuleRun', async () => {
@@ -20808,6 +20865,8 @@ const startBackgroundService = async () => {
     };
 
     log(`Service started successfully. Checks will run every ${intervalMinutes} minute(s).`);
+    scheduleSummaryDigestTimer(config);
+    updateNextRun(config);
 
     // Initial run
     await runBatch(config);
