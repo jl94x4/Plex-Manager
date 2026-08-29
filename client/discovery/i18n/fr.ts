@@ -2383,3 +2383,4 @@ Object.assign(fr, { homeDashboard: { ...fr.homeDashboard, nowPlayingCompanion: {
     header: { ...fr.homeDashboard.nowPlayingCompanion.header, playbackProgress: '{type} · {progress} % visionné' },
     summary: { progress: 'progression {progress} %', throughSession: '{progress} % de cette session' },
 } } });
+Object.assign(fr, { notifications: { ...fr.notifications, repeat: { expand: 'Afficher {count} mises à jour', expand_plural: 'Afficher {count} mises à jour', collapse: 'Masquer les mises à jour répétées', legacyHint: 'Affichage de la plus récente parmi {count} alertes similaires.' } } });
