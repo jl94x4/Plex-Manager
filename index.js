@@ -165,6 +165,7 @@ import {
 } from './lib/spotify-to-plex-playlist-job.js';
 import {
     importSavedItemsFromSpotifyLink,
+    normalizeSpotifySearchPlaylists,
 } from './lib/spotify-to-plex-playlist-import.js';
 import { createSpotifyWebClient } from './lib/spotify-to-plex-spotify-web.js';
 import {
@@ -26603,6 +26604,42 @@ app.post('/api/spotify-to-plex/import-link', requireAdmin, requireSpotifyToPlex,
         return res.json(result);
     } catch (e) {
         return res.status(e?.status || 502).json({ error: e.message || 'Could not import that Spotify link.' });
+    }
+});
+
+app.get('/api/spotify-to-plex/search-playlists', requireAdmin, requireSpotifyToPlex, async (req, res) => {
+    try {
+        const query = String(req.query?.q || req.query?.query || '').trim();
+        if (query.length < 2) return res.json({ items: [] });
+        const config = req.spotifyToPlexConfig || await loadFile(CONFIG_PATH, {});
+        const clientId = String(config.spotifyToPlexClientId || '').trim();
+        const clientSecret = String(config.spotifyToPlexClientSecret || '').trim();
+        if (!clientId || !clientSecret) {
+            return res.status(503).json({ error: 'Set Spotify API Client ID and Secret in Settings → Spotify Sync first.' });
+        }
+        const web = createSpotifyWebClient({
+            clientId,
+            clientSecret,
+            fetchImpl: (url, opts) => fetchWithTimeout(url, opts, 20000),
+        });
+        const raw = await web.searchPlaylists(query, { limit: 20 });
+        let saved = [];
+        try {
+            saved = await fetchSpotifyToPlexJson({
+                config,
+                path: '/api/saved-items',
+                fetchWithTimeout,
+                allowPrivate: ALLOW_PRIVATE_INTEGRATION_URLS,
+                timeoutMs: 15000,
+            });
+        } catch {
+            saved = [];
+        }
+        return res.json({
+            items: normalizeSpotifySearchPlaylists(raw, { savedIds: saved }),
+        });
+    } catch (e) {
+        return res.status(e?.status || 502).json({ error: e.message || 'Could not search Spotify playlists.' });
     }
 });
 

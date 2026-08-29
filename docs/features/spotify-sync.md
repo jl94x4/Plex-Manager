@@ -29,7 +29,7 @@ You do **not** need Spotify variables in the host `.env` when using Settings —
 
 Tabs cover the worker feature set:
 
-- **Playlists** — pull playlists and saved albums from a connected Spotify account, then add, schedule, or **sync to Plex** (match tracks in your library and create/update a Plex playlist). Paste a playlist, album, or artist URL to add items Spotify’s library API hides.
+- **Playlists** — pull playlists and saved albums from a connected Spotify account, then add, schedule, or **sync to Plex** (match tracks in your library and create/update a Plex playlist). Type a name to search **public and Spotify-owned** playlists (Hot Hits, Songs of Summer, and similar charts). Paste a playlist, album, or artist URL for lists Spotify’s library API still hides (Made For You).
 - **Users** — connect Spotify accounts (OAuth via the portal callback)
 - **Sync** — **Playlists to Plex** writes saved playlists into Plex. Other buttons start background worker jobs (albums, users, Lidarr, SLSKD, MQTT).
 - **Matching** — match filters, search approaches, text processing
@@ -42,6 +42,7 @@ Tabs cover the worker feature set:
 - **Apply Plex/Lidarr from portal** — manual re-push (`POST /api/spotify-to-plex/apply-portal-defaults`).
 - **Sync playlists to Plex** — `POST /api/spotify-to-plex/sync-playlist` starts a **server-side** job (`202`) that matches tracks and creates or updates the Plex playlist in **Spotify track order** (unmatched tracks are skipped). After the write, the portal downloads the Spotify cover and uploads it as the Plex playlist poster. Body: `{ id }`, `{ ids: [...] }`, or `{ all: true }`. Progress is on `GET /api/spotify-to-plex/status` as `playlistSync` so any signed-in admin session can watch it.
 - **Paste a Spotify link** — `POST /api/spotify-to-plex/import-link` with `{ search }` accepts playlist, album, and artist URLs (including `intl-xx` and `?si=` share links). Artists expand into up to 30 albums, then the UI syncs those items to Plex.
+- **Search Spotify playlists** — `GET /api/spotify-to-plex/search-playlists?q=` finds public playlists, including Spotify-owned editorial lists that do not appear in Your Library via `/me/playlists`.
 
 ## Home widget
 

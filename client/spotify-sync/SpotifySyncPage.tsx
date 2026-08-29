@@ -23,6 +23,7 @@ import {
     Disc3,
     ChevronLeft,
     ChevronRight,
+    Search,
 } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { portalUrl } from '../shared/basePath';
@@ -48,6 +49,7 @@ import {
     buildSavedItemAddBody,
     fetchSpotifyAccountPlaylistPages,
     isAlreadyAddedError,
+    mergeCatalogPlaylists,
     mergeSpotifyAccountLibrary,
     normalizeSpotifyAccountAlbums,
     normalizeSpotifyAccountPlaylists,
@@ -128,6 +130,7 @@ type AccountPlaylist = {
     liked: boolean;
     private: boolean;
     owner: string;
+    editorial?: boolean;
     userId: string;
     image: string;
     search: string;
@@ -536,6 +539,9 @@ const PlaylistsPanel: React.FC<{
     const [accountLoading, setAccountLoading] = useState(false);
     const [accountError, setAccountError] = useState('');
     const [accountFilter, setAccountFilter] = useState('');
+    const [catalogResults, setCatalogResults] = useState<AccountPlaylist[]>([]);
+    const [catalogLoading, setCatalogLoading] = useState(false);
+    const [catalogError, setCatalogError] = useState('');
     const [accountPageSize, setAccountPageSize] = useState<(typeof ACCOUNT_PAGE_SIZES)[number]>(10);
     const [accountPage, setAccountPage] = useState(1);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -615,7 +621,7 @@ const PlaylistsPanel: React.FC<{
         if (userId) void loadAccountPlaylists(userId);
     }, [userId, loadAccountPlaylists]);
 
-    const filteredAccount = useMemo(() => {
+    const localFiltered = useMemo(() => {
         const q = accountFilter.trim().toLowerCase();
         if (!q) return accountPlaylists;
         return accountPlaylists.filter((item) => (
@@ -624,6 +630,24 @@ const PlaylistsPanel: React.FC<{
             || String(item.kind || '').toLowerCase().includes(q)
         ));
     }, [accountPlaylists, accountFilter]);
+
+    const savedIdsNow = useMemo(() => savedItemIdSet(items), [items]);
+
+    const filteredAccount = useMemo(() => {
+        const catalog = catalogResults.map((item) => (
+            savedIdsNow.has(item.id) ? { ...item, added: true } : item
+        ));
+        return mergeCatalogPlaylists(localFiltered, catalog) as AccountPlaylist[];
+    }, [localFiltered, catalogResults, savedIdsNow]);
+
+    const libraryById = useMemo(() => {
+        const map = new Map<string, AccountPlaylist>();
+        for (const item of accountPlaylists) map.set(item.id, item);
+        for (const item of catalogResults) {
+            if (!map.has(item.id)) map.set(item.id, item);
+        }
+        return map;
+    }, [accountPlaylists, catalogResults]);
 
     const accountTotalPages = Math.max(1, Math.ceil(filteredAccount.length / accountPageSize) || 1);
     const safeAccountPage = Math.min(accountPage, accountTotalPages);
@@ -640,9 +664,42 @@ const PlaylistsPanel: React.FC<{
         if (accountPage !== safeAccountPage) setAccountPage(safeAccountPage);
     }, [accountPage, safeAccountPage]);
 
+    useEffect(() => {
+        const q = accountFilter.trim();
+        if (q.length < 2) {
+            setCatalogResults([]);
+            setCatalogError('');
+            setCatalogLoading(false);
+            return;
+        }
+        let cancelled = false;
+        const timer = window.setTimeout(() => {
+            setCatalogLoading(true);
+            setCatalogError('');
+            void (async () => {
+                try {
+                    const data = await apiFetch(`/api/spotify-to-plex/search-playlists?q=${encodeURIComponent(q)}`);
+                    if (cancelled) return;
+                    const next = asItemArray(data) as AccountPlaylist[];
+                    setCatalogResults(next);
+                } catch (e: any) {
+                    if (cancelled) return;
+                    setCatalogResults([]);
+                    setCatalogError(e?.message || 'Could not search Spotify playlists.');
+                } finally {
+                    if (!cancelled) setCatalogLoading(false);
+                }
+            })();
+        }, 400);
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
+    }, [accountFilter]);
+
     const selectedPlaylists = useMemo(
-        () => accountPlaylists.filter((item) => selectedIds.has(item.id)),
-        [accountPlaylists, selectedIds],
+        () => [...selectedIds].map((id) => libraryById.get(id)).filter(Boolean) as AccountPlaylist[],
+        [libraryById, selectedIds],
     );
 
     const allFilteredSelected = filteredAccount.length > 0 && filteredAccount.every((item) => selectedIds.has(item.id));
@@ -823,7 +880,7 @@ const PlaylistsPanel: React.FC<{
         <>
             <DashboardPanel
                 title="From your Spotify account"
-                subtitle="Spotify’s API lists playlists you own or follow and albums you saved. Made For You and editorial playlists are hidden — paste a playlist, album, or artist URL below. Matching can take a few minutes on large lists."
+                subtitle="Your library lists playlists you own or follow. Spotify-owned charts and mixes (Hot Hits, Songs of Summer) are hidden by Spotify’s API — type a name here or paste a URL below to add them. Matching can take a few minutes on large lists."
                 controls={(
                     <div className="flex flex-wrap items-center gap-2">
                         {users.length > 1 ? (
@@ -855,12 +912,18 @@ const PlaylistsPanel: React.FC<{
                     </div>
                 ) : (
                     <div className="space-y-4">
-                        <input
-                            className="appearance-none w-full rounded-xl border border-white/10 bg-black/30 px-3 py-3 text-[16px] leading-5 text-text"
-                            placeholder="Filter playlists and albums…"
-                            value={accountFilter}
-                            onChange={(e) => setAccountFilter(e.target.value)}
-                        />
+                        <div className="relative">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                            <input
+                                className="appearance-none w-full rounded-xl border border-white/10 bg-black/30 py-3 pl-10 pr-10 text-[16px] leading-5 text-text"
+                                placeholder="Filter yours, or search Spotify (Hot Hits, Songs of Summer…)"
+                                value={accountFilter}
+                                onChange={(e) => setAccountFilter(e.target.value)}
+                            />
+                            {catalogLoading ? (
+                                <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted" />
+                            ) : null}
+                        </div>
                         <div className="grid grid-cols-2 gap-3 lg:flex lg:flex-wrap">
                             <label className={toolbarFieldClass}>
                                 Every
@@ -908,7 +971,9 @@ const PlaylistsPanel: React.FC<{
                                 {selectedPlaylists.length} selected · {filteredAccount.length
                                     ? `${((safeAccountPage - 1) * accountPageSize) + 1}–${Math.min(filteredAccount.length, safeAccountPage * accountPageSize)} of ${filteredAccount.length}`
                                     : '0 shown'}
+                                {catalogResults.length ? ` · ${catalogResults.length} from Spotify search` : ''}
                                 {accountError ? ` · ${accountError}` : ''}
+                                {catalogError ? ` · ${catalogError}` : ''}
                             </span>
                             <CustomSelect
                                 compact
@@ -925,7 +990,7 @@ const PlaylistsPanel: React.FC<{
                         {accountLoading ? (
                             <p className="text-sm text-muted">Loading playlists and albums from Spotify…</p>
                         ) : filteredAccount.length === 0 ? (
-                            <p className="text-sm text-muted">{accountError || 'No playlists or saved albums came back from Spotify. Made For You and editorial lists are hidden by Spotify’s API — paste a URL below to add one.'}</p>
+                            <p className="text-sm text-muted">{accountError || catalogError || 'No playlists or saved albums came back from Spotify. Type a name to search public and Spotify-owned playlists, or paste a URL below.'}</p>
                         ) : (
                             <>
                             <div className="space-y-4">
@@ -952,7 +1017,7 @@ const PlaylistsPanel: React.FC<{
                                                     <p className="text-[15px] font-semibold leading-snug text-text [overflow-wrap:anywhere]">{playlist.title}</p>
                                                     <p className="mt-1.5 text-xs leading-relaxed text-muted [overflow-wrap:anywhere]">
                                                         {playlist.kind === 'album' ? 'Album' : playlist.liked ? 'Liked Songs' : 'Playlist'}
-                                                        {playlist.owner ? ` · ${playlist.owner}` : ''}
+                                                        {playlist.owner ? ` · ${playlist.owner}` : playlist.editorial ? ' · Spotify' : ''}
                                                         {playlist.private ? ' · Private' : ''}
                                                         {playlist.added ? ' · Saved' : ''}
                                                     </p>
@@ -1013,7 +1078,7 @@ const PlaylistsPanel: React.FC<{
                 )}
             </DashboardPanel>
 
-            <DashboardPanel title="Add playlist, album, or artist" subtitle="Paste a Spotify URL or URI. Albums and playlists are saved as-is. An artist page adds their albums (up to 30), then matches tracks and creates or updates Plex playlists.">
+            <DashboardPanel title="Add playlist, album, or artist" subtitle="Paste a Spotify URL or URI for playlists that search still misses (Made For You, private links). Albums and playlists are saved as-is. An artist page adds their albums (up to 30), then matches tracks and creates or updates Plex playlists.">
                 <div className="flex flex-col gap-2 sm:flex-row">
                     <input
                         className="appearance-none text-[16px] leading-5 w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-[16px] text-text"
