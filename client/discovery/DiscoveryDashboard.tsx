@@ -24,10 +24,12 @@ import { MusicArtistPage } from './MusicArtistPage';
 import { RequestQueueDashboard } from '../requests/RequestQueueDashboard';
 import {
     currentDiscoverPathWithSearch,
+    consumeDiscoverPersonReturn,
     readDiscoverBrowsePath,
     restoreDiscoverScrollPositionWhenReady,
     stashDiscoverBrowsePath,
     stashDiscoverDetailSeed,
+    stashDiscoverPersonReturn,
     stashDiscoverScrollPosition,
 } from './discoverNavigationUtils';
 import { resolveTmdbImageUrl } from './tmdbImageUrl';
@@ -166,6 +168,7 @@ const DiscoveryDashboardInner: React.FC<{
         stashDiscoverBrowsePath(currentPath);
         const [pathname, ...rest] = newPath.split('?');
         const search = rest.length ? `?${rest.join('?')}` : '';
+        stashDiscoverPersonReturn(currentPath, `${pathname}${search}`);
         const target = `${portalUrl(pathname)}${search}`;
         window.history.pushState({}, '', target);
         setPath(window.location.pathname);
@@ -553,7 +556,21 @@ const DiscoveryDashboardInner: React.FC<{
         return (
             <PersonDetailsPage
                 personId={id}
-                onBack={() => navigateBackToBrowse('/discovery')}
+                onBack={() => {
+                    const from = consumeDiscoverPersonReturn(id);
+                    if (!from) {
+                        navigateBackToBrowse('/discovery');
+                        return;
+                    }
+                    const stillOnThisPerson = () => {
+                        const parts = stripBasePath(window.location.pathname).split('/').filter(Boolean);
+                        return parts[1] === 'person' && Number(parts[2]) === id;
+                    };
+                    window.history.back();
+                    window.setTimeout(() => {
+                        if (stillOnThisPerson()) navigate(from);
+                    }, 50);
+                }}
                 onSelect={openMedia}
                 formatItem={formatItem}
             />

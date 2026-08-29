@@ -16,7 +16,7 @@ import { resolveMediaAvailabilityState } from './discoverAvailability';
 import { enrichDiscoverItemsWithAvailability } from './discoverAvailabilityEnrich';
 import { MediaStatusPanel, mediaStatusChipClass } from './DiscoverStatusOverlay';
 import { DiscoveryLogo } from './DiscoveryLogo';
-import { readDiscoverDetailSeed, scrollPortalToTop } from './discoverNavigationUtils';
+import { currentDiscoverPathWithSearch, readDiscoverDetailSeed, scrollPortalToTop, stashDiscoverPersonReturn, stashDiscoverScrollPosition } from './discoverNavigationUtils';
 import { MediaOverviewExtras } from './MediaOverviewExtras';
 import { OpenInArrButton } from '../shared/OpenInArrButton';
 import { OpenInLibraryButton } from '../shared/OpenInLibraryButton';
@@ -440,6 +440,9 @@ export const MediaDetailsPage: React.FC<{
     };
 
     const discoveryNavigate = (path: string) => {
+        const current = currentDiscoverPathWithSearch();
+        stashDiscoverScrollPosition(current);
+        stashDiscoverPersonReturn(current, path);
         window.history.pushState({}, '', portalUrl(path));
         scrollPortalToTop();
         window.dispatchEvent(new Event('popstate'));

@@ -1,3 +1,5 @@
+import { stripBasePath } from '../shared/basePath';
+
 /** Scroll the portal main view back to the top after in-app discovery navigation. */
 export const scrollPortalToTop = () => {
     if (typeof window === 'undefined') return;
@@ -13,7 +15,11 @@ const MAX_SCROLL_ENTRIES = 36;
 const toDiscoveryPath = (value = '') => {
     const raw = String(value || '').trim();
     if (!raw) return '';
-    return raw.startsWith('/discovery') ? raw : '';
+    const qIndex = raw.indexOf('?');
+    const pathPart = qIndex >= 0 ? raw.slice(0, qIndex) : raw;
+    const search = qIndex >= 0 ? raw.slice(qIndex) : '';
+    const stripped = stripBasePath(pathPart) || pathPart;
+    return stripped.startsWith('/discovery') ? `${stripped}${search}` : '';
 };
 
 const isDetailPath = (path = '') => (
@@ -191,5 +197,39 @@ export const readDiscoverDetailSeed = (mediaType: string, mediaId: number) => {
         return parsed;
     } catch {
         return null;
+    }
+};
+
+const DISCOVER_PERSON_RETURN_KEY = 'discover:personReturn:v1';
+
+const personIdFromPath = (path = '') => {
+    const match = toDiscoveryPath(path).split('?')[0].match(/^\/discovery\/person\/(\d+)/);
+    return match ? Number(match[1]) : 0;
+};
+
+/** Remember the title (or other Discover page) that opened this actor, so Back returns there. */
+export const stashDiscoverPersonReturn = (fromPath: string, toPath: string) => {
+    if (typeof sessionStorage === 'undefined') return;
+    const personId = personIdFromPath(toPath);
+    const from = toDiscoveryPath(fromPath);
+    if (!personId || !from || personIdFromPath(from) === personId) return;
+    try {
+        sessionStorage.setItem(DISCOVER_PERSON_RETURN_KEY, JSON.stringify({ personId, from }));
+    } catch {
+        // ignore quota / private mode
+    }
+};
+
+export const consumeDiscoverPersonReturn = (personId: number) => {
+    if (typeof sessionStorage === 'undefined') return '';
+    try {
+        const raw = sessionStorage.getItem(DISCOVER_PERSON_RETURN_KEY);
+        if (!raw) return '';
+        const parsed = JSON.parse(raw);
+        if (Number(parsed?.personId) !== Number(personId)) return '';
+        sessionStorage.removeItem(DISCOVER_PERSON_RETURN_KEY);
+        return toDiscoveryPath(parsed?.from || '');
+    } catch {
+        return '';
     }
 };
