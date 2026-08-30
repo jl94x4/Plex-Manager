@@ -42,7 +42,7 @@ class OverlayEligibilityTests(unittest.TestCase):
         self.now = datetime.now()
         self.cutoff = self.now - timedelta(days=7)
 
-    def test_new_season_via_recent_plex_added_even_when_air_date_old(self):
+    def test_new_season_ignores_recent_plex_added_when_air_date_old(self):
         old_air = self.now - timedelta(days=120)
         recent_add = self.now - timedelta(days=2)
         show = FakeShow(
@@ -56,9 +56,34 @@ class OverlayEligibilityTests(unittest.TestCase):
             ],
         )
         ok, meta = self.should_have_overlay(show, self.cutoff, False)
-        self.assertTrue(ok, meta)
+        self.assertFalse(ok)
+        self.assertEqual(meta.get("reason"), "aged_out")
         self.assertEqual(meta.get("seasonIndex"), 3)
-        self.assertEqual(meta.get("addedAt"), recent_add.isoformat())
+
+    def test_new_season_via_recent_air_date(self):
+        old_air = self.now - timedelta(days=400)
+        recent_air = self.now - timedelta(days=2)
+        show = FakeShow(
+            [
+                FakeSeason(1, "s1", [FakeEpisode(aired=old_air)]),
+                FakeSeason(2, "s2", [FakeEpisode(aired=recent_air, added=old_air)]),
+            ],
+        )
+        ok, meta = self.should_have_overlay(show, self.cutoff, False)
+        self.assertTrue(ok, meta)
+        self.assertEqual(meta.get("seasonIndex"), 2)
+
+    def test_new_season_rejects_missing_air_date_even_if_just_added(self):
+        recent_add = self.now - timedelta(days=1)
+        show = FakeShow(
+            [
+                FakeSeason(1, "s1", [FakeEpisode(aired=self.now - timedelta(days=400))]),
+                FakeSeason(2, "s2", [FakeEpisode(aired=None, added=recent_add)]),
+            ],
+        )
+        ok, meta = self.should_have_overlay(show, self.cutoff, False)
+        self.assertFalse(ok)
+        self.assertEqual(meta.get("reason"), "no_date")
 
     def test_new_season_rejects_single_season_show(self):
         ep = FakeEpisode(aired=self.now - timedelta(days=1))

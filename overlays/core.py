@@ -1007,11 +1007,16 @@ def _within_overlay_window(
     aired: datetime | None = None,
     added: datetime | None = None,
 ) -> bool:
-    """True when either air date or Plex addedAt falls inside the overlay window."""
+    """Recently Added: true when air date or Plex addedAt falls inside the window."""
     for dt in (aired, added):
         if dt is not None and dt >= cutoff:
             return True
     return False
+
+
+def _within_air_window(cutoff: datetime, aired: datetime | None) -> bool:
+    """New Season: air date only — adding an old show to Plex does not qualify."""
+    return aired is not None and aired >= cutoff
 
 
 def _first_episode(season):
@@ -1184,8 +1189,8 @@ def should_have_overlay(
         if added is not None:
             meta["addedAt"] = added.isoformat()
         meta["airDateSource"] = source
-        if not _within_overlay_window(cutoff, aired=aired, added=added):
-            meta["reason"] = "aged_out" if (aired or added) else "no_date"
+        if not _within_air_window(cutoff, aired):
+            meta["reason"] = "aged_out" if aired else "no_date"
             return False, meta
         return True, meta
     except Exception as exc:
@@ -1511,7 +1516,7 @@ def discover_eligible_shows(
                 if not _is_returning_season(latest, show):
                     continue
                 added = _as_datetime(getattr(ep, "addedAt", None))
-                if not _within_overlay_window(cutoff, aired=aired, added=added):
+                if not _within_air_window(cutoff, aired):
                     continue
                 should_have.add(key)
                 show_by_key[key] = show
@@ -1524,11 +1529,11 @@ def discover_eligible_shows(
                     "library": section.title,
                 }
 
-            # Plex addedAt / TMDB fallback for latest-season E01 premieres.
+            # Recently-added E01s with missing Plex air dates — TMDB only, never addedAt.
             try:
                 recent = _search_recently_added_episodes(section, cutoff, max_results=250)
             except Exception as exc:
-                _progress(progress, f"{section.title}: addedAt/TMDB premiere fallback failed ({exc})")
+                _progress(progress, f"{section.title}: TMDB air-date fallback for recently added E01s failed ({exc})")
                 recent = []
             e01s = [
                 ep for ep in recent
@@ -1565,7 +1570,7 @@ def discover_eligible_shows(
                     aired = resolver.resolve_episode_aired(ep, show)
                     if aired is not None:
                         source = "tmdb"
-                if not _within_overlay_window(cutoff, aired=aired, added=added):
+                if not _within_air_window(cutoff, aired):
                     continue
                 should_have.add(key)
                 show_by_key[key] = show
@@ -1573,7 +1578,7 @@ def discover_eligible_shows(
                     "seasonIndex": latest.index,
                     "airedAt": aired.isoformat() if aired else None,
                     "addedAt": added.isoformat() if added else None,
-                    "airDateSource": source or ("addedAt" if added else None),
+                    "airDateSource": source,
                     "reason": None,
                     "library": section.title,
                 }

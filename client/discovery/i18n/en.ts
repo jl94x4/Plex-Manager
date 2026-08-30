@@ -1389,7 +1389,7 @@ export const en = {
             newEpisodeEnabled: 'New Episode overlays enabled',
             newEpisodeEnabledHint: 'Stamp episode thumbs with a New Episode banner for recently aired episodes.',
             newSeasonEnabled: 'New Season overlays enabled',
-            newSeasonEnabledHint: 'Stamp show posters when season 2+ premieres or lands in Plex within the window (air date or addedAt). Season 1 never qualifies.',
+            newSeasonEnabledHint: 'Stamp show posters when season 2+ premieres within the air-date window. Adding an old show to Plex does not count. Season 1 never qualifies.',
             newSeasonWatchNowStyle: 'New Season “Watch Now” split style',
             newSeasonWatchNowStyleHint: 'Use the red|white New Season | Watch Now badge instead of the plain pill.',
             newSeasonStampSeasonPoster: 'Stamp New Season on show and season posters',
