@@ -12,6 +12,12 @@ import {
     resolveCustomNavIcon,
     shouldUseCustomTabEmbedProxy,
 } from '../shared/customNavTabs';
+import {
+    APPLET_PRESET_LOGOS,
+    appletPresetLogoPath,
+    isAppletPresetLogoUrl,
+    matchAppletPresetLogo,
+} from '../../lib/applet-preset-logos.js';
 import { CustomSelect, SettingsToggleRow } from '../shared/ui';
 import { SettingHint } from './SettingHint';
 import { useDiscoverI18n } from '../discovery/i18n';
@@ -65,6 +71,23 @@ export const CustomNavTabsSettings: React.FC<Props> = ({
         } else if (!memberNavOrder.includes(key)) {
             onMemberNavOrderChange(insertNavKeyBefore(memberNavOrder, 'logout', key));
         }
+    };
+
+    const patchTab = (id: string, patch: Partial<CustomNavTab>) => {
+        const current = customNavTabs.find((tab) => tab.id === id);
+        if (!current) return;
+        const merged = { ...current, ...patch };
+        const matched = matchAppletPresetLogo(merged.name, merged.url);
+        const extra: Partial<CustomNavTab> = {};
+        if (matched) {
+            if (!merged.logoUrl || isAppletPresetLogoUrl(merged.logoUrl)) {
+                extra.logoUrl = appletPresetLogoPath(matched.id);
+            }
+            if (!merged.icon || merged.icon === 'Globe') {
+                extra.icon = matched.icon;
+            }
+        }
+        updateTab(id, { ...patch, ...extra });
     };
 
     const uploadLogo = async (id: string, file: File) => {
@@ -203,8 +226,8 @@ export const CustomNavTabsSettings: React.FC<Props> = ({
                                         <input
                                             className="appearance-none text-[16px] leading-5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[16px] text-text outline-none focus:border-plex"
                                             value={tab.name}
-                                            onChange={(event) => updateTab(tab.id, { name: event.target.value })}
-                                            placeholder="Game library"
+                                            onChange={(event) => patchTab(tab.id, { name: event.target.value })}
+                                            placeholder="Radarr"
                                         />
                                     </label>
                                     <label className="block text-sm">
@@ -212,8 +235,8 @@ export const CustomNavTabsSettings: React.FC<Props> = ({
                                         <input
                                             className="appearance-none text-[16px] leading-5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[16px] text-text outline-none focus:border-plex"
                                             value={tab.url}
-                                            onChange={(event) => updateTab(tab.id, { url: event.target.value })}
-                                            placeholder="https://games.example.com"
+                                            onChange={(event) => patchTab(tab.id, { url: event.target.value })}
+                                            placeholder="https://radarr.example.com"
                                         />
                                     </label>
                                     <label className="block text-sm md:col-span-2">
@@ -233,7 +256,7 @@ export const CustomNavTabsSettings: React.FC<Props> = ({
                                             options={iconOptions}
                                         />
                                     </label>
-                                    <label className="block text-sm">
+                                    <div className="block text-sm md:col-span-2">
                                         <span className="mb-1 block font-semibold text-text">{t('settings.navigation.customTabs.logo')}</span>
                                         <input
                                             className="appearance-none text-[16px] leading-5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[16px] text-text outline-none focus:border-plex"
@@ -267,8 +290,38 @@ export const CustomNavTabsSettings: React.FC<Props> = ({
                                                 </button>
                                             ) : null}
                                         </div>
+                                        <div className="mt-3">
+                                            <span className="mb-2 block text-xs font-semibold text-muted">
+                                                {t('settings.navigation.customTabs.logoPresets')}
+                                            </span>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {APPLET_PRESET_LOGOS.map((preset) => {
+                                                    const path = appletPresetLogoPath(preset.id);
+                                                    const selected = tab.logoUrl === path;
+                                                    return (
+                                                        <button
+                                                            key={preset.id}
+                                                            type="button"
+                                                            title={preset.name}
+                                                            className={`h-9 w-9 overflow-hidden rounded-lg border bg-background/70 p-1 ${selected ? 'border-plex ring-1 ring-plex' : 'border-border hover:border-plex/40'}`}
+                                                            onClick={() => updateTab(tab.id, {
+                                                                logoUrl: selected ? '' : path,
+                                                                icon: selected ? tab.icon : preset.icon,
+                                                            })}
+                                                        >
+                                                            <img
+                                                                src={resolvePortalAssetUrl(path)}
+                                                                alt=""
+                                                                className="h-full w-full object-contain"
+                                                            />
+                                                        </button>
+                                                    );
+                                                })}
+                                            </div>
+                                            <SettingHint>{t('settings.navigation.customTabs.logoPresetsHint')}</SettingHint>
+                                        </div>
                                         <SettingHint>{t('settings.navigation.customTabs.logoHint')}</SettingHint>
-                                    </label>
+                                    </div>
                                     <label className="block text-sm">
                                         <span className="mb-1 block font-semibold text-text">{t('settings.navigation.customTabs.openMode.label')}</span>
                                         <CustomSelect

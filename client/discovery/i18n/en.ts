@@ -1832,10 +1832,12 @@ export const en = {
                 descriptionPlaceholder: 'Optional short description shown above embedded pages',
                 icon: 'Fallback icon',
                 logo: 'Custom logo',
-                logoHint: 'Optional image URL, or upload a PNG / JPEG / WebP. Used in the Applets launcher. Fallback icon is used if this is empty.',
+                logoHint: 'Optional image URL, upload, or a bundled preset. Used in the Applets launcher. Fallback icon is used if this is empty.',
                 logoUpload: 'Upload image',
                 logoUploading: 'Uploading…',
                 logoClear: 'Remove logo',
+                logoPresets: 'Preset logos',
+                logoPresetsHint: 'Pick a bundled icon, or we fill one in when the tab name or URL matches a known app.',
                 showPaletteLabel: 'Show name in Applets',
                 showPaletteLabelHint: 'When off, the desktop launcher shows only the icon.',
                 displayMode: {
