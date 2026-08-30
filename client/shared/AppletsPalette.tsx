@@ -25,18 +25,18 @@ const AppletTile: React.FC<{ tab: CustomNavTab; onActivate: (tab: CustomNavTab) 
             className="group flex flex-col items-center gap-2 rounded-2xl border border-transparent bg-transparent px-2 py-3 text-center transition-colors hover:border-border/70 hover:bg-white/5"
             title={tab.description || tab.name}
         >
-            <span className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl border border-plex/25 bg-plex/10 text-plex shadow-[0_0_18px_rgba(229,160,13,0.12)]">
-                {logoSrc ? (
-                    <img
-                        src={logoSrc}
-                        alt=""
-                        className="h-full w-full object-contain p-1.5"
-                        onError={() => setLogoFailed(true)}
-                    />
-                ) : (
-                    <Icon className="h-7 w-7" />
-                )}
-            </span>
+            {logoSrc ? (
+                <img
+                    src={logoSrc}
+                    alt=""
+                    className="h-14 w-14 object-contain"
+                    onError={() => setLogoFailed(true)}
+                />
+            ) : (
+                <span className="flex h-14 w-14 items-center justify-center text-plex">
+                    <Icon className="h-8 w-8" />
+                </span>
+            )}
             {showLabel ? (
                 <span className="max-w-[5.5rem] truncate text-xs font-semibold text-text group-hover:text-plex">
                     {tab.name}
