@@ -50,6 +50,7 @@ import { useNowPlaying } from './shared/useNowPlaying';
 import { filterNavOrder, ensureCompleteNavOrder, resolveMemberNavOrder, MOBILE_NAV_PRIMARY_SLOTS, type NavFeatureFlags } from './shared/nav';
 import { customNavTabKey, resolveCustomNavIcon, APPLETS_NAV_KEY, buildDesktopNavOrder, canAccessCustomNavTab } from './shared/customNavTabs';
 import { AppletsPalette } from './shared/AppletsPalette';
+import { readDesktopNavIconsOnly, writeDesktopNavIconsOnly } from './shared/desktopNavCollapse';
 import type { CustomNavTab } from './shared/types';
 import { isFirefoxMobileClient, useFirefoxMobileNavShell } from './shared/useFirefoxMobileNavShell';
 import { ProfileBadgeRack, AchievementsHomeWidget } from './achievements/AchievementsDashboard';
@@ -12294,14 +12295,19 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
     const customNavTabs: CustomNavTab[] = Array.isArray(sessionInfo?.customNavTabs) ? sessionInfo.customNavTabs : [];
     const [appletsOpen, setAppletsOpen] = useState(false);
+    const [desktopNavIconsOnly, setDesktopNavIconsOnly] = useState(() => {
+        const iconsOnly = readDesktopNavIconsOnly();
+        writeDesktopNavIconsOnly(iconsOnly);
+        return iconsOnly;
+    });
     const appletsButtonRef = useRef<HTMLButtonElement>(null);
 
     useEffect(() => {
         setAppletsOpen(false);
     }, [currentRoute, externalTabId]);
 
-    const navItemsConfig: Record<string, { label: string; icon: React.FC<any>; route: string; adminOnly: boolean; beta?: boolean; href?: string; onClick?: (e: any) => void; customTabId?: string }> = useMemo(() => {
-        const config: Record<string, { label: string; icon: React.FC<any>; route: string; adminOnly: boolean; beta?: boolean; href?: string; onClick?: (e: any) => void; customTabId?: string }> = {
+    const navItemsConfig: Record<string, { label: string; icon: React.FC<any>; route: string; adminOnly: boolean; beta?: boolean; href?: string; onClick?: (e: any) => void; customTabId?: string; logoUrl?: string }> = useMemo(() => {
+        const config: Record<string, { label: string; icon: React.FC<any>; route: string; adminOnly: boolean; beta?: boolean; href?: string; onClick?: (e: any) => void; customTabId?: string; logoUrl?: string }> = {
         'home': { label: t('navigation.home'), icon: Home, route: 'user', adminOnly: false },
         'users': { label: t('navigation.users'), icon: Users, route: 'users', adminOnly: true },
         'discover': { label: t('navigation.dashboard'), icon: Film, route: 'dashboard', adminOnly: false },
@@ -12341,6 +12347,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                     route: 'external',
                     adminOnly: !!tab.adminOnly,
                     customTabId: tab.id,
+                    logoUrl: tab.logoUrl,
                 };
             } else if (tab.openMode === 'newTab') {
                 config[key] = {
@@ -12349,6 +12356,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                     route: '',
                     adminOnly: !!tab.adminOnly,
                     href: tab.url,
+                    logoUrl: tab.logoUrl,
                 };
             } else {
                 config[key] = {
@@ -12357,6 +12365,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                     route: '',
                     adminOnly: !!tab.adminOnly,
                     onClick: () => { window.location.href = tab.url; },
+                    logoUrl: tab.logoUrl,
                 };
             }
         }
@@ -12407,6 +12416,16 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     const [navCompressStep, setNavCompressStep] = useState(0);
     const [navCompressEpoch, setNavCompressEpoch] = useState(0);
     const [navListLayoutTick, setNavListLayoutTick] = useState(0);
+    const skipDesktopNavCollapseEffect = useRef(true);
+    useEffect(() => {
+        writeDesktopNavIconsOnly(desktopNavIconsOnly);
+        if (skipDesktopNavCollapseEffect.current) {
+            skipDesktopNavCollapseEffect.current = false;
+            return;
+        }
+        setNavCompressEpoch((epoch) => epoch + 1);
+        window.dispatchEvent(new Event('resize'));
+    }, [desktopNavIconsOnly]);
 
     const desktopNavKeySignature = useMemo(() => (
         desktopNavOrder.join('|')
@@ -12472,8 +12491,9 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     useLayoutEffect(() => {
         const nav = navListRef.current;
         if (!nav) return;
+        if (desktopNavIconsOnly) return;
 
-        const layoutSignature = `${desktopNavKeySignature}|${sidebarIdentityPosition}|${navCompressEpoch}`;
+        const layoutSignature = `${desktopNavKeySignature}|${sidebarIdentityPosition}|${navCompressEpoch}|${desktopNavIconsOnly ? 'icons' : 'full'}`;
         if (layoutSignature !== navCompressSignatureRef.current) {
             navCompressSignatureRef.current = layoutSignature;
             navMinCompressStepRef.current = 0;
@@ -12509,7 +12529,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         }
 
         navTriedExpandRef.current = false;
-    }, [desktopNavKeySignature, sidebarIdentityPosition, navCompressEpoch, navCompressStep, navListLayoutTick, MAX_NAV_COMPRESS_STEP]);
+    }, [desktopNavKeySignature, sidebarIdentityPosition, navCompressEpoch, navCompressStep, navListLayoutTick, MAX_NAV_COMPRESS_STEP, desktopNavIconsOnly]);
 
     useEffect(() => {
         let timer: ReturnType<typeof setTimeout> | undefined;
@@ -12543,8 +12563,8 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     }, []);
 
     const compressStep = Math.min(Math.max(navCompressStep, 0), MAX_NAV_COMPRESS_STEP);
-    const navStyleIndex = NAV_STYLE_BY_STEP[compressStep];
-    const identityStyleIndex = IDENTITY_STYLE_BY_STEP[compressStep];
+    const navStyleIndex = desktopNavIconsOnly ? 0 : NAV_STYLE_BY_STEP[compressStep];
+    const identityStyleIndex = desktopNavIconsOnly ? 3 : IDENTITY_STYLE_BY_STEP[compressStep];
     const desktopNavDensity = DESKTOP_NAV_STYLES[navStyleIndex];
     const identityDensity = IDENTITY_STYLES[identityStyleIndex];
 
@@ -12555,7 +12575,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
     const renderNavAction = (
         key: string,
-        item: { label: string; icon: React.FC<any>; route: string; href?: string; onClick?: (e: any) => void; customTabId?: string; beta?: boolean },
+        item: { label: string; icon: React.FC<any>; route: string; href?: string; onClick?: (e: any) => void; customTabId?: string; beta?: boolean; logoUrl?: string },
         options: { compactLabel?: string; mobile?: boolean; isCurrent: boolean; badgeCount?: number },
     ) => {
         const Icon = item.icon;
@@ -12565,14 +12585,37 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             ? t(NAV_BETA_NOTICE_KEYS[item.route] || 'spotifySyncPage.betaNotice')
             : '';
         const desktopDensity = options.mobile ? null : desktopNavDensity;
+        const iconsOnly = !options.mobile && desktopNavIconsOnly;
+        const logoSrc = item.logoUrl ? resolvePortalAssetUrl(item.logoUrl) : '';
+        const iconClass = options.mobile ? 'w-5 h-5' : (desktopDensity?.icon || 'w-5 h-5');
+        const mark = logoSrc ? (
+            <img src={logoSrc} alt="" className={`${iconClass} object-contain flex-shrink-0`} />
+        ) : (
+            <Icon className={`${iconClass} flex-shrink-0`} />
+        );
         const baseClass = options.mobile
             ? `relative flex flex-col items-center justify-center gap-0.5 h-full flex-1 min-w-0 px-0.5 text-center text-[0.6rem] sm:text-[0.65rem] transition-colors ${options.isCurrent ? 'text-plex font-bold' : 'text-muted hover:text-text'}`
-            : `flex flex-1 w-full max-h-11 items-center ${desktopDensity?.gap || 'gap-2.5'} ${desktopDensity?.px || 'px-3'} ${desktopDensity?.py || 'py-1'} no-underline rounded-lg transition-colors ${desktopDensity?.text || 'text-[15px]'} font-medium ${options.isCurrent ? 'nav-item-active' : 'text-muted hover:bg-white/5 hover:text-text'}`;
+            : iconsOnly
+                ? `relative flex w-full items-center justify-center px-0 py-1.5 no-underline rounded-lg transition-colors ${options.isCurrent ? 'nav-item-active' : 'text-muted hover:bg-white/5 hover:text-text'}`
+                : `flex flex-1 w-full max-h-11 items-center ${desktopDensity?.gap || 'gap-2.5'} ${desktopDensity?.px || 'px-3'} ${desktopDensity?.py || 'py-1'} no-underline rounded-lg transition-colors ${desktopDensity?.text || 'text-[15px]'} font-medium ${options.isCurrent ? 'nav-item-active' : 'text-muted hover:bg-white/5 hover:text-text'}`;
 
         if (item.href) {
             return (
-                <a key={key} href={item.href} target="_blank" rel="noreferrer" className={options.mobile ? baseClass.replace('hover:text-text', 'hover:text-text') : `flex flex-1 w-full max-h-11 items-center ${desktopDensity?.gap || 'gap-2.5'} ${desktopDensity?.px || 'px-3'} ${desktopDensity?.py || 'py-1'} text-muted no-underline rounded-lg transition-colors ${desktopDensity?.text || 'text-[15px]'} font-medium hover:bg-white/5 hover:text-text`}>
-                    <Icon className={`${desktopDensity?.icon || 'w-5 h-5'} flex-shrink-0`} /> {label}
+                <a
+                    key={key}
+                    href={item.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={label}
+                    aria-label={label}
+                    className={options.mobile ? baseClass : (
+                        iconsOnly
+                            ? `${baseClass} text-muted hover:bg-white/5 hover:text-text`
+                            : `flex flex-1 w-full max-h-11 items-center ${desktopDensity?.gap || 'gap-2.5'} ${desktopDensity?.px || 'px-3'} ${desktopDensity?.py || 'py-1'} text-muted no-underline rounded-lg transition-colors ${desktopDensity?.text || 'text-[15px]'} font-medium hover:bg-white/5 hover:text-text`
+                    )}
+                >
+                    {mark}
+                    {iconsOnly ? <span className="sr-only">{label}</span> : <> {label}</>}
                 </a>
             );
         }
@@ -12593,10 +12636,12 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                 type="button"
                 className={`${baseClass} bg-transparent border-0 cursor-pointer`}
                 onClick={handleActivate}
+                title={iconsOnly ? label : undefined}
+                aria-label={iconsOnly ? label : undefined}
             >
                 <span className="relative shrink-0">
-                    <Icon className={options.mobile ? 'w-5 h-5' : (desktopDensity?.icon || 'w-5 h-5')} />
-                    {badgeCount > 0 && options.mobile && (
+                    {mark}
+                    {badgeCount > 0 && (options.mobile || iconsOnly) && (
                         <span className="absolute -top-1 -right-1.5 min-w-[14px] h-3.5 px-0.5 rounded-full bg-plex text-background text-[8px] font-bold flex items-center justify-center leading-none">
                             {badgeCount > 9 ? '9+' : badgeCount}
                         </span>
@@ -12607,6 +12652,8 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                         <span className="truncate">{label}</span>
                         {item.beta ? <BetaBadge title={betaTitle} className="scale-90" /> : null}
                     </span>
+                ) : iconsOnly ? (
+                    <span className="sr-only">{label}</span>
                 ) : (
                     <span className="flex items-center gap-2 flex-1 min-w-0">
                         <span className="truncate">{label}</span>
@@ -12626,7 +12673,10 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     };
 
     const renderServerIdentity = (placement: 'top' | 'bottom') => (
-        <div className={`flex flex-col items-center w-full shrink-0 ${placement === 'top' ? identityDensity.sectionTop : identityDensity.sectionBottom} border-white/10 ${placement === 'top' ? 'border-b' : 'border-t'}`}>
+        <div
+            className={`flex flex-col items-center w-full shrink-0 ${placement === 'top' ? identityDensity.sectionTop : identityDensity.sectionBottom} border-white/10 ${placement === 'top' ? 'border-b' : 'border-t'}`}
+            title={desktopNavIconsOnly ? serverName : undefined}
+        >
             <div className={`relative ${identityDensity.logoMb} ${customLogoUrl ? `${identityDensity.customWrap} flex items-center justify-center` : ''}`}>
                 {customLogoUrl ? (
                     <img
@@ -12657,7 +12707,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                 )}
             </div>
 
-            <div className="flex flex-col items-center text-center px-2">
+            <div className={`flex flex-col items-center text-center px-2 ${desktopNavIconsOnly ? 'sr-only' : ''}`}>
                 <h2 className={`${identityDensity.title} font-black text-text tracking-tight leading-tight line-clamp-2`}>
                     {serverName}
                 </h2>
@@ -12771,7 +12821,8 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
 
             {/* Desktop Sidebar */}
-            <div className="hidden md:flex flex-col w-72 nav-shell border-r px-5 py-2.5 sticky top-0 self-start h-dvh shadow-2xl overflow-hidden">
+            <div className="hidden md:flex relative shrink-0 sticky top-0 self-start h-dvh z-20">
+            <div className={`flex flex-col h-full nav-shell border-r py-2.5 shadow-2xl overflow-hidden transition-[width,padding] duration-200 ${desktopNavIconsOnly ? 'w-[4.5rem] px-1.5' : 'w-72 px-5'}`}>
                 {sidebarIdentityPosition === 'top' && renderServerIdentity('top')}
 
                 <div
@@ -12789,13 +12840,19 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                     <button
                                         ref={appletsButtonRef}
                                         type="button"
-                                        className={`flex flex-1 w-full max-h-11 items-center ${desktopDensity?.gap || 'gap-2.5'} ${desktopDensity?.px || 'px-3'} ${desktopDensity?.py || 'py-1'} bg-transparent border-0 cursor-pointer no-underline rounded-lg transition-colors ${desktopDensity?.text || 'text-[15px]'} font-medium ${isCurrent || appletsOpen ? 'nav-item-active' : 'text-muted hover:bg-white/5 hover:text-text'}`}
+                                        className={desktopNavIconsOnly
+                                            ? `relative flex w-full items-center justify-center px-0 py-1.5 bg-transparent border-0 cursor-pointer no-underline rounded-lg transition-colors ${isCurrent || appletsOpen ? 'nav-item-active' : 'text-muted hover:bg-white/5 hover:text-text'}`
+                                            : `flex flex-1 w-full max-h-11 items-center ${desktopDensity?.gap || 'gap-2.5'} ${desktopDensity?.px || 'px-3'} ${desktopDensity?.py || 'py-1'} bg-transparent border-0 cursor-pointer no-underline rounded-lg transition-colors ${desktopDensity?.text || 'text-[15px]'} font-medium ${isCurrent || appletsOpen ? 'nav-item-active' : 'text-muted hover:bg-white/5 hover:text-text'}`}
                                         onClick={() => setAppletsOpen((open) => !open)}
                                         aria-expanded={appletsOpen}
                                         aria-haspopup="dialog"
+                                        title={desktopNavIconsOnly ? t('navigation.applets') : undefined}
+                                        aria-label={t('navigation.applets')}
                                     >
                                         <AppWindow className={`${desktopDensity?.icon || 'w-5 h-5'} flex-shrink-0`} />
-                                        <span className="truncate">{t('navigation.applets')}</span>
+                                        {desktopNavIconsOnly
+                                            ? <span className="sr-only">{t('navigation.applets')}</span>
+                                            : <span className="truncate">{t('navigation.applets')}</span>}
                                     </button>
                                     {appletsOpen ? (
                                         <AppletsPalette
@@ -12832,6 +12889,41 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
                 {sidebarIdentityPosition !== 'top' && renderServerIdentity('bottom')}
 
+                {desktopNavIconsOnly ? (
+                    <div className="mt-1 pt-1 border-t border-white/10 shrink-0 w-full flex flex-col items-center gap-1.5">
+                        <button
+                            type="button"
+                            onClick={() => onNavigate('profile')}
+                            title={profileName}
+                            aria-label={profileName}
+                            className={`p-0.5 rounded-xl border bg-white/5 hover:border-plex/40 transition-all ${currentRoute === 'profile' ? 'border-plex/50 bg-plex/10' : 'border-white/10'}`}
+                        >
+                            <img
+                                src={profileIcon}
+                                alt=""
+                                className="w-8 h-8 rounded-full object-cover bg-background/60"
+                                onError={(e) => {
+                                    (e.target as HTMLImageElement).src = logoUrl();
+                                }}
+                            />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => setProfileOpen(true)}
+                            className="p-1.5 rounded-lg text-plex hover:bg-white/10 transition-colors"
+                            title="Change theme"
+                            aria-label="Change theme"
+                        >
+                            <Palette className="w-4 h-4" />
+                        </button>
+                        <InAppNotificationsBell
+                            onNavigate={(route, options) => onNavigate(route as any, options)}
+                            className="overflow-visible"
+                            placement="up"
+                            buttonClassName="relative w-9 h-9 flex items-center justify-center rounded-xl border border-white/10 bg-white/5 text-muted hover:text-text hover:border-plex/40 hover:bg-white/10 transition-all overflow-visible"
+                        />
+                    </div>
+                ) : (
                 <div className={`${identityStyleIndex >= 3 ? 'mt-1 pt-1' : 'mt-2 pt-2'} border-t border-white/10 shrink-0 w-full min-w-0`}>
                     <div className="grid grid-cols-[minmax(0,1fr)_2.75rem] gap-1.5 items-stretch w-full min-w-0">
                         <div
@@ -12880,6 +12972,20 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                         )}
                     </div>
                 </div>
+                )}
+            </div>
+            <button
+                type="button"
+                className="absolute top-1/2 -translate-y-1/2 left-full z-30 flex h-14 w-4 items-center justify-center rounded-r-md border border-l-0 border-white/15 bg-[rgb(var(--color-card))] text-muted shadow-lg hover:bg-white/10 hover:text-text"
+                onClick={() => setDesktopNavIconsOnly((current) => !current)}
+                title={desktopNavIconsOnly ? t('navigation.expandNav') : t('navigation.collapseNav')}
+                aria-label={desktopNavIconsOnly ? t('navigation.expandNav') : t('navigation.collapseNav')}
+                aria-pressed={desktopNavIconsOnly}
+            >
+                {desktopNavIconsOnly
+                    ? <ChevronRight className="w-3.5 h-3.5" />
+                    : <ChevronLeft className="w-3.5 h-3.5" />}
+            </button>
             </div>
 
             {profileOpen && (
@@ -12891,7 +12997,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                         onClick={() => setProfileOpen(false)}
                     />
                     <div
-                        className="absolute left-5 bottom-4 w-[calc(18rem-2.5rem)] max-w-[calc(18rem-2.5rem)] rounded-2xl border border-border shadow-2xl overflow-hidden animate-fade-in"
+                        className={`absolute bottom-4 rounded-2xl border border-border shadow-2xl overflow-hidden animate-fade-in ${desktopNavIconsOnly ? 'left-[4.75rem] w-64 max-w-[16rem]' : 'left-5 w-[calc(18rem-2.5rem)] max-w-[calc(18rem-2.5rem)]'}`}
                         style={{ backgroundColor: '#12141a' }}
                     >
                         <div

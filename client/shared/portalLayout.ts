@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { DESKTOP_NAV_COLLAPSED_WIDTH_PX, DESKTOP_NAV_EXPANDED_WIDTH_PX } from './desktopNavCollapse';
 
 export const activityStreamColumnCount = () => 3;
 
@@ -52,7 +53,12 @@ export const discoverPosterGridColumnsAtWidth = (containerWidth: number): number
 export const estimatePortalContentWidth = (): number => {
     if (typeof window === 'undefined') return 1200;
     const isDesktop = window.matchMedia('(min-width: 768px)').matches;
-    const sidebar = isDesktop ? 288 : 0;
+    const iconsOnly = typeof document !== 'undefined'
+        ? document.documentElement.dataset.desktopNavIcons === '1'
+        : false;
+    const sidebar = isDesktop
+        ? (iconsOnly ? DESKTOP_NAV_COLLAPSED_WIDTH_PX : DESKTOP_NAV_EXPANDED_WIDTH_PX)
+        : 0;
     const padding = isDesktop ? 64 : 8;
     return Math.max(320, window.innerWidth - sidebar - padding);
 };

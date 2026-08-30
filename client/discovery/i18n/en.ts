@@ -82,6 +82,8 @@ export const en = {
         logout: 'Logout',
         more: 'More',
         moreMenu: 'More Menu',
+        collapseNav: 'Show icons only',
+        expandNav: 'Show full navigation',
     },
     spotifySyncPage: {
         betaTitle: 'Beta feature',
