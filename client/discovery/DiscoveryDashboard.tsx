@@ -586,6 +586,7 @@ const DiscoveryDashboardInner: React.FC<{
                     mbid={mbid}
                     onBack={() => navigateBackToBrowse('/discovery/music')}
                     pushToast={pushToast}
+                    isAdmin={isAdmin}
                 />
             </div>
         );

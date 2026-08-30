@@ -853,6 +853,7 @@ export const SettingsDashboard: React.FC = () => {
     const [memberNavHiddenKeys, setMemberNavHiddenKeys] = useState<string[]>([]);
     const [customNavTabs, setCustomNavTabs] = useState<CustomNavTab[]>([]);
     const [customNavDisplay, setCustomNavDisplay] = useState<'links' | 'applets'>('links');
+    const [arrOpenInPortalEmbed, setArrOpenInPortalEmbed] = useState(false);
     const [homeCustomModules, setHomeCustomModules] = useState<HomeCustomModule[]>([]);
     const [downloadsVisibleToMembers, setDownloadsVisibleToMembers] = useState(true);
     const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -1597,6 +1598,7 @@ export const SettingsDashboard: React.FC = () => {
             setMemberNavHiddenKeys(normalizeMemberNavHiddenKeys(initialSettings.memberNavHiddenKeys, initialSettings.customNavTabs));
             if (Array.isArray(initialSettings.customNavTabs)) setCustomNavTabs(initialSettings.customNavTabs);
             setCustomNavDisplay(initialSettings.customNavDisplay === 'applets' ? 'applets' : 'links');
+            setArrOpenInPortalEmbed(!!initialSettings.arrOpenInPortalEmbed);
             if (Array.isArray(initialSettings.homeCustomModules)) setHomeCustomModules(initialSettings.homeCustomModules);
             if (initialSettings.downloadsVisibleToMembers !== undefined) {
                 setDownloadsVisibleToMembers(!!initialSettings.downloadsVisibleToMembers);
@@ -2240,6 +2242,7 @@ export const SettingsDashboard: React.FC = () => {
             memberNavHiddenKeys: normalizeMemberNavHiddenKeys(memberNavHiddenKeys, customNavTabs),
             customNavTabs,
             customNavDisplay,
+            arrOpenInPortalEmbed,
             homeCustomModules,
             downloadsVisibleToMembers,
             hideStreamUsers,
@@ -4057,6 +4060,8 @@ export const SettingsDashboard: React.FC = () => {
                                     onChange={setCustomNavTabs}
                                     customNavDisplay={customNavDisplay}
                                     onDisplayChange={setCustomNavDisplay}
+                                    arrOpenInPortalEmbed={arrOpenInPortalEmbed}
+                                    onArrOpenInPortalEmbedChange={setArrOpenInPortalEmbed}
                                     navOrder={navOrder}
                                     onNavOrderChange={setNavOrder}
                                     memberNavOrder={memberNavOrder}

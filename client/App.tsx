@@ -59,6 +59,15 @@ import {
     Navigation,
 } from './screens';
 import { DiscoveryDashboard } from './discovery/DiscoveryDashboard';
+import { canAccessCustomNavTab } from './shared/customNavTabs';
+import {
+    ARR_OPEN_IN_PORTAL_EVENT,
+    buildArrPortalEmbedHref,
+    findMatchingArrEmbedTab,
+    isSafeArrEmbedPath,
+    readArrEmbedQuery,
+    resolveArrEmbedPath,
+} from '../lib/arr-portal-embed.js';
 
 export const MainApp: React.FC = () => {
     const [confirmState, setConfirmState] = useState<{
@@ -149,6 +158,7 @@ export const MainApp: React.FC = () => {
         typeof window !== 'undefined' ? stripBasePath(window.location.pathname) : '/profile'
     ));
     const [externalTabId, setExternalTabId] = useState<string | null>(null);
+    const [externalEmbedPath, setExternalEmbedPath] = useState('');
     const [sessionInfo, setSessionInfo] = useState<any>(null);
     // Default temporary access off so login never flashes the trial panel before public config arrives.
     const [publicConfig, setPublicConfig] = useState<any>({ allowTemporaryAccess: false });
@@ -410,8 +420,15 @@ export const MainApp: React.FC = () => {
                 path = custom.startsWith('/external') ? custom : '/external';
                 const match = path.match(/^\/external\/([^/?#]+)/i);
                 setExternalTabId(match?.[1] ? decodeURIComponent(match[1]) : null);
+                try {
+                    const parsed = new URL(path, 'http://local.invalid');
+                    setExternalEmbedPath(readArrEmbedQuery(parsed.search));
+                } catch {
+                    setExternalEmbedPath('');
+                }
             } else {
                 setExternalTabId(null);
+                setExternalEmbedPath('');
             }
             if (options?.hash) path += options.hash;
             window.history.pushState({}, '', portalUrl(path));
@@ -570,6 +587,7 @@ export const MainApp: React.FC = () => {
             else if (path.startsWith('/external/')) {
                 const match = path.match(/^\/external\/([^/?#]+)/i);
                 setExternalTabId(match?.[1] ? decodeURIComponent(match[1]) : null);
+                setExternalEmbedPath(readArrEmbedQuery(window.location.search));
                 setCurrentRoute('external');
             }
             else if (path.startsWith('/admin') || path.startsWith('/users')) {
@@ -613,6 +631,25 @@ export const MainApp: React.FC = () => {
         window.addEventListener('portal-open-profile', onOpenProfile as EventListener);
         return () => window.removeEventListener('portal-open-profile', onOpenProfile as EventListener);
     }, [setRoute]);
+
+    useEffect(() => {
+        const onOpenArrEmbed = (event: Event) => {
+            if (!sessionInfo?.arrOpenInPortalEmbed || !sessionInfo?.session?.isAdmin) return;
+            const detail = (event as CustomEvent)?.detail || {};
+            const url = String(detail.url || '').trim();
+            if (!url) return;
+            const arrType = detail.arrType === 'sonarr' || detail.arrType === 'lidarr' ? detail.arrType : 'radarr';
+            const tabs = Array.isArray(sessionInfo.customNavTabs) ? sessionInfo.customNavTabs : [];
+            const tab = findMatchingArrEmbedTab(tabs, url, arrType);
+            if (!tab || !canAccessCustomNavTab(tab, true)) return;
+            const embedPath = resolveArrEmbedPath(tab.url, url);
+            if (embedPath && !isSafeArrEmbedPath(embedPath)) return;
+            event.preventDefault();
+            setRoute('external', { path: buildArrPortalEmbedHref(tab.id, embedPath) });
+        };
+        window.addEventListener(ARR_OPEN_IN_PORTAL_EVENT, onOpenArrEmbed as EventListener);
+        return () => window.removeEventListener(ARR_OPEN_IN_PORTAL_EVENT, onOpenArrEmbed as EventListener);
+    }, [sessionInfo, setRoute]);
 
     useEffect(() => {
         if (!sessionInfo?.session?.isAdmin) {
@@ -817,6 +854,7 @@ export const MainApp: React.FC = () => {
                 <Suspense fallback={<Loader isLoading={true} isCinematic={!!publicConfig?.useCinematicLoading} />}>
                     <CustomExternalTabPage
                         tabId={externalTabId}
+                        embedPath={externalEmbedPath}
                         customNavTabs={sessionInfo?.customNavTabs || []}
                         isAdmin={isAdmin}
                     />

@@ -1856,6 +1856,10 @@ export const en = {
                     linksHint: 'Each enabled tab appears as its own sidebar item, the same as native portal pages.',
                     appletsHint: 'Desktop shows one Applets item above Settings. Click it to open a launcher of these tabs. Phones still use the individual nav links.',
                 },
+                openArrInEmbed: {
+                    label: 'Open Radarr, Sonarr, and Lidarr in the portal',
+                    hint: 'When on, Open in Radarr/Sonarr/Lidarr loads that title in the Applets iframe instead of a new tab. A matching applet is needed (same host, or a tab named Radarr, Sonarr, or Lidarr). Otherwise the link still opens in a new tab.',
+                },
                 enabled: 'Enabled',
                 adminOnly: 'Admin only',
                 adminOnlyHint: 'When on, only admins see this tab. Members never get it in their layout.',

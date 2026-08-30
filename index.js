@@ -5088,6 +5088,7 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
             : [],
         customNavTabs: sanitizeCustomNavTabsForSession(config.customNavTabs),
         customNavDisplay: normalizeCustomNavDisplay(config.customNavDisplay),
+        arrOpenInPortalEmbed: !!config.arrOpenInPortalEmbed,
         homeCustomModules: sanitizeHomeCustomModulesForSession(config.homeCustomModules, isAdmin),
         navFeatures,
         impersonation: impersonating ? {
@@ -5490,6 +5491,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 memberNavHiddenKeys: Array.isArray(config.memberNavHiddenKeys) ? config.memberNavHiddenKeys : [],
                 customNavTabs: sanitizeCustomNavTabsForSession(config.customNavTabs),
                 customNavDisplay: normalizeCustomNavDisplay(config.customNavDisplay),
+                arrOpenInPortalEmbed: !!config.arrOpenInPortalEmbed,
                 homeCustomModules: sanitizeHomeCustomModulesForSession(config.homeCustomModules, true),
                 downloadsVisibleToMembers: config.downloadsVisibleToMembers !== false,
                 defaultLibraryIds: config.defaultLibraryIds || null,
@@ -5818,7 +5820,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         autoApproveMovies4k, autoApproveTv4k, portalAutoRequestMovies, portalAutoRequestTv,
         seriesMetadataProvider, animeMetadataProvider, tvdbApiKey,
         inactiveCleanupEnabled, inactiveCleanupDays,
-        primaryColor, customLogoUrl, customLoginLogoUrl, loginLogoCircleFrame, customFaviconUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, customNavTabs, customNavDisplay, homeCustomModules, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
+        primaryColor, customLogoUrl, customLoginLogoUrl, loginLogoCircleFrame, customFaviconUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, customNavTabs, customNavDisplay, arrOpenInPortalEmbed, homeCustomModules, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
         autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, spotifyToPlexEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, supportTicketsEnabled, chatEnabled, chatMentionNotifyInApp, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, scannerNotifyDeleted, scannerNotifyUpgrade, scannerNotifyImport, scannerNotifyGrab, scannerNotifyUpdate, scannerNotifyInteraction, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, spotifyToPlexInternalUrl, spotifyToPlexClientId, spotifyToPlexClientSecret, spotifyToPlexEncryptionKey, spotifyToPlexHomeWidgetEnabled, spotifyToPlexScheduleMode, spotifyToPlexScheduledSyncEnabled, spotifyToPlexScheduledSyncIntervalHours, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
@@ -6222,6 +6224,9 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         customNavDisplay: normalizeCustomNavDisplay(
             customNavDisplay != null ? customNavDisplay : existingConfig.customNavDisplay,
         ),
+        arrOpenInPortalEmbed: arrOpenInPortalEmbed !== undefined
+            ? !!arrOpenInPortalEmbed
+            : !!existingConfig.arrOpenInPortalEmbed,
         homeCustomModules: normalizedHomeCustomModules,
         navOrder: pruneNavOrderCustomKeys(resolvedNavOrder, normalizedCustomNavTabs),
         navHiddenKeys: (() => {
@@ -7537,6 +7542,8 @@ const spotifyToPlexPortalDefaultsDeps = () => ({
 });
 
 app.get('/api/spotify-to-plex/callback', requireAuth, requireAdmin, handleSpotifyToPlexCallback);
+app.all('/api/custom-tab-embed/:tabId', requireAuth, requireMember, handleCustomTabEmbedProxy);
+app.all('/api/custom-tab-embed/:tabId/*', requireAuth, requireMember, handleCustomTabEmbedProxy);
 app.all('/api/spotify-to-plex-embed/:tabId', requireAuth, requireAdmin, handleSpotifyToPlexEmbedProxy);
 app.all('/api/spotify-to-plex-embed/:tabId/*', requireAuth, requireAdmin, handleSpotifyToPlexEmbedProxy);
 app.all('/api/home-module-embed/:moduleId', requireAuth, requireMember, handleHomeModuleEmbedProxy);

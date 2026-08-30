@@ -180,6 +180,8 @@ export interface AppSettings {
     customNavTabs?: CustomNavTab[];
     /** Desktop launcher vs individual custom-tab links. */
     customNavDisplay?: CustomNavDisplay;
+    /** Open Radarr/Sonarr/Lidarr deep links in the Applets iframe. */
+    arrOpenInPortalEmbed?: boolean;
     /** Admin-defined custom HTML / iframe modules for the home dashboard. */
     homeCustomModules?: HomeCustomModule[];
 }

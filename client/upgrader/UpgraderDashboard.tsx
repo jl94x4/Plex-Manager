@@ -15,6 +15,7 @@ import { emptyLibrary } from '../media-automation/types';
 import type { MediaAutomationLibrary, MediaAutomationPipeline } from '../media-automation/types';
 import { UpgraderUpgradeModal } from './UpgraderUpgradeModal';
 import { UpgraderShowDrawer } from './UpgraderShowDrawer';
+import { handleArrPortalEmbedAnchorClick } from '../../lib/arr-portal-embed.js';
 import { UpgraderHistoryPanel } from './UpgraderHistoryPanel';
 import { UpgraderExclusionsPanel } from './UpgraderExclusionsPanel';
 import { UpgraderProfilesTab } from './UpgraderProfilesTab';
@@ -1194,6 +1195,13 @@ export const UpgraderDashboard: React.FC = () => {
                                                                     target="_blank"
                                                                     rel="noreferrer"
                                                                     className="text-xs font-bold text-plex hover:text-orange-400 transition-colors"
+                                                                    onClick={(event) => {
+                                                                        handleArrPortalEmbedAnchorClick(event, {
+                                                                            url: item.arrDeepUrl,
+                                                                            arrType: item.arrType === 'radarr' ? 'radarr' : 'sonarr',
+                                                                            label: item.arrType === 'radarr' ? 'Open in Radarr' : 'Open in Sonarr',
+                                                                        });
+                                                                    }}
                                                                 >
                                                                     Open in {item.arrType === 'radarr' ? 'Radarr' : 'Sonarr'}
                                                                 </a>
@@ -1309,6 +1317,13 @@ export const UpgraderDashboard: React.FC = () => {
                                                                         target="_blank"
                                                                         rel="noreferrer"
                                                                         className="inline-block text-[10px] font-bold text-plex hover:underline"
+                                                                        onClick={(event) => {
+                                                                            handleArrPortalEmbedAnchorClick(event, {
+                                                                                url: item.arrDeepUrl,
+                                                                                arrType: item.arrType === 'radarr' ? 'radarr' : 'sonarr',
+                                                                                label: item.arrType === 'radarr' ? 'Open in Radarr' : 'Open in Sonarr',
+                                                                            });
+                                                                        }}
                                                                     >
                                                                         Open in {item.arrType === 'radarr' ? 'Radarr' : 'Sonarr'}
                                                                     </a>

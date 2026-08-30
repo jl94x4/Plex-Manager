@@ -8,6 +8,7 @@ import { translateDiscoverAvailabilityDetail, translateDiscoverStatus, useDiscov
 import { resolveMediaAvailabilityState } from './discoverAvailability';
 import { mediaStatusPanelClass, mediaStatusChipClass } from './DiscoverStatusOverlay';
 import { formatRequestedByCopy } from './requestSeasonUtils';
+import { OpenInArrButton } from '../shared/OpenInArrButton';
 
 type ArtistAlbum = {
     mbid: string;
@@ -71,7 +72,8 @@ export const MusicArtistPage: React.FC<{
     mbid: string;
     onBack: () => void;
     pushToast?: (msg: string, type: 'success' | 'error') => void;
-}> = ({ mbid, onBack, pushToast }) => {
+    isAdmin?: boolean;
+}> = ({ mbid, onBack, pushToast, isAdmin = false }) => {
     const { t } = useDiscoverI18n();
     const [loading, setLoading] = useState(true);
     const [artist, setArtist] = useState<any>(null);
@@ -267,6 +269,18 @@ export const MusicArtistPage: React.FC<{
                             {canNotifyArtist ? <Bell className="w-4 h-4" /> : null}
                             {requestButtonLabel}
                         </button>
+                        {isAdmin
+                            && ['available', 'partial', 'processing', 'requested', 'pending'].includes(availability.kind)
+                            ? (
+                                <OpenInArrButton
+                                    mediaType="music"
+                                    mbid={mbid}
+                                    title={artist.name || artist.title}
+                                    className="mt-3 w-full sm:w-auto px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-sm font-bold transition-colors inline-flex items-center justify-center gap-1.5 disabled:opacity-50"
+                                    onError={(message) => toast(message, 'error')}
+                                />
+                            )
+                            : null}
                         {canNotifyArtist ? (
                             <p className="mt-2 text-xs text-muted">
                                 {formatRequestedByCopy(t, artistNotify?.requestedByName, artistNotify?.requestedByCount)}

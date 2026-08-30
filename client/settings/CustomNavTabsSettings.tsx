@@ -29,6 +29,8 @@ type Props = {
     onChange: (next: CustomNavTab[]) => void;
     customNavDisplay: CustomNavDisplay;
     onDisplayChange: (next: CustomNavDisplay) => void;
+    arrOpenInPortalEmbed: boolean;
+    onArrOpenInPortalEmbedChange: (next: boolean) => void;
     navOrder: string[];
     onNavOrderChange: (next: string[]) => void;
     memberNavOrder: string[];
@@ -46,6 +48,8 @@ export const CustomNavTabsSettings: React.FC<Props> = ({
     onChange,
     customNavDisplay,
     onDisplayChange,
+    arrOpenInPortalEmbed,
+    onArrOpenInPortalEmbedChange,
     navOrder,
     onNavOrderChange,
     memberNavOrder,
@@ -202,6 +206,15 @@ export const CustomNavTabsSettings: React.FC<Props> = ({
                             : t('settings.navigation.customTabs.displayMode.linksHint')}
                     </SettingHint>
                 </label>
+                <div className="mt-4 max-w-xl border-t border-border/40 pt-2">
+                    <SettingsToggleRow
+                        title={t('settings.navigation.customTabs.openArrInEmbed.label')}
+                        description={t('settings.navigation.customTabs.openArrInEmbed.hint')}
+                        checked={arrOpenInPortalEmbed}
+                        onChange={onArrOpenInPortalEmbedChange}
+                        border={false}
+                    />
+                </div>
             </div>
 
             {!customNavTabs.length ? (

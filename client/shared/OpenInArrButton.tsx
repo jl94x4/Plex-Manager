@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ExternalLink, Loader2 } from 'lucide-react';
 import { apiFetch } from './api';
+import { dispatchArrPortalEmbed, handleArrPortalEmbedAnchorClick } from '../../lib/arr-portal-embed.js';
 
 export type ArrDeepLinkParams = {
     mediaType: 'movie' | 'tv' | 'music';
@@ -92,6 +93,7 @@ export const OpenInArrButton: React.FC<{
     const [busy, setBusy] = useState(false);
     const [href, setHref] = useState<string | null>(null);
     const [label, setLabel] = useState(arrOpenLabel(mediaType));
+    const [arrType, setArrType] = useState<ArrDeepLinkResult['arrType']>(normalizeArrType(null, mediaType));
     const canResolve = mediaType === 'music'
         ? !!String(mbid || '').trim() || !!String(title || '').trim()
         : (tmdbId != null && Number(tmdbId) > 0) || !!String(title || '').trim();
@@ -109,6 +111,7 @@ export const OpenInArrButton: React.FC<{
                 if (cancelled) return;
                 setHref(link.url);
                 setLabel(link.label);
+                setArrType(link.arrType);
             })
             .catch(() => {
                 if (!cancelled) setHref(null);
@@ -127,12 +130,16 @@ export const OpenInArrButton: React.FC<{
     const handleClick = async () => {
         if (busy) return;
         setBusy(true);
-        // Open synchronously so popup blockers don't kill the tab after the await.
         const popup = window.open('about:blank', '_blank');
         try {
             const link = await fetchArrDeepLink({ mediaType, tmdbId, mbid, title, year, is4k });
             setHref(link.url);
             setLabel(link.label);
+            setArrType(link.arrType);
+            if (dispatchArrPortalEmbed(link)) {
+                try { popup?.close(); } catch { /* ignore */ }
+                return;
+            }
             openResolvedUrl(link.url, popup);
         } catch (error) {
             try { popup?.close(); } catch { /* ignore */ }
@@ -157,6 +164,9 @@ export const OpenInArrButton: React.FC<{
                 rel="noopener noreferrer"
                 className={className}
                 title={label}
+                onClick={(event) => {
+                    handleArrPortalEmbedAnchorClick(event, { url: href, arrType, label });
+                }}
             >
                 {content}
             </a>

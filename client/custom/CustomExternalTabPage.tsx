@@ -9,9 +9,11 @@ import {
     normalizeCustomTabEmbedUrl,
     shouldUseCustomTabEmbedProxy,
 } from '../shared/customNavTabs';
+import { isSafeArrEmbedPath } from '../../lib/arr-portal-embed.js';
 
 type Props = {
     tabId: string | null;
+    embedPath?: string;
     customNavTabs?: CustomNavTab[];
     isAdmin?: boolean;
 };
@@ -47,7 +49,7 @@ const readToolbarCollapsed = () => {
     }
 };
 
-export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = [], isAdmin = false }) => {
+export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', customNavTabs = [], isAdmin = false }) => {
     const { t } = useDiscoverI18n();
     const tab = useMemo(
         () => customNavTabs.find((entry) => String(entry.id) === String(tabId || '')),
@@ -58,6 +60,19 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = 
     const [zoom, setZoom] = useState(ZOOM_DEFAULT);
     const [toolbarCollapsed, setToolbarCollapsed] = useState(readToolbarCollapsed);
     const resolvedUrl = useMemo(() => normalizeCustomTabEmbedUrl(tab?.url || ''), [tab?.url]);
+    const safeEmbedPath = useMemo(
+        () => (isSafeArrEmbedPath(embedPath) ? String(embedPath).replace(/^\/+/, '') : ''),
+        [embedPath],
+    );
+    const deepResolvedUrl = useMemo(() => {
+        if (!resolvedUrl || !safeEmbedPath) return resolvedUrl;
+        try {
+            const base = resolvedUrl.endsWith('/') ? resolvedUrl : `${resolvedUrl}/`;
+            return new URL(safeEmbedPath, base).href;
+        } catch {
+            return resolvedUrl;
+        }
+    }, [resolvedUrl, safeEmbedPath]);
     const useEmbedProxy = useMemo(
         () => !!(resolvedUrl && shouldUseCustomTabEmbedProxy(resolvedUrl)),
         [resolvedUrl],
@@ -68,15 +83,18 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = 
     }, [resolvedUrl]);
     const iframeSrc = useMemo(() => {
         if (!tab) return '';
-        if (useEmbedProxy) return getCustomTabEmbedProxySrc(tab.id);
-        return resolvedUrl;
-    }, [tab, useEmbedProxy, resolvedUrl]);
+        if (useEmbedProxy) {
+            const prefix = getCustomTabEmbedProxySrc(tab.id);
+            return safeEmbedPath ? `${prefix}${safeEmbedPath}` : prefix;
+        }
+        return deepResolvedUrl || resolvedUrl;
+    }, [tab, useEmbedProxy, resolvedUrl, deepResolvedUrl, safeEmbedPath]);
 
     useEffect(() => {
         setEmbedBlocked(false);
         setIframeKey((value) => value + 1);
         setZoom(tab?.id ? readStoredZoom(tab.id) : ZOOM_DEFAULT);
-    }, [tab?.id, tab?.url, useEmbedProxy]);
+    }, [tab?.id, tab?.url, useEmbedProxy, safeEmbedPath]);
 
     const applyZoom = (next: number) => {
         const clamped = clampZoom(next);
@@ -107,7 +125,7 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = 
         );
     }
 
-    if (tab.openMode !== 'embed') {
+    if (tab.openMode !== 'embed' && !safeEmbedPath) {
         return (
             <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4 p-8 text-center">
                 <Globe className="h-10 w-10 text-plex" />
@@ -195,7 +213,7 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = 
                             </>
                         ) : null}
                         <a
-                            href={resolvedUrl || tab.url}
+                            href={deepResolvedUrl || tab.url}
                             target="_blank"
                             rel="noreferrer"
                             className="inline-flex items-center gap-2 rounded-xl bg-plex px-3 py-2 text-sm font-bold text-background hover:bg-plex-hover"
@@ -235,7 +253,7 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = 
                     <Globe className="h-12 w-12 text-muted" />
                     <p className="max-w-xl text-sm text-muted">{embedWarningText}</p>
                     <a
-                        href={resolvedUrl || tab.url}
+                        href={deepResolvedUrl || tab.url}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-2 rounded-xl bg-plex px-4 py-2 text-sm font-bold text-background hover:bg-plex-hover"
