@@ -2384,3 +2384,14 @@ Object.assign(fr, { homeDashboard: { ...fr.homeDashboard, nowPlayingCompanion: {
     summary: { progress: 'progression {progress} %', throughSession: '{progress} % de cette session' },
 } } });
 Object.assign(fr, { notifications: { ...fr.notifications, repeat: { expand: 'Afficher {count} mises à jour', expand_plural: 'Afficher {count} mises à jour', collapse: 'Masquer les mises à jour répétées', legacyHint: 'Affichage de la plus récente parmi {count} alertes similaires.' } } });
+Object.assign(fr, {
+    navigation: { ...fr.navigation, chat: 'Chat', spotifySync: 'Synchronisation Spotify', applets: 'Applets', appletsHint: 'Lancer une application intégrée', appletsEmpty: 'Aucune application n’est encore activée.', appletsPrev: 'Page précédente', appletsNext: 'Page suivante', appletsPage: 'Page {current} sur {total}' },
+    spotifySyncPage: { betaTitle: 'Fonctionnalité bêta', betaNotice: 'La synchronisation Spotify est en BÊTA et reste en plein développement. Attendez-vous à des imperfections, des fonctionnalités manquantes et des changements incompatibles.' },
+    posterSetsPage: { betaTitle: 'Fonctionnalité bêta', betaNotice: 'Poster Sets est en BÊTA et reste en plein développement. Attendez-vous à des imperfections, des fonctionnalités manquantes et des changements incompatibles.' },
+    profilePage: { ...fr.profilePage, watchedLabel: 'Regardé', listenedLabel: 'Écouté', libraryAccess: 'Accès aux bibliothèques' },
+    analytics: { ...fr.analytics, overviewSnapshot: { title: 'Aperçu de la bibliothèque', collapse: 'Réduire', expand: 'Développer', playbacks: '{count} lecture', playbacks_plural: '{count} lectures', viewers: '{count} spectateur', viewers_plural: '{count} spectateurs' } },
+    nowPlaying: { ...fr.nowPlaying, with: 'avec' },
+    preferencesPage: { ...fr.preferencesPage, homeTitle: 'Accueil', homeSubtitle: 'Ce qui apparaît sur l’accueil de votre portail.', showNowPlaying: 'En cours de lecture sur l’accueil', showNowPlayingHint: 'Affichez ce que vous regardez sur l’accueil et dans Discover. Désactivez cette option pour masquer la bande En cours de lecture.' },
+    downloads: { ...fr.downloads, actions: { ...fr.downloads?.actions, collapse: 'Réduire', expand: 'Développer' } },
+    scanner: { ...fr.scanner, filters: { ...fr.scanner?.filters, grabs: 'Récupérations', interaction: 'Nécessite une intervention', updates: 'Mises à jour' }, activity: { ...fr.scanner?.activity, actions: { ...fr.scanner?.activity?.actions, grab: 'Récupération', interaction: 'Nécessite une intervention', appUpdate: 'Mise à jour' } } },
+});
