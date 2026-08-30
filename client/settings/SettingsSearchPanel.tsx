@@ -116,6 +116,7 @@ const SETTINGS_INDEX_TAB_LABEL = (tabId: string) => {
     const labels: Record<string, string> = {
         plex: 'Media Player',
         layout: 'Layout',
+        applets: 'Applets',
         'stream-rules': 'Stream Rules',
     };
     return labels[tabId] || tabId.replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());

@@ -14,6 +14,7 @@ import {
     Layers,
     Palette,
     LayoutDashboard,
+    AppWindow,
     Activity,
     UserPlus,
     ListTodo,
@@ -257,6 +258,7 @@ const SETTINGS_TAB_ICONS: Record<string, React.ComponentType<{ className?: strin
     request: BookOpen,
     branding: Palette,
     layout: LayoutDashboard,
+    applets: AppWindow,
     status: Activity,
     invites: UserPlus,
     tasks: ListTodo,
@@ -339,6 +341,7 @@ const SETTINGS_TAB_TRANSLATION_KEYS: Record<string, string> = {
     branding: 'settings.navigation.tabs.branding',
     contact: 'settings.navigation.tabs.contact',
     layout: 'settings.navigation.tabs.layout',
+    applets: 'settings.navigation.tabs.applets',
     achievements: 'settings.navigation.tabs.achievements',
     analytics: 'settings.navigation.tabs.analytics',
     plex: 'settings.navigation.tabs.plex',
@@ -4052,8 +4055,8 @@ export const SettingsDashboard: React.FC = () => {
                         </div>
                     )}
 
-                    {activeTab === 'layout' && (
-                        <div className="mb-8 space-y-10">
+                    {activeTab === 'applets' && (
+                        <div className="mb-8">
                             <section id={getSettingsSectionElementId('applets')} className="scroll-mt-24">
                                 <CustomNavTabsSettings
                                     customNavTabs={customNavTabs}
@@ -4068,6 +4071,11 @@ export const SettingsDashboard: React.FC = () => {
                                     onMemberNavOrderChange={setMemberNavOrder}
                                 />
                             </section>
+                        </div>
+                    )}
+
+                    {activeTab === 'layout' && (
+                        <div className="mb-8 space-y-10">
                             <section id={getSettingsSectionElementId('navigation')} className="scroll-mt-24">
                                 <NavigationOrderSettings
                                     navOrder={navOrder}

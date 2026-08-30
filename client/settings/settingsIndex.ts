@@ -1,5 +1,5 @@
 export const SETTINGS_TABS = [
-    'plex', 'notifications', 'newsletter', 'cleanup', 'mediastack', 'request', 'branding', 'layout',
+    'plex', 'notifications', 'newsletter', 'cleanup', 'mediastack', 'request', 'branding', 'layout', 'applets',
     'achievements', 'analytics', 'status', 'invites', 'tasks', 'upgrader', 'collexions', 'spotify-sync', 'media-automation', 'poster-sets', 'overlays', 'editions', 'system', 'contact', 'broadcast', 'stream-rules', 'logs',
 ] as const;
 
@@ -30,8 +30,8 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
     { id: 'contact/whatsapp', tabId: 'contact', sectionId: 'whatsapp', label: 'WhatsApp Number', group: 'Portal', keywords: ['whatsapp', 'phone', 'number'] },
     { id: 'contact/email', tabId: 'contact', sectionId: 'email', label: 'Contact Email', group: 'Portal', keywords: ['email', 'mail', 'support'] },
 
-    { id: 'layout', tabId: 'layout', label: 'Layout', group: 'Portal', keywords: ['layout', 'navigation', 'menu', 'order', 'sidebar', 'home', 'dashboard', 'widgets', 'sections', 'reorder', 'hide', 'downloads', 'members', 'applets'] },
-    { id: 'layout/applets', tabId: 'layout', sectionId: 'applets', label: 'Applets', group: 'Portal', keywords: ['applets', 'launcher', 'custom', 'external', 'tabs', 'links', 'iframe', 'embed', 'services', 'navigation', 'sidebar'] },
+    { id: 'layout', tabId: 'layout', label: 'Layout', group: 'Portal', keywords: ['layout', 'navigation', 'menu', 'order', 'sidebar', 'home', 'dashboard', 'widgets', 'sections', 'reorder', 'hide', 'downloads', 'members'] },
+    { id: 'applets', tabId: 'applets', label: 'Applets', group: 'Portal', keywords: ['applets', 'launcher', 'custom', 'external', 'tabs', 'links', 'iframe', 'embed', 'services', 'navigation', 'sidebar'] },
     { id: 'layout/navigation', tabId: 'layout', sectionId: 'navigation', label: 'Navigation', group: 'Portal', keywords: ['menu', 'order', 'sidebar', 'nav', 'downloads', 'members'] },
     { id: 'layout/home-modules', tabId: 'layout', sectionId: 'home-modules', label: 'Home Custom Modules', group: 'Portal', keywords: ['dashboard', 'home', 'modules', 'html', 'iframe', 'custom', 'widget'] },
     { id: 'layout/home-layout', tabId: 'layout', sectionId: 'home-layout', label: 'Home Layout', group: 'Portal', keywords: ['dashboard', 'widgets', 'sections', 'home', 'layout', 'reorder', 'hide'] },
@@ -130,14 +130,7 @@ export type SettingsTabSection = {
     translationKey: string;
 };
 
-export const SETTINGS_TAB_SECTIONS: Partial<Record<SettingsTabId, SettingsTabSection[]>> = {
-    layout: [
-        { sectionId: 'applets', label: 'Applets', translationKey: 'settings.navigation.sections.applets' },
-        { sectionId: 'navigation', label: 'Navigation', translationKey: 'settings.navigation.sections.navigation' },
-        { sectionId: 'home-modules', label: 'Home Custom Modules', translationKey: 'settings.navigation.sections.homeModules' },
-        { sectionId: 'home-layout', label: 'Home Layout', translationKey: 'settings.navigation.sections.homeLayout' },
-    ],
-};
+export const SETTINGS_TAB_SECTIONS: Partial<Record<SettingsTabId, SettingsTabSection[]>> = {};
 
 const RECENT_KEY = 'portal-settings-recent';
 const RECENT_LIMIT = 6;
@@ -148,11 +141,11 @@ export const parseSettingsHash = (hash: string): { tabId: SettingsTabId | null; 
     if (raw === 'system/upgrader') return { tabId: 'upgrader', sectionId: null };
 
     // Legacy tab hashes → merged Layout / Notifications sections.
-    const legacyTabRedirects: Record<string, { tabId: SettingsTabId; sectionId: string }> = {
+    const legacyTabRedirects: Record<string, { tabId: SettingsTabId; sectionId: string | null }> = {
         navigation: { tabId: 'layout', sectionId: 'navigation' },
         'home-modules': { tabId: 'layout', sectionId: 'home-modules' },
         'home-layout': { tabId: 'layout', sectionId: 'home-layout' },
-        'custom-nav-tabs': { tabId: 'layout', sectionId: 'applets' },
+        'custom-nav-tabs': { tabId: 'applets', sectionId: null },
         smtp: { tabId: 'notifications', sectionId: 'smtp' },
         gotify: { tabId: 'notifications', sectionId: 'gotify' },
     };
@@ -170,8 +163,8 @@ export const parseSettingsHash = (hash: string): { tabId: SettingsTabId | null; 
     }
     const tabId = SETTINGS_TABS.includes(normalizedTabPart as SettingsTabId) ? normalizedTabPart as SettingsTabId : null;
     const sectionId = sectionParts.length > 0 ? sectionParts.join('/') : null;
-    if (tabId === 'layout' && sectionId === 'custom-nav-tabs') {
-        return { tabId: 'layout', sectionId: 'applets' };
+    if (tabId === 'layout' && (sectionId === 'custom-nav-tabs' || sectionId === 'applets')) {
+        return { tabId: 'applets', sectionId: null };
     }
     return { tabId, sectionId };
 };
@@ -210,7 +203,8 @@ export const recordRecentSetting = (entryId: string) => {
 };
 
 const SETTINGS_ENTRY_ALIASES: Record<string, string> = {
-    'layout/custom-nav-tabs': 'layout/applets',
+    'layout/applets': 'applets',
+    'layout/custom-nav-tabs': 'applets',
 };
 
 export const resolveSettingsEntry = (entryId: string): SettingsIndexEntry | undefined => {
