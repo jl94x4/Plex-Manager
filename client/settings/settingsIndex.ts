@@ -30,9 +30,9 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
     { id: 'contact/whatsapp', tabId: 'contact', sectionId: 'whatsapp', label: 'WhatsApp Number', group: 'Portal', keywords: ['whatsapp', 'phone', 'number'] },
     { id: 'contact/email', tabId: 'contact', sectionId: 'email', label: 'Contact Email', group: 'Portal', keywords: ['email', 'mail', 'support'] },
 
-    { id: 'layout', tabId: 'layout', label: 'Layout', group: 'Portal', keywords: ['layout', 'navigation', 'menu', 'order', 'sidebar', 'home', 'dashboard', 'widgets', 'sections', 'reorder', 'hide', 'downloads', 'members'] },
+    { id: 'layout', tabId: 'layout', label: 'Layout', group: 'Portal', keywords: ['layout', 'navigation', 'menu', 'order', 'sidebar', 'home', 'dashboard', 'widgets', 'sections', 'reorder', 'hide', 'downloads', 'members', 'applets'] },
+    { id: 'layout/applets', tabId: 'layout', sectionId: 'applets', label: 'Applets', group: 'Portal', keywords: ['applets', 'launcher', 'custom', 'external', 'tabs', 'links', 'iframe', 'embed', 'services', 'navigation', 'sidebar'] },
     { id: 'layout/navigation', tabId: 'layout', sectionId: 'navigation', label: 'Navigation', group: 'Portal', keywords: ['menu', 'order', 'sidebar', 'nav', 'downloads', 'members'] },
-    { id: 'layout/custom-nav-tabs', tabId: 'layout', sectionId: 'custom-nav-tabs', label: 'Custom External Tabs', group: 'Portal', keywords: ['custom', 'external', 'tabs', 'links', 'iframe', 'embed', 'services', 'navigation', 'sidebar'] },
     { id: 'layout/home-modules', tabId: 'layout', sectionId: 'home-modules', label: 'Home Custom Modules', group: 'Portal', keywords: ['dashboard', 'home', 'modules', 'html', 'iframe', 'custom', 'widget'] },
     { id: 'layout/home-layout', tabId: 'layout', sectionId: 'home-layout', label: 'Home Layout', group: 'Portal', keywords: ['dashboard', 'widgets', 'sections', 'home', 'layout', 'reorder', 'hide'] },
     { id: 'achievements', tabId: 'achievements', label: 'Achievements', group: 'Portal', keywords: ['xp', 'badges', 'leaderboard', 'gamification', 'achievements', 'level'] },
@@ -124,6 +124,21 @@ export const SETTINGS_TAB_GROUPS = [
     })),
 }));
 
+export type SettingsTabSection = {
+    sectionId: string;
+    label: string;
+    translationKey: string;
+};
+
+export const SETTINGS_TAB_SECTIONS: Partial<Record<SettingsTabId, SettingsTabSection[]>> = {
+    layout: [
+        { sectionId: 'applets', label: 'Applets', translationKey: 'settings.navigation.sections.applets' },
+        { sectionId: 'navigation', label: 'Navigation', translationKey: 'settings.navigation.sections.navigation' },
+        { sectionId: 'home-modules', label: 'Home Custom Modules', translationKey: 'settings.navigation.sections.homeModules' },
+        { sectionId: 'home-layout', label: 'Home Layout', translationKey: 'settings.navigation.sections.homeLayout' },
+    ],
+};
+
 const RECENT_KEY = 'portal-settings-recent';
 const RECENT_LIMIT = 6;
 
@@ -137,6 +152,7 @@ export const parseSettingsHash = (hash: string): { tabId: SettingsTabId | null; 
         navigation: { tabId: 'layout', sectionId: 'navigation' },
         'home-modules': { tabId: 'layout', sectionId: 'home-modules' },
         'home-layout': { tabId: 'layout', sectionId: 'home-layout' },
+        'custom-nav-tabs': { tabId: 'layout', sectionId: 'applets' },
         smtp: { tabId: 'notifications', sectionId: 'smtp' },
         gotify: { tabId: 'notifications', sectionId: 'gotify' },
     };
@@ -154,6 +170,9 @@ export const parseSettingsHash = (hash: string): { tabId: SettingsTabId | null; 
     }
     const tabId = SETTINGS_TABS.includes(normalizedTabPart as SettingsTabId) ? normalizedTabPart as SettingsTabId : null;
     const sectionId = sectionParts.length > 0 ? sectionParts.join('/') : null;
+    if (tabId === 'layout' && sectionId === 'custom-nav-tabs') {
+        return { tabId: 'layout', sectionId: 'applets' };
+    }
     return { tabId, sectionId };
 };
 
@@ -190,9 +209,14 @@ export const recordRecentSetting = (entryId: string) => {
     localStorage.setItem(RECENT_KEY, JSON.stringify(next));
 };
 
-export const resolveSettingsEntry = (entryId: string): SettingsIndexEntry | undefined => (
-    SETTINGS_INDEX.find((entry) => entry.id === entryId)
-);
+const SETTINGS_ENTRY_ALIASES: Record<string, string> = {
+    'layout/custom-nav-tabs': 'layout/applets',
+};
+
+export const resolveSettingsEntry = (entryId: string): SettingsIndexEntry | undefined => {
+    const resolvedId = SETTINGS_ENTRY_ALIASES[entryId] || entryId;
+    return SETTINGS_INDEX.find((entry) => entry.id === resolvedId);
+};
 
 export const getRecentSettingsEntries = (): SettingsIndexEntry[] => (
     getRecentSettingsIds()

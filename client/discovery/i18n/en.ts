@@ -1789,6 +1789,12 @@ export const en = {
                 system: 'System',
                 logs: 'Logs & Audit',
             },
+            sections: {
+                applets: 'Applets',
+                navigation: 'Navigation',
+                homeModules: 'Home Custom Modules',
+                homeLayout: 'Home Layout',
+            },
             order: {
                 title: 'Navigation Order',
                 description: 'Set separate layouts for admins and members. Drag the handle to reorder, or use the arrows.',
@@ -1824,7 +1830,7 @@ export const en = {
                 featureOff: 'Feature off — enable under Settings → {section}',
             },
             customTabs: {
-                title: 'Custom External Tabs',
+                title: 'Applets',
                 description: 'Add links to external services (game libraries, dashboards, media servers, and more). Use individual sidebar links, or a desktop Applets launcher.',
                 add: 'Add tab',
                 empty: 'No custom tabs yet. Add one to surface external services in the navigation.',
@@ -1881,7 +1887,7 @@ export const en = {
                     blockedHost: 'This site blocks embedding inside other pages.',
                     proxyIncompatible: 'Immich and similar apps cannot load through the portal embed proxy. Use an HTTPS subdomain on your domain (for example https://photos.example.com), not http:// or a local IP.',
                     genericBlocked: 'This page could not be embedded inside the portal.',
-                    useOpenInBrowser: 'Use Open in browser, or change the tab to Open in new tab in Settings → Layout → Custom External Tabs.',
+                    useOpenInBrowser: 'Use Open in browser, or change the tab to Open in new tab in Settings → Layout → Applets.',
                 },
             },
         },

@@ -67,6 +67,7 @@ import { pruneDashboardLayoutCustomModules } from '../shared/homeCustomModules';
 import { DEFAULT_NAV_ORDER, deriveMemberNavOrderFromAdmin, ensureCompleteMemberNavOrder, ensureCompleteNavOrder, normalizeMemberNavHiddenKeys, normalizeNavHiddenKeys, resolveMemberNavOrder } from '../shared/nav';
 import {
     SETTINGS_TAB_GROUPS,
+    SETTINGS_TAB_SECTIONS,
     buildSettingsHash,
     getSettingsSectionElementId,
     parseSettingsHash,
@@ -2526,18 +2527,29 @@ export const SettingsDashboard: React.FC = () => {
                         <label htmlFor="settings-tab-select" className="text-muted text-xs uppercase tracking-wider font-bold mb-2 block">{t('settings.navigation.category')}</label>
                         <CustomSelect
                             id="settings-tab-select"
-                            value={activeTab}
+                            value={activeSectionId && (SETTINGS_TAB_SECTIONS[activeTab] || []).some((section) => section.sectionId === activeSectionId)
+                                ? `${activeTab}/${activeSectionId}`
+                                : activeTab}
                             onChange={(val) => {
                                 const entry = resolveSettingsEntry(val);
                                 if (entry) navigateToSetting(entry);
                             }}
                             options={visibleTabGroups.flatMap((group) => [
                                 { label: t(SETTINGS_GROUP_TRANSLATION_KEYS[group.title] || group.title), value: `__group_${group.title}`, isGroup: true as const },
-                                ...group.tabs.map((tab) => ({
-                                    label: t(SETTINGS_TAB_TRANSLATION_KEYS[tab.id] || tab.label),
-                                    value: tab.id,
-                                    icon: <SettingsTabIcon id={tab.id} />,
-                                })),
+                                ...group.tabs.flatMap((tab) => {
+                                    const sections = SETTINGS_TAB_SECTIONS[tab.id as SettingsTabId] || [];
+                                    return [
+                                        {
+                                            label: t(SETTINGS_TAB_TRANSLATION_KEYS[tab.id] || tab.label),
+                                            value: tab.id,
+                                            icon: <SettingsTabIcon id={tab.id} />,
+                                        },
+                                        ...sections.map((section) => ({
+                                            label: `  ${t(section.translationKey)}`,
+                                            value: `${tab.id}/${section.sectionId}`,
+                                        })),
+                                    ];
+                                }),
                             ])}
                         />
                         </div>
@@ -2554,11 +2566,18 @@ export const SettingsDashboard: React.FC = () => {
                                     <div key={group.title}>
                                         <p className="text-[10px] uppercase tracking-wider font-bold text-plex px-2 mb-0.5">{t(SETTINGS_GROUP_TRANSLATION_KEYS[group.title] || group.title)}</p>
                                         <div className="space-y-0.5">
-                                            {group.tabs.map(tab => (
+                                            {group.tabs.map(tab => {
+                                                const sections = SETTINGS_TAB_SECTIONS[tab.id as SettingsTabId] || [];
+                                                const isChildActive = sections.some((section) => (
+                                                    activeTab === tab.id && activeSectionId === section.sectionId
+                                                ));
+                                                const isTabActive = activeTab === tab.id && !isChildActive;
+                                                return (
+                                                <div key={tab.id}>
                                                 <button
-                                                    key={tab.id}
+                                                    type="button"
                                                     onClick={() => navigateToSetting({ id: tab.id, tabId: tab.id as SettingsTabId, label: tab.label, group: group.title, keywords: tab.keywords || [] })}
-                                                    className={`w-full text-left px-2 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${activeTab === tab.id
+                                                    className={`w-full text-left px-2 py-1.5 rounded-md text-sm font-medium transition-all flex items-center gap-2 ${isTabActive
                                                         ? 'nav-item-active'
                                                         : 'text-muted hover:text-text hover:bg-white/5'
                                                         }`}
@@ -2571,7 +2590,33 @@ export const SettingsDashboard: React.FC = () => {
                                                         ) : null}
                                                     </span>
                                                 </button>
-                                            ))}
+                                                {sections.length > 0 ? (
+                                                    <div className="ml-3 mt-0.5 space-y-0.5 border-l border-border/70 pl-2">
+                                                        {sections.map((section) => {
+                                                            const entryId = `${tab.id}/${section.sectionId}`;
+                                                            const isActive = activeTab === tab.id && activeSectionId === section.sectionId;
+                                                            return (
+                                                                <button
+                                                                    key={entryId}
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        const entry = resolveSettingsEntry(entryId);
+                                                                        if (entry) navigateToSetting(entry);
+                                                                    }}
+                                                                    className={`w-full text-left px-2 py-1 rounded-md text-[13px] font-medium transition-all ${isActive
+                                                                        ? 'nav-item-active'
+                                                                        : 'text-muted hover:text-text hover:bg-white/5'
+                                                                        }`}
+                                                                >
+                                                                    <span className="truncate block">{t(section.translationKey)}</span>
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                ) : null}
+                                                </div>
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 ))}
@@ -4006,7 +4051,7 @@ export const SettingsDashboard: React.FC = () => {
 
                     {activeTab === 'layout' && (
                         <div className="mb-8 space-y-10">
-                            <section id={getSettingsSectionElementId('custom-nav-tabs')} className="scroll-mt-24">
+                            <section id={getSettingsSectionElementId('applets')} className="scroll-mt-24">
                                 <CustomNavTabsSettings
                                     customNavTabs={customNavTabs}
                                     onChange={setCustomNavTabs}
