@@ -1881,6 +1881,8 @@ export const en = {
                     zoomIn: 'Zoom in',
                     zoomOut: 'Zoom out',
                     zoomReset: 'Reset zoom to 100%',
+                    collapseBar: 'Hide toolbar',
+                    expandBar: 'Show toolbar',
                     openInBrowser: 'Open in browser',
                     proxyActive: 'Loading through the portal proxy so HTTP and cross-site apps can embed without extra reverse-proxy setup.',
                     mixedContent: 'Browsers block HTTP pages inside an HTTPS portal (mixed content). Local http:// URLs cannot load inside https://portal pages.',

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ExternalLink, Globe, Minus, Plus, RefreshCw } from 'lucide-react';
+import { ChevronDown, ChevronUp, ExternalLink, Globe, Minus, Plus, RefreshCw } from 'lucide-react';
 import { useDiscoverI18n } from '../discovery/i18n';
 import type { CustomNavTab } from '../shared/types';
 import {
@@ -20,6 +20,7 @@ const ZOOM_MIN = 50;
 const ZOOM_MAX = 200;
 const ZOOM_STEP = 5;
 const ZOOM_DEFAULT = 100;
+const TOOLBAR_STORAGE_KEY = 'portal.embedToolbarCollapsed';
 
 const embedZoomStorageKey = (id: string) => `portal.embedZoom.${id}`;
 
@@ -38,6 +39,14 @@ const readStoredZoom = (id: string) => {
     }
 };
 
+const readToolbarCollapsed = () => {
+    try {
+        return window.localStorage.getItem(TOOLBAR_STORAGE_KEY) === '1';
+    } catch {
+        return false;
+    }
+};
+
 export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = [], isAdmin = false }) => {
     const { t } = useDiscoverI18n();
     const tab = useMemo(
@@ -47,6 +56,7 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = 
     const [iframeKey, setIframeKey] = useState(0);
     const [embedBlocked, setEmbedBlocked] = useState(false);
     const [zoom, setZoom] = useState(ZOOM_DEFAULT);
+    const [toolbarCollapsed, setToolbarCollapsed] = useState(readToolbarCollapsed);
     const resolvedUrl = useMemo(() => normalizeCustomTabEmbedUrl(tab?.url || ''), [tab?.url]);
     const useEmbedProxy = useMemo(
         () => !!(resolvedUrl && shouldUseCustomTabEmbedProxy(resolvedUrl)),
@@ -74,6 +84,15 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = 
         if (!tab?.id) return;
         try {
             window.localStorage.setItem(embedZoomStorageKey(tab.id), String(clamped));
+        } catch {
+            // ignore quota / private mode
+        }
+    };
+
+    const applyToolbarCollapsed = (collapsed: boolean) => {
+        setToolbarCollapsed(collapsed);
+        try {
+            window.localStorage.setItem(TOOLBAR_STORAGE_KEY, collapsed ? '1' : '0');
         } catch {
             // ignore quota / private mode
         }
@@ -120,73 +139,85 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = 
     const scale = zoom / 100;
 
     return (
-        <div className="flex w-full min-h-0 flex-1 flex-col gap-2 md:gap-3">
-            <div className="flex shrink-0 flex-wrap items-start justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-2.5 md:py-3">
-                <div className="min-w-0">
-                    <h1 className="truncate text-lg font-bold text-text">{tab.name}</h1>
-                    {tab.description ? (
-                        <p className="mt-1 max-w-3xl text-sm text-muted">{tab.description}</p>
-                    ) : null}
+        <div className={`flex w-full min-h-0 flex-1 flex-col ${toolbarCollapsed ? 'gap-0' : 'gap-2 md:gap-3'}`}>
+            {toolbarCollapsed ? null : (
+                <div className="flex shrink-0 flex-wrap items-start justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-2.5 md:py-3">
+                    <div className="min-w-0">
+                        <h1 className="truncate text-lg font-bold text-text">{tab.name}</h1>
+                        {tab.description ? (
+                            <p className="mt-1 max-w-3xl text-sm text-muted">{tab.description}</p>
+                        ) : null}
+                    </div>
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
+                        {!predictedEmbedIssue ? (
+                            <>
+                                <div className="inline-flex items-center rounded-xl border border-white/10 bg-black/20">
+                                    <button
+                                        type="button"
+                                        className="inline-flex items-center justify-center rounded-l-xl px-2.5 py-2 text-text hover:bg-white/5 disabled:opacity-40"
+                                        onClick={() => applyZoom(zoom - ZOOM_STEP)}
+                                        disabled={zoom <= ZOOM_MIN}
+                                        aria-label={t('settings.navigation.customTabs.embed.zoomOut')}
+                                        title={t('settings.navigation.customTabs.embed.zoomOut')}
+                                    >
+                                        <Minus className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="min-w-[3.5rem] px-1 py-2 text-center text-xs font-bold tabular-nums text-text hover:bg-white/5"
+                                        onClick={() => applyZoom(ZOOM_DEFAULT)}
+                                        title={t('settings.navigation.customTabs.embed.zoomReset')}
+                                    >
+                                        {zoom}%
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="inline-flex items-center justify-center rounded-r-xl px-2.5 py-2 text-text hover:bg-white/5 disabled:opacity-40"
+                                        onClick={() => applyZoom(zoom + ZOOM_STEP)}
+                                        disabled={zoom >= ZOOM_MAX}
+                                        aria-label={t('settings.navigation.customTabs.embed.zoomIn')}
+                                        title={t('settings.navigation.customTabs.embed.zoomIn')}
+                                    >
+                                        <Plus className="h-4 w-4" />
+                                    </button>
+                                </div>
+                                <button
+                                    type="button"
+                                    className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm font-semibold text-text hover:bg-white/5"
+                                    onClick={() => {
+                                        setEmbedBlocked(false);
+                                        setIframeKey((value) => value + 1);
+                                    }}
+                                >
+                                    <RefreshCw className="h-4 w-4" />
+                                    {t('settings.navigation.customTabs.embed.reload')}
+                                </button>
+                            </>
+                        ) : null}
+                        <a
+                            href={resolvedUrl || tab.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-2 rounded-xl bg-plex px-3 py-2 text-sm font-bold text-background hover:bg-plex-hover"
+                        >
+                            <ExternalLink className="h-4 w-4" />
+                            {t('settings.navigation.customTabs.embed.openInBrowser')}
+                        </a>
+                        <button
+                            type="button"
+                            className="inline-flex items-center justify-center rounded-xl border border-white/10 px-2.5 py-2 text-text hover:bg-white/5"
+                            onClick={() => applyToolbarCollapsed(true)}
+                            aria-expanded={!toolbarCollapsed}
+                            aria-label={t('settings.navigation.customTabs.embed.collapseBar')}
+                            title={t('settings.navigation.customTabs.embed.collapseBar')}
+                        >
+                            <ChevronUp className="h-4 w-4" />
+                        </button>
+                    </div>
                 </div>
-                <div className="flex shrink-0 flex-wrap items-center gap-2">
-                    {!predictedEmbedIssue ? (
-                        <>
-                            <div className="inline-flex items-center rounded-xl border border-white/10 bg-black/20">
-                                <button
-                                    type="button"
-                                    className="inline-flex items-center justify-center rounded-l-xl px-2.5 py-2 text-text hover:bg-white/5 disabled:opacity-40"
-                                    onClick={() => applyZoom(zoom - ZOOM_STEP)}
-                                    disabled={zoom <= ZOOM_MIN}
-                                    aria-label={t('settings.navigation.customTabs.embed.zoomOut')}
-                                    title={t('settings.navigation.customTabs.embed.zoomOut')}
-                                >
-                                    <Minus className="h-4 w-4" />
-                                </button>
-                                <button
-                                    type="button"
-                                    className="min-w-[3.5rem] px-1 py-2 text-center text-xs font-bold tabular-nums text-text hover:bg-white/5"
-                                    onClick={() => applyZoom(ZOOM_DEFAULT)}
-                                    title={t('settings.navigation.customTabs.embed.zoomReset')}
-                                >
-                                    {zoom}%
-                                </button>
-                                <button
-                                    type="button"
-                                    className="inline-flex items-center justify-center rounded-r-xl px-2.5 py-2 text-text hover:bg-white/5 disabled:opacity-40"
-                                    onClick={() => applyZoom(zoom + ZOOM_STEP)}
-                                    disabled={zoom >= ZOOM_MAX}
-                                    aria-label={t('settings.navigation.customTabs.embed.zoomIn')}
-                                    title={t('settings.navigation.customTabs.embed.zoomIn')}
-                                >
-                                    <Plus className="h-4 w-4" />
-                                </button>
-                            </div>
-                            <button
-                                type="button"
-                                className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm font-semibold text-text hover:bg-white/5"
-                                onClick={() => {
-                                    setEmbedBlocked(false);
-                                    setIframeKey((value) => value + 1);
-                                }}
-                            >
-                                <RefreshCw className="h-4 w-4" />
-                                {t('settings.navigation.customTabs.embed.reload')}
-                            </button>
-                        </>
-                    ) : null}
-                    <a
-                        href={resolvedUrl || tab.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-2 rounded-xl bg-plex px-3 py-2 text-sm font-bold text-background hover:bg-plex-hover"
-                    >
-                        <ExternalLink className="h-4 w-4" />
-                        {t('settings.navigation.customTabs.embed.openInBrowser')}
-                    </a>
-                </div>
-            </div>
+            )}
 
-            {useEmbedProxy ? (
+            {!toolbarCollapsed && useEmbedProxy ? (
                 <div className="shrink-0 rounded-xl border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-xs leading-relaxed text-sky-100 md:text-sm">
                     {t('settings.navigation.customTabs.embed.proxyActive')}
                 </div>
@@ -214,7 +245,20 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, customNavTabs = 
                     </a>
                 </div>
             ) : (
-                <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/30">
+                <div className={`relative flex min-h-0 flex-1 flex-col overflow-hidden border border-white/10 bg-black/30 ${toolbarCollapsed ? 'rounded-t-xl rounded-b-none md:rounded-2xl' : 'rounded-2xl'}`}>
+                    {toolbarCollapsed ? (
+                        <button
+                            type="button"
+                            className="absolute left-1/2 top-2 z-10 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/15 bg-black/70 px-3 py-1 text-xs font-semibold text-text shadow-lg backdrop-blur-md hover:bg-black/85"
+                            onClick={() => applyToolbarCollapsed(false)}
+                            aria-expanded={!toolbarCollapsed}
+                            aria-label={t('settings.navigation.customTabs.embed.expandBar')}
+                            title={t('settings.navigation.customTabs.embed.expandBar')}
+                        >
+                            <ChevronDown className="h-3.5 w-3.5" />
+                            <span className="max-w-[10rem] truncate">{tab.name}</span>
+                        </button>
+                    ) : null}
                     <div
                         className="absolute left-0 top-0 origin-top-left"
                         style={{
