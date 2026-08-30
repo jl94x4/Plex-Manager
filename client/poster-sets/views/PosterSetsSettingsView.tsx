@@ -24,6 +24,7 @@ import {
     X,
 } from 'lucide-react';
 import { CustomSelect, SettingsToggleRow } from '../../shared/ui';
+import { StickySaveBar } from '../../shared/StickySaveBar';
 import { BetaBadge, PosterSetsBetaBanner } from '../../shared/BetaBadge';
 import { askConfirm } from '../../shared/confirm';
 import { normalizeUpgraderGridSize } from '../../shared/portalLayout';
@@ -1625,16 +1626,16 @@ export const PosterSetsSettingsView: React.FC = () => {
                         />
                         <span className="mt-1 block text-[11px] text-muted">Default 6. Minimum 1.</span>
                     </label>
-                    <div className="flex flex-wrap gap-2">
-                        <button type="button" className={primaryButtonClass} disabled={busy !== null} onClick={() => void saveSettings()}>
-                            {busy === 'save' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                            Save settings
-                        </button>
+                    <StickySaveBar>
                         <button type="button" className={buttonClass} disabled={busy !== null} onClick={() => void runTest()}>
                             {busy === 'test' ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                             Test connection
                         </button>
-                    </div>
+                        <button type="button" className={primaryButtonClass} disabled={busy !== null} onClick={() => void saveSettings()}>
+                            {busy === 'save' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                            Save settings
+                        </button>
+                    </StickySaveBar>
                     {testResult ? <p className="text-sm text-muted">{testResult}</p> : null}
                 </section>
     

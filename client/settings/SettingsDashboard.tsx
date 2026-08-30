@@ -5,6 +5,7 @@ import {
     ChevronDown,
     Check,
     BookOpen,
+    Save,
     RefreshCw,
     Server,
     Bell,
@@ -37,6 +38,7 @@ import { portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
 import { appConfirm } from '../shared/confirm';
 import { usePoll } from '../shared/usePoll';
 import { CustomSelect, SettingsSwitch, SettingsToggleRow } from '../shared/ui';
+import { StickySaveBar } from '../shared/StickySaveBar';
 import { Loader, ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { SettingHint, SettingFieldLabel } from './SettingHint';
 import type { User, AuditEntry, DeletedUser, PlexServer, ArrInstance, DownloadClientConfig, CustomNavTab, HomeCustomModule } from '../shared/types';
@@ -5877,12 +5879,20 @@ export const SettingsDashboard: React.FC = () => {
                         </div>
                     )}
                         </div>
-                        <div className="flex justify-end gap-4 mt-8 pt-6 border-t border-border/50">
+                        <StickySaveBar flushPanel>
                             <a href="https://jl94x4.github.io/Server-Manager-Portal/" target="_blank" rel="noreferrer" className="w-full sm:w-auto px-6 py-3 bg-border text-text rounded-lg font-bold hover:bg-opacity-80 transition-colors flex items-center justify-center gap-2">
                                 <BookOpen className="w-5 h-5" /> Docs
                             </a>
-                            <button className="w-full sm:w-auto px-6 py-3 bg-plex text-background rounded-lg font-bold hover:bg-plex-hover transition-colors flex items-center justify-center gap-2 shadow-lg shadow-plex/10" onClick={handleSave}>{activeTab === 'stream-rules' ? 'Save Stream Rules' : 'Save Settings'}</button>
-                        </div>
+                            <button
+                                type="button"
+                                className="w-full sm:w-auto px-6 py-3 bg-plex text-background rounded-lg font-bold hover:bg-plex-hover transition-colors flex items-center justify-center gap-2 shadow-lg shadow-plex/10 disabled:opacity-50"
+                                onClick={handleSave}
+                                disabled={isLoading}
+                            >
+                                <Save className="w-5 h-5" />
+                                {activeTab === 'stream-rules' ? 'Save Stream Rules' : 'Save Settings'}
+                            </button>
+                        </StickySaveBar>
                     </div>
                 </div>
             </div>

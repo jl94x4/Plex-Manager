@@ -6,7 +6,7 @@ import { DashboardHero, DashboardPageShell, DashboardPanel } from '../shared/das
 import { pushToast, ToastContainer, type ToastMessage } from '../shared/toast';
 import { subscribeWebPush, unsubscribeWebPush, webPushSupported, getIosWebPushBlockReason, isAndroidDevice, isStandalonePwa, syncExistingWebPushSubscription } from '../shared/webPushSubscribe';
 import { useDiscoverI18n } from '../discovery/i18n';
-import { DiscoverLocaleSelect } from '../discovery/i18n/DiscoverLocaleSelect';
+import { StickySaveBar } from '../shared/StickySaveBar';
 
 type Props = {
     sessionInfo: any;
@@ -774,12 +774,12 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                             </div>
                         </DashboardPanel>
                     )}
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between rounded-2xl border border-white/10 bg-black/25 px-4 py-3">
-                        <p className="text-sm text-muted">
+                    <StickySaveBar>
+                        <p className="mr-auto text-sm text-muted">
                             {dirty ? t('preferencesPage.unsaved') : t('preferencesPage.saveHint')}
                         </p>
                         {renderSaveButton()}
-                    </div>
+                    </StickySaveBar>
                 </div>
             )}
         </DashboardPageShell>

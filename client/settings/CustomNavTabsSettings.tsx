@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react';
 import type { CustomNavDisplay, CustomNavTab } from '../shared/types';
 import {
@@ -53,6 +53,9 @@ export const CustomNavTabsSettings: React.FC<Props> = ({
 }) => {
     const { t } = useDiscoverI18n();
     const [uploadingId, setUploadingId] = useState<string | null>(null);
+    const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
+    const [focusTabId, setFocusTabId] = useState<string | null>(null);
+    const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
     const iconOptions = useMemo(
         () => CUSTOM_NAV_ICON_OPTIONS.map((icon) => ({ value: icon, label: icon })),
         [],
@@ -115,12 +118,30 @@ export const CustomNavTabsSettings: React.FC<Props> = ({
         }
     };
 
+    useEffect(() => {
+        if (!focusTabId) return;
+        const node = cardRefs.current[focusTabId];
+        node?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        setFocusTabId(null);
+    }, [focusTabId, customNavTabs]);
+
+    const toggleExpanded = (id: string) => {
+        setExpandedIds((current) => {
+            const next = new Set(current);
+            if (next.has(id)) next.delete(id);
+            else next.add(id);
+            return next;
+        });
+    };
+
     const addTab = () => {
         const tab = createDefaultCustomNavTab();
         onChange([...customNavTabs, tab]);
         const key = customNavTabKey(tab.id);
         onNavOrderChange(insertNavKeyBefore(navOrder, 'settings', key));
         onMemberNavOrderChange(insertNavKeyBefore(memberNavOrder, 'logout', key));
+        setExpandedIds((current) => new Set(current).add(tab.id));
+        setFocusTabId(tab.id);
     };
 
     const removeTab = (id: string) => {
@@ -191,10 +212,22 @@ export const CustomNavTabsSettings: React.FC<Props> = ({
                 <div className="space-y-4">
                     {customNavTabs.map((tab, index) => {
                         const Icon = resolveCustomNavIcon(tab.icon);
+                        const expanded = expandedIds.has(tab.id);
                         return (
-                            <div key={tab.id} className="rounded-2xl border border-border/70 bg-background/20 p-4">
-                                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-                                    <div className="flex min-w-0 items-center gap-3">
+                            <div
+                                key={tab.id}
+                                ref={(node) => {
+                                    cardRefs.current[tab.id] = node;
+                                }}
+                                className="scroll-mt-24 rounded-2xl border border-border/70 bg-background/20 p-4"
+                            >
+                                <div className="flex flex-wrap items-center justify-between gap-3">
+                                    <button
+                                        type="button"
+                                        className="flex min-w-0 flex-1 items-center gap-3 rounded-xl text-left hover:bg-white/[0.03]"
+                                        onClick={() => toggleExpanded(tab.id)}
+                                        aria-expanded={expanded}
+                                    >
                                         <div className="inline-flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-plex/30 bg-plex/10 text-plex">
                                             {tab.logoUrl ? (
                                                 <img src={resolvePortalAssetUrl(tab.logoUrl)} alt="" className="h-full w-full object-contain p-1" />
@@ -206,7 +239,8 @@ export const CustomNavTabsSettings: React.FC<Props> = ({
                                             <p className="truncate text-sm font-bold text-text">{tab.name || t('settings.navigation.customTabs.untitled')}</p>
                                             <p className="truncate text-xs text-muted">{tab.url}</p>
                                         </div>
-                                    </div>
+                                        <ChevronDown className={`ml-auto h-4 w-4 shrink-0 text-muted transition-transform ${expanded ? 'rotate-180' : ''}`} />
+                                    </button>
                                     <div className="flex items-center gap-1">
                                         <button type="button" className="rounded-lg p-2 text-muted hover:bg-white/5 hover:text-text disabled:opacity-40" disabled={index === 0} onClick={() => moveTab(index, -1)} aria-label="Move up">
                                             <ChevronUp className="h-4 w-4" />
@@ -220,7 +254,9 @@ export const CustomNavTabsSettings: React.FC<Props> = ({
                                     </div>
                                 </div>
 
-                                <div className="grid gap-4 md:grid-cols-2">
+                                {expanded ? (
+                                <>
+                                <div className="mt-4 grid gap-4 md:grid-cols-2">
                                     <label className="block text-sm">
                                         <span className="mb-1 block font-semibold text-text">{t('settings.navigation.customTabs.name')}</span>
                                         <input
@@ -375,6 +411,8 @@ export const CustomNavTabsSettings: React.FC<Props> = ({
                                         border={false}
                                     />
                                 </div>
+                                </>
+                                ) : null}
                             </div>
                         );
                     })}
