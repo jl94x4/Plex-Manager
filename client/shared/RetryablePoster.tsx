@@ -15,6 +15,7 @@ type Props = {
     alt?: string;
     className?: string;
     loading?: 'lazy' | 'eager';
+    fetchPriority?: 'high' | 'low' | 'auto';
     compactPlaceholder?: boolean;
 };
 
@@ -24,6 +25,7 @@ export const RetryablePoster: React.FC<Props> = ({
     alt = '',
     className = 'w-full h-full object-cover',
     loading = 'eager',
+    fetchPriority,
     compactPlaceholder = true,
 }) => {
     const [attempt, setAttempt] = useState(0);
@@ -50,6 +52,7 @@ export const RetryablePoster: React.FC<Props> = ({
             src={currentSrc}
             alt={alt}
             loading={loading}
+            {...(fetchPriority ? { fetchPriority } : {})}
             decoding="async"
             className={className}
             onError={() => {

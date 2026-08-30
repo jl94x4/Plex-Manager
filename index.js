@@ -116,7 +116,13 @@ import {
     isPortalEmbedProxyPath,
     parseEmbedProxyFromReferer,
 } from './lib/custom-tab-embed-proxy.js';
-import { discardFetchBody, pipeFetchBodyToResponse, sendFetchImage } from './lib/fetch-body.js';
+import { bufferFetchImage, discardFetchBody, pipeFetchBodyToResponse, sendFetchImage, sendImageBuffer } from './lib/fetch-body.js';
+import {
+    collectDashboardImageJobs,
+    getOrFetchMediaImage,
+    mediaImageCacheKey,
+    scheduleDashboardImageWarm,
+} from './lib/media-image-cache.js';
 import { shouldSkipGzipForUrl } from './lib/skip-gzip.js';
 import {
     applySpotifyToPlexDefaults,
@@ -7987,6 +7993,78 @@ const isSafePlexMediaPath = (rawPath) => {
     return true;
 };
 
+const fetchPlexPosterBuffer = async (config, thumbPath, width, height) => {
+    const fetchPoster = async () => {
+        const uri = await getPlexConnectionUri(config);
+        const url = `${uri}/photo/:/transcode?url=${encodeURIComponent(thumbPath)}&width=${encodeURIComponent(width)}&height=${encodeURIComponent(height)}&minSize=1&X-Plex-Token=${config.plexToken}`;
+        return fetchWithTimeout(url, { headers: plexClientHeaders(config.plexToken) }, 15000);
+    };
+    let response = null;
+    try {
+        response = await fetchPoster();
+    } catch {
+        response = null;
+    }
+    if (!response?.ok) {
+        if (response) discardFetchBody(response);
+        try {
+            response = await fetchPoster();
+        } catch {
+            return null;
+        }
+    }
+    return bufferFetchImage(response);
+};
+
+const fetchJellyfinPosterBuffer = async (config, itemId, width, height) => {
+    if (!isJellyfinConfigured(config)) return null;
+    const baseUrl = resolveIntegrationUrlForFetch(config.jellyfinUrl);
+    const imageUrl = `${baseUrl}/Items/${encodeURIComponent(itemId)}/Images/Primary?fillWidth=${width}&fillHeight=${height}&quality=90`;
+    const fetchPoster = () => fetchWithTimeout(imageUrl, {
+        headers: jellyfinHeaders(config.jellyfinApiKey),
+    }, 15000);
+    let response = null;
+    try {
+        response = await fetchPoster();
+    } catch {
+        response = null;
+    }
+    if (!response?.ok) {
+        if (response) discardFetchBody(response);
+        try {
+            response = await fetchPoster();
+        } catch {
+            return null;
+        }
+    }
+    return bufferFetchImage(response);
+};
+
+const serveMediaImage = async (res, key, fetchBuffer, failImage) => {
+    try {
+        const result = await getOrFetchMediaImage(key, fetchBuffer);
+        if (!result?.body?.length) return failImage(500);
+        sendImageBuffer(res, result, {
+            cacheControl: 'private, max-age=86400',
+            cacheStatus: result.cacheStatus,
+        });
+    } catch {
+        failImage(500);
+    }
+};
+
+const scheduleWarmDashboardCovers = (config, lists, source) => {
+    const jobs = collectDashboardImageJobs({ source, ...lists });
+    if (!jobs.length) return;
+    scheduleDashboardImageWarm(jobs, (job) => {
+        if (job.source === 'jellyfin') {
+            return fetchJellyfinPosterBuffer(config, job.id, job.width, job.height);
+        }
+        if (!isSafePlexMediaPath(job.id)) return null;
+        return fetchPlexPosterBuffer(config, job.id, job.width, job.height);
+    });
+};
+
 app.get('/api/plex/image', requireAuth, requireMember, async (req, res) => {
     const { path: thumbPath, width, height } = req.query;
     if (!thumbPath) return res.status(400).send('path required');
@@ -8006,26 +8084,18 @@ app.get('/api/plex/image', requireAuth, requireMember, async (req, res) => {
         const config = await loadFile(CONFIG_PATH, {});
         const transcodeWidth = Math.min(Math.max(parseInt(width, 10) || PLEX_POSTER_WIDTH, 16), 1200);
         const transcodeHeight = Math.min(Math.max(parseInt(height, 10) || PLEX_POSTER_HEIGHT, 16), 1800);
-        const fetchPoster = async () => {
-            const uri = await getPlexConnectionUri(config);
-            const url = `${uri}/photo/:/transcode?url=${encodeURIComponent(thumbPath)}&width=${encodeURIComponent(transcodeWidth)}&height=${encodeURIComponent(transcodeHeight)}&minSize=1&X-Plex-Token=${config.plexToken}`;
-            return fetchWithTimeout(url, { headers: plexClientHeaders(config.plexToken) }, 15000);
-        };
-        let response = null;
-        try {
-            response = await fetchPoster();
-        } catch {
-            response = null;
-        }
-        if (!response?.ok) {
-            if (response) discardFetchBody(response);
-            try {
-                response = await fetchPoster();
-            } catch {
-                return failImage(500);
-            }
-        }
-        await sendFetchImage(res, response);
+        const key = mediaImageCacheKey({
+            source: 'plex',
+            id: String(thumbPath),
+            width: transcodeWidth,
+            height: transcodeHeight,
+        });
+        await serveMediaImage(
+            res,
+            key,
+            () => fetchPlexPosterBuffer(config, thumbPath, transcodeWidth, transcodeHeight),
+            failImage,
+        );
     } catch (e) {
         failImage(500);
     }
@@ -15350,6 +15420,7 @@ app.get('/api/plex/dashboard', requireAuth, requireMember, async (req, res) => {
         }
 
         res.json({ activeSessions, recentMovies, recentShows, recentMusic });
+        scheduleWarmDashboardCovers(config, { recentMovies, recentShows, recentMusic }, 'plex');
     } catch (e) {
         log(`Error fetching Plex dashboard: ${e.message}`);
         res.status(500).json({ error: 'Failed to fetch dashboard data' });
@@ -15755,20 +15826,31 @@ app.get('/api/jellyfin/image', requireAuth, requireMember, async (req, res) => {
     const width = Math.min(Math.max(parseInt(req.query.width, 10) || 300, 64), 1200);
     const height = Math.min(Math.max(parseInt(req.query.height, 10) || 450, 64), 1600);
     if (!itemId || !/^[A-Za-z0-9_-]+$/.test(itemId)) return res.status(400).send('Invalid itemId');
+    const failImage = (status = 500) => {
+        if (res.headersSent) {
+            if (!res.writableEnded) res.destroy();
+            return;
+        }
+        res.setHeader('Cache-Control', 'no-store');
+        res.status(status).send('');
+    };
     try {
         const config = await loadFile(CONFIG_PATH, {});
-        if (!isJellyfinConfigured(config)) return res.status(503).send('');
-        const baseUrl = resolveIntegrationUrlForFetch(config.jellyfinUrl);
-        const imageUrl = `${baseUrl}/Items/${encodeURIComponent(itemId)}/Images/Primary?fillWidth=${width}&fillHeight=${height}&quality=90`;
-        const response = await fetchWithTimeout(imageUrl, {
-            headers: jellyfinHeaders(config.jellyfinApiKey),
-        }, 15000);
-        if (!response.ok) {
-            log(`Jellyfin image ${itemId} returned HTTP ${response.status}`);
-        }
-        await sendFetchImage(res, response);
+        if (!isJellyfinConfigured(config)) return failImage(503);
+        const key = mediaImageCacheKey({
+            source: 'jellyfin',
+            id: itemId,
+            width,
+            height,
+        });
+        await serveMediaImage(
+            res,
+            key,
+            () => fetchJellyfinPosterBuffer(config, itemId, width, height),
+            failImage,
+        );
     } catch (e) {
-        res.status(500).send('');
+        failImage(500);
     }
 });
 
@@ -15919,12 +16001,17 @@ app.get('/api/jellyfin/dashboard', requireAuth, requireMember, async (req, res) 
             resolveUrl: resolveIntegrationUrlForFetch,
         });
 
+        const recentMovies = movies.map((item) => mapJellyfinItemForDiscover(config, item, 'movie'));
+        const recentShows = episodes.map((item) => mapJellyfinItemForDiscover(config, item, 'episode'));
+        const recentMusic = music.map((item) => mapJellyfinItemForDiscover(config, item, 'music'));
+
         res.json({
             activeSessions,
-            recentMovies: movies.map((item) => mapJellyfinItemForDiscover(config, item, 'movie')),
-            recentShows: episodes.map((item) => mapJellyfinItemForDiscover(config, item, 'episode')),
-            recentMusic: music.map((item) => mapJellyfinItemForDiscover(config, item, 'music')),
+            recentMovies,
+            recentShows,
+            recentMusic,
         });
+        scheduleWarmDashboardCovers(config, { recentMovies, recentShows, recentMusic }, 'jellyfin');
     } catch (e) {
         log(`Error fetching Jellyfin dashboard: ${e.message}`);
         res.status(500).json({ error: 'Failed to fetch Jellyfin dashboard data' });

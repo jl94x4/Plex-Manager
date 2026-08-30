@@ -124,6 +124,8 @@ type PosterCardProps = {
     className?: string;
     footer?: React.ReactNode;
     showQualityBadges?: boolean;
+    loading?: 'lazy' | 'eager';
+    fetchPriority?: 'high' | 'low' | 'auto';
 };
 
 export type UserDashboardWidgetDeps = {
@@ -912,6 +914,8 @@ export const createRecentlyAddedWidgetRenderer = (deps: UserDashboardWidgetDeps)
                                 className="snap-start shrink-0 w-32 md:w-40"
                                 item={item}
                                 showQualityBadges={showQualityBadges}
+                                loading={idx < 12 ? 'eager' : 'lazy'}
+                                fetchPriority={idx < 4 ? 'high' : 'auto'}
                                 footer={(
                                     <div className="flex flex-col px-1">
                                         <p className="text-xs font-bold text-text truncate group-hover:text-plex transition-colors">{item.title}</p>
@@ -935,6 +939,8 @@ export const createRecentlyAddedWidgetRenderer = (deps: UserDashboardWidgetDeps)
                                 className="snap-start shrink-0 w-32 md:w-40"
                                 item={item}
                                 showQualityBadges={showQualityBadges}
+                                loading={idx < 12 ? 'eager' : 'lazy'}
+                                fetchPriority={idx < 4 ? 'high' : 'auto'}
                                 footer={(
                                     <div className="flex flex-col px-1">
                                         <p className="text-xs font-bold text-text truncate group-hover:text-plex transition-colors">{item.title}</p>
@@ -959,6 +965,8 @@ export const createRecentlyAddedWidgetRenderer = (deps: UserDashboardWidgetDeps)
                                 className="snap-start shrink-0 w-32 md:w-40"
                                 item={item}
                                 showQualityBadges={showQualityBadges}
+                                loading={idx < 12 ? 'eager' : 'lazy'}
+                                fetchPriority={idx < 4 ? 'high' : 'auto'}
                                 footer={(
                                     <div className="flex flex-col px-1">
                                         <p className="text-xs font-bold text-text truncate group-hover:text-plex transition-colors">{item.title}</p>

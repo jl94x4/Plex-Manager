@@ -7049,7 +7049,9 @@ export const DiscoverPosterCard: React.FC<{
     }>;
     posterWidth?: number;
     posterHeight?: number;
-}> = ({ item, aspect, overlay, variant = 'discover', className = 'w-full', footer, showQualityBadges = true, posterOnlyLink = false, onPosterClick, onPosterHover, quickActions, posterWidth = 300, posterHeight }) => {
+    loading?: 'lazy' | 'eager';
+    fetchPriority?: 'high' | 'low' | 'auto';
+}> = ({ item, aspect, overlay, variant = 'discover', className = 'w-full', footer, showQualityBadges = true, posterOnlyLink = false, onPosterClick, onPosterHover, quickActions, posterWidth = 300, posterHeight, loading, fetchPriority }) => {
     const { t } = useDiscoverI18n();
     const resolvedAspect = aspect ?? (
         item?.mediaType === 'music' || item?.type === 'music' ? 'square' : '2/3'
@@ -7099,7 +7101,8 @@ export const DiscoverPosterCard: React.FC<{
                     src={primaryPosterSrc}
                     fallbackSrc={fallbackPosterSrc}
                     alt={item.title}
-                    loading="lazy"
+                    loading={loading ?? (variant === 'home' ? 'eager' : 'lazy')}
+                    fetchPriority={fetchPriority}
                     compactPlaceholder={false}
                     className={`w-full h-full object-cover ${variant === 'home' ? 'transition-[transform,opacity] duration-300 group-hover:scale-105 group-hover:opacity-80' : ''}`}
                 />
