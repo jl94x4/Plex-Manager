@@ -966,7 +966,7 @@ const PlaylistsPanel: React.FC<{
                                 Sync to Plex
                             </button>
                         </div>
-                        <p className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[11px] text-muted">
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-[11px] text-muted">
                             <span>
                                 {selectedPlaylists.length} selected · {filteredAccount.length
                                     ? `${((safeAccountPage - 1) * accountPageSize) + 1}–${Math.min(filteredAccount.length, safeAccountPage * accountPageSize)} of ${filteredAccount.length}`
@@ -986,7 +986,7 @@ const PlaylistsPanel: React.FC<{
                                 )}
                                 options={ACCOUNT_PAGE_SIZES.map((size) => ({ value: size, label: `${size} per page` }))}
                             />
-                        </p>
+                        </div>
                         {accountLoading ? (
                             <p className="text-sm text-muted">Loading playlists and albums from Spotify…</p>
                         ) : filteredAccount.length === 0 ? (

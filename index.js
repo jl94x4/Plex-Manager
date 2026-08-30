@@ -26781,7 +26781,7 @@ app.get('/api/spotify-to-plex/search-playlists', requireAdmin, requireSpotifyToP
             clientSecret,
             fetchImpl: (url, opts) => fetchWithTimeout(url, opts, 20000),
         });
-        const raw = await web.searchPlaylists(query, { limit: 20 });
+        const raw = await web.searchPlaylists(query);
         let saved = [];
         try {
             saved = await fetchSpotifyToPlexJson({
