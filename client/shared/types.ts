@@ -178,6 +178,8 @@ export interface AppSettings {
     memberNavHiddenKeys?: string[];
     /** Admin-defined external service tabs shown in the sidebar. */
     customNavTabs?: CustomNavTab[];
+    /** Desktop launcher vs individual custom-tab links. */
+    customNavDisplay?: CustomNavDisplay;
     /** Admin-defined custom HTML / iframe modules for the home dashboard. */
     homeCustomModules?: HomeCustomModule[];
 }
@@ -197,6 +199,7 @@ export interface HomeCustomModule {
 }
 
 export type CustomNavTabOpenMode = 'embed' | 'sameTab' | 'newTab';
+export type CustomNavDisplay = 'links' | 'applets';
 
 export interface CustomNavTab {
     id: string;
@@ -207,6 +210,10 @@ export interface CustomNavTab {
     openMode: CustomNavTabOpenMode;
     adminOnly?: boolean;
     enabled: boolean;
+    /** Optional image URL or uploaded `/api/branding/custom-tab/:id` path. */
+    logoUrl?: string;
+    /** Show the tab name under the Applets palette icon. Default true. */
+    showPaletteLabel?: boolean;
 }
 
 export interface PlexServer {

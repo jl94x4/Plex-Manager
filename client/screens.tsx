@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react';
 import ReactDOM from 'react-dom';
-import { Home, Film, Activity, Sparkles, LogOut, Settings, FileText, BarChart3, Users, PlaySquare, TrendingUp, X, Star, Layers, HardDrive, Calendar, Tv, Clock, DownloadCloud, MonitorSmartphone, Copy, ChevronUp, ChevronDown, List, Palette, Music, Play, Pause, Upload, Shield, CheckCircle, AlertCircle, RefreshCw, ChevronLeft, ChevronRight, Trophy, PlayCircle, Coffee, Compass, PieChart, Clapperboard, AlertTriangle, Check, Cpu, Monitor, LineChart as LucideLineChart, Share2, Search, BookOpen, Loader2, Eye, EyeOff, ClipboardList, ArrowUpCircle, MoreHorizontal, ExternalLink, Info, GitFork, MapPin, Radar, Image as ImageIcon, SlidersHorizontal, LifeBuoy, MessageSquare, User, Mail } from 'lucide-react';
+import { Home, Film, Activity, Sparkles, LogOut, Settings, FileText, BarChart3, Users, PlaySquare, TrendingUp, X, Star, Layers, HardDrive, Calendar, Tv, Clock, DownloadCloud, MonitorSmartphone, Copy, ChevronUp, ChevronDown, List, Palette, Music, Play, Pause, Upload, Shield, CheckCircle, AlertCircle, RefreshCw, ChevronLeft, ChevronRight, Trophy, PlayCircle, Coffee, Compass, PieChart, Clapperboard, AlertTriangle, Check, Cpu, Monitor, LineChart as LucideLineChart, Share2, Search, BookOpen, Loader2, Eye, EyeOff, ClipboardList, ArrowUpCircle, MoreHorizontal, ExternalLink, Info, GitFork, MapPin, Radar, Image as ImageIcon, SlidersHorizontal, LifeBuoy, MessageSquare, User, Mail, AppWindow } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, PieChart as RechartsPieChart, Pie, Cell } from 'recharts';
 
 import { SettingsDashboard } from './settings/SettingsDashboard';
@@ -48,7 +48,8 @@ import { BetaBadge } from './shared/BetaBadge';
 import { DiscoverNowPlayingStrip } from './discovery/DiscoverNowPlayingStrip';
 import { useNowPlaying } from './shared/useNowPlaying';
 import { filterNavOrder, ensureCompleteNavOrder, resolveMemberNavOrder, MOBILE_NAV_PRIMARY_SLOTS, type NavFeatureFlags } from './shared/nav';
-import { customNavTabKey, resolveCustomNavIcon } from './shared/customNavTabs';
+import { customNavTabKey, resolveCustomNavIcon, APPLETS_NAV_KEY, buildDesktopNavOrder, canAccessCustomNavTab } from './shared/customNavTabs';
+import { AppletsPalette } from './shared/AppletsPalette';
 import type { CustomNavTab } from './shared/types';
 import { isFirefoxMobileClient, useFirefoxMobileNavShell } from './shared/useFirefoxMobileNavShell';
 import { ProfileBadgeRack, AchievementsHomeWidget } from './achievements/AchievementsDashboard';
@@ -12289,6 +12290,12 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     }, [mobileThemeOpen]);
 
     const customNavTabs: CustomNavTab[] = Array.isArray(sessionInfo?.customNavTabs) ? sessionInfo.customNavTabs : [];
+    const [appletsOpen, setAppletsOpen] = useState(false);
+    const appletsButtonRef = useRef<HTMLButtonElement>(null);
+
+    useEffect(() => {
+        setAppletsOpen(false);
+    }, [currentRoute, externalTabId]);
 
     const navItemsConfig: Record<string, { label: string; icon: React.FC<any>; route: string; adminOnly: boolean; beta?: boolean; href?: string; onClick?: (e: any) => void; customTabId?: string }> = useMemo(() => {
         const config: Record<string, { label: string; icon: React.FC<any>; route: string; adminOnly: boolean; beta?: boolean; href?: string; onClick?: (e: any) => void; customTabId?: string }> = {
@@ -12360,6 +12367,19 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         return filterNavOrder(order, { isAdmin, features: navFeatures, hiddenKeys, customTabs: customNavTabs });
     }, [navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, isAdmin, navFeatures, customNavTabs]);
 
+    const visibleApplets = useMemo(
+        () => customNavTabs.filter((tab) => (
+            canAccessCustomNavTab(tab, isAdmin)
+            && normalizedNavOrder.includes(customNavTabKey(tab.id))
+        )),
+        [customNavTabs, isAdmin, normalizedNavOrder],
+    );
+
+    const desktopNavOrder = useMemo(() => buildDesktopNavOrder(normalizedNavOrder, {
+        display: sessionInfo?.customNavDisplay,
+        hasVisibleApplets: visibleApplets.length > 0,
+    }), [normalizedNavOrder, sessionInfo?.customNavDisplay, visibleApplets.length]);
+
     const isNavCurrent = (key: string, route: string, customTabId?: string) => {
         if (customTabId) return currentRoute === 'external' && externalTabId === customTabId;
         return ['admin', 'user'].includes(currentRoute) && key === 'home' ? true : currentRoute === route;
@@ -12386,8 +12406,8 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     const [navListLayoutTick, setNavListLayoutTick] = useState(0);
 
     const desktopNavKeySignature = useMemo(() => (
-        normalizedNavOrder.filter((key) => key !== 'logs').join('|')
-    ), [normalizedNavOrder]);
+        desktopNavOrder.join('|')
+    ), [desktopNavOrder]);
 
     /** Nav link styles — stay readable; logo steps first, then these three. */
     const DESKTOP_NAV_STYLES = [
@@ -12756,7 +12776,46 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                     className={`sidebar-nav-scroll flex flex-col justify-start min-h-0 flex-1 ${navStyleIndex > 0 ? 'gap-0' : 'gap-0.5'} py-0.5`}
                     data-nav-density={compressStep}
                 >
-                    {normalizedNavOrder.map((key) => {
+                    {desktopNavOrder.map((key) => {
+                        if (key === APPLETS_NAV_KEY) {
+                            const isCurrent = currentRoute === 'external'
+                                && visibleApplets.some((tab) => tab.id === externalTabId);
+                            const desktopDensity = desktopNavDensity;
+                            return (
+                                <React.Fragment key={key}>
+                                    <button
+                                        ref={appletsButtonRef}
+                                        type="button"
+                                        className={`flex flex-1 w-full max-h-11 items-center ${desktopDensity?.gap || 'gap-2.5'} ${desktopDensity?.px || 'px-3'} ${desktopDensity?.py || 'py-1'} bg-transparent border-0 cursor-pointer no-underline rounded-lg transition-colors ${desktopDensity?.text || 'text-[15px]'} font-medium ${isCurrent || appletsOpen ? 'nav-item-active' : 'text-muted hover:bg-white/5 hover:text-text'}`}
+                                        onClick={() => setAppletsOpen((open) => !open)}
+                                        aria-expanded={appletsOpen}
+                                        aria-haspopup="dialog"
+                                    >
+                                        <AppWindow className={`${desktopDensity?.icon || 'w-5 h-5'} flex-shrink-0`} />
+                                        <span className="truncate">{t('navigation.applets')}</span>
+                                    </button>
+                                    {appletsOpen ? (
+                                        <AppletsPalette
+                                            tabs={visibleApplets}
+                                            anchorRef={appletsButtonRef}
+                                            onClose={() => setAppletsOpen(false)}
+                                            onActivate={(tab) => {
+                                                setAppletsOpen(false);
+                                                if (tab.openMode === 'embed') {
+                                                    onNavigate('external', { path: `/external/${encodeURIComponent(tab.id)}` });
+                                                    return;
+                                                }
+                                                if (tab.openMode === 'newTab') {
+                                                    window.open(tab.url, '_blank', 'noopener,noreferrer');
+                                                    return;
+                                                }
+                                                window.location.href = tab.url;
+                                            }}
+                                        />
+                                    ) : null}
+                                </React.Fragment>
+                            );
+                        }
                         const item = navItemsConfig[key];
                         if (!item) return null;
                         if (key === 'logs') return null;

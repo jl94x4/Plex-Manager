@@ -9,7 +9,7 @@ import {
     normalizeNavHiddenKeys,
 } from '../shared/nav';
 import { getCustomNavTabLabel } from '../shared/customNavTabs';
-import type { CustomNavTab } from '../shared/types';
+import type { CustomNavDisplay, CustomNavTab } from '../shared/types';
 import { useDiscoverI18n } from '../discovery/i18n';
 import { SettingsToggleRow } from '../shared/ui';
 import { SettingHint } from './SettingHint';
@@ -43,6 +43,7 @@ type Props = {
     /** When false, sidebar still hides these until enabled in their Settings section. */
     featureStatus?: NavFeatureStatus;
     customNavTabs?: CustomNavTab[];
+    customNavDisplay?: CustomNavDisplay;
 };
 
 const FEATURE_OFF_SECTIONS: Record<string, string> = {
@@ -451,6 +452,7 @@ export const NavigationOrderSettings: React.FC<Props> = ({
     onDownloadsVisibleToMembersChange,
     featureStatus,
     customNavTabs = [],
+    customNavDisplay = 'links',
 }) => {
     const { t } = useDiscoverI18n();
     const labelForKey = (key: string, options?: { adminSuffix?: boolean; downloadsMembersVisible?: boolean }) => {
@@ -479,6 +481,11 @@ export const NavigationOrderSettings: React.FC<Props> = ({
         <p className="mb-4 max-w-3xl text-xs text-muted">
             {t('settings.navigation.order.audienceHint')}
         </p>
+        {customNavDisplay === 'applets' ? (
+            <p className="mb-4 max-w-3xl text-xs text-muted">
+                {t('settings.navigation.order.appletsOrderHint')}
+            </p>
+        ) : null}
 
         <div className="mb-6 max-w-xl rounded-xl border border-border/70 bg-background/30 p-4">
             <SettingsToggleRow

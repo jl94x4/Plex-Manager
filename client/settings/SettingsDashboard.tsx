@@ -849,6 +849,7 @@ export const SettingsDashboard: React.FC = () => {
     const [memberNavOrder, setMemberNavOrder] = useState<string[]>(() => deriveMemberNavOrderFromAdmin([...DEFAULT_NAV_ORDER]));
     const [memberNavHiddenKeys, setMemberNavHiddenKeys] = useState<string[]>([]);
     const [customNavTabs, setCustomNavTabs] = useState<CustomNavTab[]>([]);
+    const [customNavDisplay, setCustomNavDisplay] = useState<'links' | 'applets'>('links');
     const [homeCustomModules, setHomeCustomModules] = useState<HomeCustomModule[]>([]);
     const [downloadsVisibleToMembers, setDownloadsVisibleToMembers] = useState(true);
     const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -1592,6 +1593,7 @@ export const SettingsDashboard: React.FC = () => {
             setMemberNavOrder(resolveMemberNavOrder(initialSettings.memberNavOrder, initialSettings.navOrder, initialSettings.customNavTabs));
             setMemberNavHiddenKeys(normalizeMemberNavHiddenKeys(initialSettings.memberNavHiddenKeys, initialSettings.customNavTabs));
             if (Array.isArray(initialSettings.customNavTabs)) setCustomNavTabs(initialSettings.customNavTabs);
+            setCustomNavDisplay(initialSettings.customNavDisplay === 'applets' ? 'applets' : 'links');
             if (Array.isArray(initialSettings.homeCustomModules)) setHomeCustomModules(initialSettings.homeCustomModules);
             if (initialSettings.downloadsVisibleToMembers !== undefined) {
                 setDownloadsVisibleToMembers(!!initialSettings.downloadsVisibleToMembers);
@@ -2234,6 +2236,7 @@ export const SettingsDashboard: React.FC = () => {
             memberNavOrder: ensureCompleteMemberNavOrder(memberNavOrder, customNavTabs),
             memberNavHiddenKeys: normalizeMemberNavHiddenKeys(memberNavHiddenKeys, customNavTabs),
             customNavTabs,
+            customNavDisplay,
             homeCustomModules,
             downloadsVisibleToMembers,
             hideStreamUsers,
@@ -4005,6 +4008,8 @@ export const SettingsDashboard: React.FC = () => {
                                 <CustomNavTabsSettings
                                     customNavTabs={customNavTabs}
                                     onChange={setCustomNavTabs}
+                                    customNavDisplay={customNavDisplay}
+                                    onDisplayChange={setCustomNavDisplay}
                                     navOrder={navOrder}
                                     onNavOrderChange={setNavOrder}
                                     memberNavOrder={memberNavOrder}
@@ -4024,6 +4029,7 @@ export const SettingsDashboard: React.FC = () => {
                                     downloadsVisibleToMembers={downloadsVisibleToMembers}
                                     onDownloadsVisibleToMembersChange={setDownloadsVisibleToMembers}
                                     customNavTabs={customNavTabs}
+                                    customNavDisplay={customNavDisplay}
                                     featureStatus={{
                                         upgrader: upgraderEnabled,
                                         collexions: collexionsEnabled,

@@ -1,10 +1,11 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ChevronDown, ChevronUp, Plus, Trash2 } from 'lucide-react';
-import type { CustomNavTab } from '../shared/types';
+import type { CustomNavDisplay, CustomNavTab } from '../shared/types';
 import {
     CUSTOM_NAV_ICON_OPTIONS,
     createDefaultCustomNavTab,
     customNavTabKey,
+    customTabLogoPublicPath,
     detectCustomTabEmbedIssue,
     insertNavKeyBefore,
     removeNavKey,
@@ -14,10 +15,14 @@ import {
 import { CustomSelect, SettingsToggleRow } from '../shared/ui';
 import { SettingHint } from './SettingHint';
 import { useDiscoverI18n } from '../discovery/i18n';
+import { portalUrl, resolvePortalAssetUrl } from '../shared/basePath';
+import { PORTAL_CSRF_HEADER, PORTAL_CSRF_VALUE } from '../shared/api';
 
 type Props = {
     customNavTabs: CustomNavTab[];
     onChange: (next: CustomNavTab[]) => void;
+    customNavDisplay: CustomNavDisplay;
+    onDisplayChange: (next: CustomNavDisplay) => void;
     navOrder: string[];
     onNavOrderChange: (next: string[]) => void;
     memberNavOrder: string[];
@@ -33,12 +38,15 @@ const OPEN_MODE_OPTIONS = [
 export const CustomNavTabsSettings: React.FC<Props> = ({
     customNavTabs,
     onChange,
+    customNavDisplay,
+    onDisplayChange,
     navOrder,
     onNavOrderChange,
     memberNavOrder,
     onMemberNavOrderChange,
 }) => {
     const { t } = useDiscoverI18n();
+    const [uploadingId, setUploadingId] = useState<string | null>(null);
     const iconOptions = useMemo(
         () => CUSTOM_NAV_ICON_OPTIONS.map((icon) => ({ value: icon, label: icon })),
         [],
@@ -56,6 +64,31 @@ export const CustomNavTabsSettings: React.FC<Props> = ({
             onMemberNavOrderChange(removeNavKey(memberNavOrder, key));
         } else if (!memberNavOrder.includes(key)) {
             onMemberNavOrderChange(insertNavKeyBefore(memberNavOrder, 'logout', key));
+        }
+    };
+
+    const uploadLogo = async (id: string, file: File) => {
+        setUploadingId(id);
+        try {
+            const response = await fetch(portalUrl(`/api/config/custom-tab-logo/${encodeURIComponent(id)}`), {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': file.type || (file.name.toLowerCase().endsWith('.png') ? 'image/png' : (file.name.toLowerCase().endsWith('.webp') ? 'image/webp' : 'image/jpeg')),
+                    [PORTAL_CSRF_HEADER]: PORTAL_CSRF_VALUE,
+                },
+                body: file,
+            });
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({ error: 'Failed to upload logo' }));
+                throw new Error(errorData.error || 'Failed to upload logo');
+            }
+            const result = await response.json().catch(() => ({}));
+            updateTab(id, { logoUrl: result.logoUrl || customTabLogoPublicPath(id) });
+        } catch {
+            // keep the previous logo if upload fails
+        } finally {
+            setUploadingId(null);
         }
     };
 
@@ -108,6 +141,25 @@ export const CustomNavTabsSettings: React.FC<Props> = ({
                 </button>
             </div>
 
+            <div className="mb-6 rounded-2xl border border-border/70 bg-background/20 p-4">
+                <label className="block max-w-xl text-sm">
+                    <span className="mb-1 block font-semibold text-text">{t('settings.navigation.customTabs.displayMode.label')}</span>
+                    <CustomSelect
+                        value={customNavDisplay}
+                        onChange={(value) => onDisplayChange(value === 'applets' ? 'applets' : 'links')}
+                        options={[
+                            { value: 'links', label: t('settings.navigation.customTabs.displayMode.links') },
+                            { value: 'applets', label: t('settings.navigation.customTabs.displayMode.applets') },
+                        ]}
+                    />
+                    <SettingHint>
+                        {customNavDisplay === 'applets'
+                            ? t('settings.navigation.customTabs.displayMode.appletsHint')
+                            : t('settings.navigation.customTabs.displayMode.linksHint')}
+                    </SettingHint>
+                </label>
+            </div>
+
             {!customNavTabs.length ? (
                 <div className="rounded-2xl border border-dashed border-border/70 bg-background/20 px-4 py-8 text-center text-sm text-muted">
                     {t('settings.navigation.customTabs.empty')}
@@ -120,8 +172,12 @@ export const CustomNavTabsSettings: React.FC<Props> = ({
                             <div key={tab.id} className="rounded-2xl border border-border/70 bg-background/20 p-4">
                                 <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                                     <div className="flex min-w-0 items-center gap-3">
-                                        <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-plex/30 bg-plex/10 text-plex">
-                                            <Icon className="h-5 w-5" />
+                                        <div className="inline-flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-plex/30 bg-plex/10 text-plex">
+                                            {tab.logoUrl ? (
+                                                <img src={resolvePortalAssetUrl(tab.logoUrl)} alt="" className="h-full w-full object-contain p-1" />
+                                            ) : (
+                                                <Icon className="h-5 w-5" />
+                                            )}
                                         </div>
                                         <div className="min-w-0">
                                             <p className="truncate text-sm font-bold text-text">{tab.name || t('settings.navigation.customTabs.untitled')}</p>
@@ -178,6 +234,42 @@ export const CustomNavTabsSettings: React.FC<Props> = ({
                                         />
                                     </label>
                                     <label className="block text-sm">
+                                        <span className="mb-1 block font-semibold text-text">{t('settings.navigation.customTabs.logo')}</span>
+                                        <input
+                                            className="appearance-none text-[16px] leading-5 w-full rounded-xl border border-border bg-background px-3 py-2 text-[16px] text-text outline-none focus:border-plex"
+                                            value={tab.logoUrl || ''}
+                                            onChange={(event) => updateTab(tab.id, { logoUrl: event.target.value })}
+                                            placeholder="https://example.com/radarr.png"
+                                        />
+                                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                                            <label className="inline-flex cursor-pointer items-center rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted hover:border-plex/40 hover:text-text">
+                                                {uploadingId === tab.id
+                                                    ? t('settings.navigation.customTabs.logoUploading')
+                                                    : t('settings.navigation.customTabs.logoUpload')}
+                                                <input
+                                                    type="file"
+                                                    accept="image/png,image/jpeg,image/webp"
+                                                    className="hidden"
+                                                    onChange={(event) => {
+                                                        const file = event.target.files?.[0];
+                                                        event.target.value = '';
+                                                        if (file) void uploadLogo(tab.id, file);
+                                                    }}
+                                                />
+                                            </label>
+                                            {tab.logoUrl ? (
+                                                <button
+                                                    type="button"
+                                                    className="text-xs font-semibold text-muted hover:text-red-300"
+                                                    onClick={() => updateTab(tab.id, { logoUrl: '' })}
+                                                >
+                                                    {t('settings.navigation.customTabs.logoClear')}
+                                                </button>
+                                            ) : null}
+                                        </div>
+                                        <SettingHint>{t('settings.navigation.customTabs.logoHint')}</SettingHint>
+                                    </label>
+                                    <label className="block text-sm">
                                         <span className="mb-1 block font-semibold text-text">{t('settings.navigation.customTabs.openMode.label')}</span>
                                         <CustomSelect
                                             value={tab.openMode}
@@ -220,6 +312,13 @@ export const CustomNavTabsSettings: React.FC<Props> = ({
                                         hint={<SettingHint>{t('settings.navigation.customTabs.adminOnlyHint')}</SettingHint>}
                                         checked={!!tab.adminOnly}
                                         onChange={(checked) => updateTab(tab.id, { adminOnly: checked })}
+                                        border={false}
+                                    />
+                                    <SettingsToggleRow
+                                        title={t('settings.navigation.customTabs.showPaletteLabel')}
+                                        hint={<SettingHint>{t('settings.navigation.customTabs.showPaletteLabelHint')}</SettingHint>}
+                                        checked={tab.showPaletteLabel !== false}
+                                        onChange={(checked) => updateTab(tab.id, { showPaletteLabel: checked })}
                                         border={false}
                                     />
                                 </div>

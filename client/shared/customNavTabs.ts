@@ -132,6 +132,29 @@ export const removeNavKey = (order: string[], key: string) => (
     order.filter((entry) => entry !== key)
 );
 
+export const APPLETS_NAV_KEY = 'applets';
+
+export const isAppletsNavDisplay = (value?: string | null) => String(value || '').trim().toLowerCase() === 'applets';
+
+export const customTabLogoPublicPath = (tabId: string) => {
+    const id = String(tabId || '').trim();
+    return id ? `/api/branding/custom-tab/${encodeURIComponent(id)}` : '';
+};
+
+export const buildDesktopNavOrder = (
+    order: string[],
+    { display, hasVisibleApplets }: { display?: string | null; hasVisibleApplets: boolean },
+) => {
+    const keys = (Array.isArray(order) ? order : []).filter((key) => key !== 'logs' && key !== APPLETS_NAV_KEY);
+    if (!isAppletsNavDisplay(display)) return keys;
+    const withoutCustom = keys.filter((key) => !isCustomNavTabKey(key));
+    if (!hasVisibleApplets) return withoutCustom;
+    const anchor = withoutCustom.includes('settings') ? 'settings' : 'logout';
+    const anchorIdx = withoutCustom.indexOf(anchor);
+    if (anchorIdx < 0) return [...withoutCustom, APPLETS_NAV_KEY];
+    return [...withoutCustom.slice(0, anchorIdx), APPLETS_NAV_KEY, ...withoutCustom.slice(anchorIdx)];
+};
+
 export const createDefaultCustomNavTab = (): CustomNavTab => ({
     id: typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
         ? crypto.randomUUID()
@@ -142,6 +165,7 @@ export const createDefaultCustomNavTab = (): CustomNavTab => ({
     openMode: 'embed',
     adminOnly: false,
     enabled: true,
+    showPaletteLabel: true,
 });
 
 export type CustomTabEmbedIssue = 'mixed-content' | 'blocked-host' | 'proxy-incompatible';

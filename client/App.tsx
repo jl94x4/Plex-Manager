@@ -304,7 +304,14 @@ export const MainApp: React.FC = () => {
     }, [currentRoute, publicConfig?.showPublicStatusMonitor, sessionInfo]);
 
     useEffect(() => {
-        const onPublicConfigUpdated = () => { fetchPublicConfig(); };
+        const onPublicConfigUpdated = () => {
+            fetchPublicConfig();
+            apiFetch('/api/users/me')
+                .then((data) => {
+                    if (data?.session) setSessionInfo(data);
+                })
+                .catch(() => {});
+        };
         window.addEventListener('portal-public-config-updated', onPublicConfigUpdated);
         return () => window.removeEventListener('portal-public-config-updated', onPublicConfigUpdated);
     }, [fetchPublicConfig]);
