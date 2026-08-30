@@ -2368,7 +2368,7 @@ const loadFile = async (path, defaultContent) => {
     }
 };
 
-const notifyOps = async (event, { title, body, href, dedupeKey, cooldownMs, meta, filename, service } = {}) => {
+const notifyOps = async (event, { title, body, href, dedupeKey, cooldownMs, meta, filename, service, serviceKind } = {}) => {
     try {
         const config = await loadFile(CONFIG_PATH, {});
         return await notifyOpsAdmins({
@@ -2382,6 +2382,7 @@ const notifyOps = async (event, { title, body, href, dedupeKey, cooldownMs, meta
             meta,
             filename,
             service,
+            serviceKind,
             loadUsers: () => loadFile(USERS_PATH, []),
             log,
         });
@@ -2408,6 +2409,7 @@ const notifyScannerActivity = (config, meta = {}, scan = null) => {
             body,
             filename: filename || title,
             service: String(meta.instanceName || '').trim(),
+            serviceKind: String(meta.serviceKind || '').trim(),
             dedupeKey: usesFilename
                 ? `scanner:${event}:${title}:${filename || ''}`
                 : `scanner:${event}:${title}`,

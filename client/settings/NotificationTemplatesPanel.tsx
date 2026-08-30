@@ -101,7 +101,7 @@ export const NotificationTemplatesPanel: React.FC<Props> = ({
     };
 
     const variableHint = useMemo(
-        () => '{title} {user} {media_type} {status} {portal_url} {year} {season} {server_name} {decline_reason} {release_date} {release_type} {filename} {service}',
+        () => '{title} {user} {media_type} {status} {portal_url} {year} {season} {server_name} {decline_reason} {release_date} {release_type} {filename} {service} {service_mark}',
         [],
     );
 

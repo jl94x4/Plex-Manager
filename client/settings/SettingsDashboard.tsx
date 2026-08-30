@@ -5879,17 +5879,17 @@ export const SettingsDashboard: React.FC = () => {
                         </div>
                     )}
                         </div>
-                        <StickySaveBar flushPanel>
-                            <a href="https://jl94x4.github.io/Server-Manager-Portal/" target="_blank" rel="noreferrer" className="w-full sm:w-auto px-6 py-3 bg-border text-text rounded-lg font-bold hover:bg-opacity-80 transition-colors flex items-center justify-center gap-2">
-                                <BookOpen className="w-5 h-5" /> Docs
+                        <StickySaveBar>
+                            <a href="https://jl94x4.github.io/Server-Manager-Portal/" target="_blank" rel="noreferrer" className="inline-flex items-center justify-center gap-2 rounded-xl bg-white/[0.06] px-3.5 py-2.5 text-sm font-bold text-text transition-colors hover:bg-white/10">
+                                <BookOpen className="h-4 w-4" /> Docs
                             </a>
                             <button
                                 type="button"
-                                className="w-full sm:w-auto px-6 py-3 bg-plex text-background rounded-lg font-bold hover:bg-plex-hover transition-colors flex items-center justify-center gap-2 shadow-lg shadow-plex/10 disabled:opacity-50"
+                                className="inline-flex items-center justify-center gap-2 rounded-xl bg-plex px-4 py-2.5 text-sm font-bold text-background shadow-lg shadow-plex/15 transition-colors hover:bg-plex-hover disabled:opacity-50"
                                 onClick={handleSave}
                                 disabled={isLoading}
                             >
-                                <Save className="w-5 h-5" />
+                                <Save className="h-4 w-4" />
                                 {activeTab === 'stream-rules' ? 'Save Stream Rules' : 'Save Settings'}
                             </button>
                         </StickySaveBar>

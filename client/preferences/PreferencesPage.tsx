@@ -774,10 +774,10 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                             </div>
                         </DashboardPanel>
                     )}
+                    <p className="text-sm text-muted">
+                        {dirty ? t('preferencesPage.unsaved') : t('preferencesPage.saveHint')}
+                    </p>
                     <StickySaveBar>
-                        <p className="mr-auto text-sm text-muted">
-                            {dirty ? t('preferencesPage.unsaved') : t('preferencesPage.saveHint')}
-                        </p>
                         {renderSaveButton()}
                     </StickySaveBar>
                 </div>

@@ -33,6 +33,7 @@ import { getNotificationRepeatEntries, type NotificationRepeatEntry } from './no
 import { resolveTmdbImageUrl } from '../discovery/tmdbImageUrl';
 import { useDiscoverI18n } from '../discovery/i18n';
 import type { DiscoverTranslate } from '../discovery/i18n/types';
+import { resolvePortalAssetUrl } from './basePath';
 
 export type InAppNotification = {
     id: string;
@@ -50,6 +51,44 @@ export type InAppNotification = {
         posterPath?: string | null;
         [key: string]: unknown;
     };
+};
+
+const ARR_SERVICE_KINDS = new Set(['sonarr', 'radarr', 'lidarr', 'readarr', 'whisparr']);
+const ARR_SERVICE_MARK_RE = /^(📺|🎬|🎵|📚|🎞)\s+/u;
+
+const arrServiceKindFromItem = (item: InAppNotification) => {
+    const kind = String(item.meta?.serviceKind || '').toLowerCase();
+    return ARR_SERVICE_KINDS.has(kind) ? kind : '';
+};
+
+const ArrServiceLogo: React.FC<{ item: InAppNotification }> = ({ item }) => {
+    const kind = arrServiceKindFromItem(item);
+    if (!kind) return null;
+    const label = `${kind.charAt(0).toUpperCase()}${kind.slice(1)}`;
+    return (
+        <img
+            src={resolvePortalAssetUrl(`/static/applets/${kind}.png`)}
+            alt=""
+            title={label}
+            className="mr-1 inline-block h-3.5 w-3.5 shrink-0 object-contain align-[-0.15em]"
+        />
+    );
+};
+
+const NotificationBodyText: React.FC<{
+    item: InAppNotification;
+    body?: string;
+    className?: string;
+}> = ({ item, body, className }) => {
+    const raw = String(body || item.body || '');
+    if (!raw) return null;
+    const text = arrServiceKindFromItem(item) ? raw.replace(ARR_SERVICE_MARK_RE, '') : raw;
+    return (
+        <p className={className}>
+            <ArrServiceLogo item={item} />
+            {text}
+        </p>
+    );
 };
 
 const formatRelative = (iso: string | undefined, t: DiscoverTranslate) => {
@@ -355,7 +394,11 @@ const RepeatEntryRow: React.FC<{
             <div className="flex items-start gap-2.5 md:gap-3">
                 <NotificationArtwork item={displayItem} hoverLift={false} />
                 <div className="min-w-0 flex-1">
-                    <p className="text-sm text-muted leading-relaxed">{entry.body}</p>
+                    <NotificationBodyText
+                        item={displayItem}
+                        body={entry.body}
+                        className="text-sm text-muted leading-relaxed"
+                    />
                     <span className="mt-1 block text-xs text-muted/80">
                         {formatRelative(entry.createdAt || item.createdAt, t)}
                     </span>
@@ -418,7 +461,11 @@ const NotificationItemRow: React.FC<{
                                     <ChevronDown className={`mt-0.5 h-4 w-4 shrink-0 text-muted transition-transform duration-200 ${expanded ? 'rotate-180 text-plex' : 'group-hover:text-plex'}`} />
                                 </div>
                                 {displayBody ? (
-                                    <p className="text-sm text-muted mt-0.5 line-clamp-2 leading-relaxed">{displayBody}</p>
+                                    <NotificationBodyText
+                                        item={item}
+                                        body={displayBody}
+                                        className="text-sm text-muted mt-0.5 line-clamp-2 leading-relaxed"
+                                    />
                                 ) : null}
                                 <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs">
                                     <span className="text-muted/80">{formatRelative(displayCreatedAt, t)}</span>
@@ -486,7 +533,10 @@ const NotificationItemRow: React.FC<{
                             )}
                         </div>
                         {item.body ? (
-                            <p className="text-sm text-muted mt-0.5 line-clamp-2 leading-relaxed">{item.body}</p>
+                            <NotificationBodyText
+                                item={item}
+                                className="text-sm text-muted mt-0.5 line-clamp-2 leading-relaxed"
+                            />
                         ) : null}
                         {repeatCount > 1 && repeatEntries.length <= 1 ? (
                             <p className="text-[11px] text-muted/70 mt-1">{t('notifications.repeat.legacyHint', { count: repeatCount })}</p>
