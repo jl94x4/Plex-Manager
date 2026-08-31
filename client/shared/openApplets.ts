@@ -101,3 +101,65 @@ export const sortOpenAppletSessionsByNavOrder = (
         return a.id.localeCompare(b.id);
     })
 );
+
+const PALETTE_ORDER_PREFIX = 'portal.appletPaletteOrder.v1';
+
+const paletteOrderStorageKey = (accountKey: string) => `${PALETTE_ORDER_PREFIX}.${accountKey || 'guest'}`;
+
+export const getAppletPaletteAccountKey = (sessionInfo: any) => (
+    String(sessionInfo?.account?.id ?? sessionInfo?.session?.id ?? sessionInfo?.session?.username ?? '')
+);
+
+export const readAppletPaletteOrder = (accountKey: string): string[] => {
+    if (typeof localStorage === 'undefined') return [];
+    try {
+        const raw = localStorage.getItem(paletteOrderStorageKey(accountKey));
+        if (!raw) return [];
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed.map((id) => String(id || '').trim()).filter(Boolean);
+    } catch {
+        return [];
+    }
+};
+
+export const writeAppletPaletteOrder = (accountKey: string, orderIds: string[]): void => {
+    if (typeof localStorage === 'undefined') return;
+    try {
+        if (!orderIds.length) {
+            localStorage.removeItem(paletteOrderStorageKey(accountKey));
+            return;
+        }
+        localStorage.setItem(paletteOrderStorageKey(accountKey), JSON.stringify(orderIds));
+    } catch {
+        /* ignore quota */
+    }
+};
+
+export const applyAppletPaletteOrder = (
+    tabs: CustomNavTab[],
+    orderIds: string[] | null | undefined,
+): CustomNavTab[] => {
+    if (!orderIds?.length) return tabs;
+    const byId = new Map(tabs.map((tab) => [String(tab.id), tab]));
+    const ordered: CustomNavTab[] = [];
+    for (const id of orderIds) {
+        const tab = byId.get(String(id));
+        if (tab) {
+            ordered.push(tab);
+            byId.delete(String(id));
+        }
+    }
+    for (const tab of tabs) {
+        if (byId.has(String(tab.id))) ordered.push(tab);
+    }
+    return ordered;
+};
+
+export const reorderCustomNavTabs = (tabs: CustomNavTab[], from: number, to: number): CustomNavTab[] => {
+    if (from === to || from < 0 || to < 0 || from >= tabs.length || to >= tabs.length) return tabs;
+    const next = [...tabs];
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item);
+    return next;
+};

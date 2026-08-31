@@ -51,7 +51,7 @@ import { filterNavOrder, ensureCompleteNavOrder, resolveMemberNavOrder, MOBILE_N
 import { customNavTabKey, resolveCustomNavIcon, APPLETS_NAV_KEY, buildDesktopNavOrder, canAccessCustomNavTab } from './shared/customNavTabs';
 import { AppletsPalette } from './shared/AppletsPalette';
 import { readDesktopNavIconsOnly, writeDesktopNavIconsOnly } from './shared/desktopNavCollapse';
-import { sortCustomNavTabsByNavOrder, type OpenAppletSession } from './shared/openApplets';
+import { applyAppletPaletteOrder, getAppletPaletteAccountKey, readAppletPaletteOrder, sortCustomNavTabsByNavOrder, writeAppletPaletteOrder, type OpenAppletSession } from './shared/openApplets';
 import { buildArrPortalEmbedHref } from '../lib/arr-portal-embed.js';
 import type { CustomNavTab } from './shared/types';
 import { isFirefoxMobileClient, useFirefoxMobileNavShell } from './shared/useFirefoxMobileNavShell';
@@ -12305,6 +12305,16 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         return iconsOnly;
     });
     const appletsButtonRef = useRef<HTMLButtonElement>(null);
+    const appletAccountKey = useMemo(() => getAppletPaletteAccountKey(sessionInfo), [sessionInfo]);
+    const [paletteOrderIds, setPaletteOrderIds] = useState<string[]>([]);
+    const paletteOrderAccountRef = useRef('');
+
+    useEffect(() => {
+        if (!sessionInfo) return;
+        if (paletteOrderAccountRef.current === appletAccountKey) return;
+        paletteOrderAccountRef.current = appletAccountKey;
+        setPaletteOrderIds(readAppletPaletteOrder(appletAccountKey));
+    }, [sessionInfo, appletAccountKey]);
 
     useEffect(() => {
         setAppletsOpen(false);
@@ -12393,6 +12403,16 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         ),
         [customNavTabs, isAdmin, normalizedNavOrder],
     );
+
+    const paletteApplets = useMemo(
+        () => applyAppletPaletteOrder(visibleApplets, paletteOrderIds),
+        [visibleApplets, paletteOrderIds],
+    );
+
+    const handlePaletteOrderChange = useCallback((orderIds: string[]) => {
+        setPaletteOrderIds(orderIds);
+        writeAppletPaletteOrder(appletAccountKey, orderIds);
+    }, [appletAccountKey]);
 
     const desktopNavOrder = useMemo(() => buildDesktopNavOrder(normalizedNavOrder, {
         display: sessionInfo?.customNavDisplay,
@@ -12863,11 +12883,12 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                     </button>
                                     {appletsOpen ? (
                                         <AppletsPalette
-                                            tabs={visibleApplets}
+                                            tabs={paletteApplets}
                                             openIds={openApplets.map((session) => session.id)}
                                             activeId={externalTabId}
                                             anchorRef={appletsButtonRef}
                                             onClose={() => setAppletsOpen(false)}
+                                            onOrderChange={handlePaletteOrderChange}
                                             onCloseSession={onCloseApplet ? (tab) => onCloseApplet(tab.id) : undefined}
                                             onActivate={(tab) => {
                                                 setAppletsOpen(false);
