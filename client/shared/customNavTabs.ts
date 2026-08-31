@@ -224,29 +224,6 @@ export const isFrameOptionsBlockedAppUrl = (url: string) => {
     }
 };
 
-/** *arr apps mounted on a portal path (e.g. /radarr). */
-export const isPathMountedArrEmbedUrl = (url: string) => {
-    try {
-        const parsed = new URL(String(url || '').trim(), typeof window !== 'undefined' ? window.location.origin : 'https://localhost');
-        return /^\/(?:radarr|sonarr|lidarr|readarr|whisparr|prowlarr|bazarr)(\/|$)/i.test(parsed.pathname);
-    } catch {
-        return false;
-    }
-};
-
-/** Path mounts that must use the embed proxy (Sonarr often works with a direct iframe on /sonarr). */
-export const isPathMountedArrProxyRequired = (url: string) => {
-    if (!isPathMountedArrEmbedUrl(url)) return false;
-    try {
-        const parsed = new URL(String(url || '').trim(), typeof window !== 'undefined' ? window.location.origin : 'https://localhost');
-        const mount = parsed.pathname.replace(/\/+$/, '').split('/').filter(Boolean)[0]?.toLowerCase().replace(/4k$/, '') || '';
-        if (mount === 'sonarr') return false;
-        return true;
-    } catch {
-        return false;
-    }
-};
-
 /** Upgrade HTTP sibling subdomains to HTTPS when the portal is served over TLS. */
 export const normalizeCustomTabEmbedUrl = (url: string) => {
     const trimmed = String(url || '').trim();
@@ -279,9 +256,7 @@ const wouldNeedEmbedProxy = (
         if (portalProtocol === 'https:' && parsed.protocol === 'http:') return true;
         const portalHost = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : '';
         const targetHost = parsed.hostname.toLowerCase();
-        if (!portalHost || targetHost === portalHost) {
-            return isPathMountedArrProxyRequired(url);
-        }
+        if (!portalHost || targetHost === portalHost) return false;
         if (isFrameOptionsBlockedAppUrl(url) && !isDirectEmbedOnlyAppUrl(url)) return true;
         if (
             portalProtocol === 'https:'
