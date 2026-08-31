@@ -6714,7 +6714,16 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         log(`[spotify-sync] Portal Plex/Lidarr apply failed: ${e.message}`);
     }
     try {
-        await syncCollexionsEmbeddedWorker(spotifySyncConfig, { configDir: CONFIG_DIR, log });
+        const collexionsFieldsChanged = !!existingConfig.collexionsEnabled !== !!spotifySyncConfig.collexionsEnabled
+            || String(existingConfig.collexionsInternalUrl || '').trim() !== String(spotifySyncConfig.collexionsInternalUrl || '').trim()
+            || String(existingConfig.collexionsServiceKey || '').trim() !== String(spotifySyncConfig.collexionsServiceKey || '').trim()
+            || !!existingConfig.collexionsAutostart !== !!spotifySyncConfig.collexionsAutostart
+            || String(existingConfig.clientId || '').trim() !== String(spotifySyncConfig.clientId || '').trim();
+        await syncCollexionsEmbeddedWorker(spotifySyncConfig, {
+            configDir: CONFIG_DIR,
+            log,
+            forceRestart: collexionsFieldsChanged,
+        });
     } catch (e) {
         log(`[collexions] Embedded worker sync failed: ${e.message}`);
     }
@@ -30984,8 +30993,10 @@ app.listen(PORT, BIND_HOST, async () => {
         dedupeKey: `collexions:${payload?.signature || payload?.message || 'failed'}`,
     }));
     setCollexionsUnexpectedExitHandler(({ code, signal }) => notifyOps('collexions_failed', {
-        title: `Embedded worker exited (code=${code}, signal=${signal || 'none'})`,
-        dedupeKey: `collexions:exit:${code}:${signal || 'none'}`,
+        title: `ColleXions could not recover (exit code ${code})`,
+        body: 'The portal tried to restart ColleXions automatically. Open ColleXions or check portal logs if this keeps happening.',
+        dedupeKey: `collexions:exit-unrecoverable:${code}:${signal || 'none'}`,
+        cooldownMs: 2 * 60 * 60 * 1000,
     }));
     startCollexionsStatusWatcher({
         configDir: CONFIG_DIR,
