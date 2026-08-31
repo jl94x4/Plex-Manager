@@ -131,6 +131,11 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', 
         setEditMode(false);
     }, [tab?.id, tab?.url, useEmbedProxy, safeEmbedPath]);
 
+    useEffect(() => {
+        if (editMode) return;
+        panDragRef.current = null;
+    }, [editMode]);
+
     const applyZoom = (next: number) => {
         const clamped = clampZoom(next);
         setZoom(clamped);
@@ -385,7 +390,7 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', 
             ) : (
                 <div className={`relative flex min-h-0 flex-1 flex-col overflow-hidden border bg-black/30 ${editMode ? 'border-plex/40 ring-1 ring-plex/30' : 'border-white/10'} ${toolbarCollapsed ? 'rounded-t-xl rounded-b-none md:rounded-2xl' : 'rounded-2xl'}`}>
                     {toolbarCollapsed ? (
-                        <div className="absolute left-1/2 top-2 z-10 flex -translate-x-1/2 items-center gap-1">
+                        <div className="absolute left-1/2 top-2 z-30 flex -translate-x-1/2 items-center gap-1">
                             <button
                                 type="button"
                                 className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black/70 px-3 py-1 text-xs font-semibold text-text shadow-lg backdrop-blur-md hover:bg-black/85"
@@ -439,7 +444,7 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', 
                                 onPointerUp={finishPanDrag}
                                 onPointerCancel={finishPanDrag}
                             />
-                            <div className="pointer-events-none absolute left-3 top-3 z-30 rounded-lg border border-plex/30 bg-black/75 px-2.5 py-1 text-[11px] font-semibold text-plex shadow-lg backdrop-blur-sm">
+                            <div className="pointer-events-none absolute left-3 top-3 z-20 rounded-lg border border-plex/30 bg-black/75 px-2.5 py-1 text-[11px] font-semibold text-plex shadow-lg backdrop-blur-sm">
                                 {t('settings.navigation.customTabs.embed.editMoveHint')}
                             </div>
                         </>
