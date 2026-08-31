@@ -224,6 +224,16 @@ export const isFrameOptionsBlockedAppUrl = (url: string) => {
     }
 };
 
+/** *arr apps mounted on a portal path (e.g. /radarr) still send framing headers from the app. */
+export const isPathMountedArrEmbedUrl = (url: string) => {
+    try {
+        const parsed = new URL(String(url || '').trim(), typeof window !== 'undefined' ? window.location.origin : 'https://localhost');
+        return /^\/(?:radarr|sonarr|lidarr|readarr|whisparr|prowlarr|bazarr)(\/|$)/i.test(parsed.pathname);
+    } catch {
+        return false;
+    }
+};
+
 /** Upgrade HTTP sibling subdomains to HTTPS when the portal is served over TLS. */
 export const normalizeCustomTabEmbedUrl = (url: string) => {
     const trimmed = String(url || '').trim();
@@ -256,7 +266,9 @@ const wouldNeedEmbedProxy = (
         if (portalProtocol === 'https:' && parsed.protocol === 'http:') return true;
         const portalHost = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : '';
         const targetHost = parsed.hostname.toLowerCase();
-        if (!portalHost || targetHost === portalHost) return false;
+        if (!portalHost || targetHost === portalHost) {
+            return isPathMountedArrEmbedUrl(url);
+        }
         if (isFrameOptionsBlockedAppUrl(url) && !isDirectEmbedOnlyAppUrl(url)) return true;
         if (
             portalProtocol === 'https:'
