@@ -112,11 +112,9 @@ import {
     createCustomTabEmbedProxyHandler,
     createHomeModuleEmbedProxyHandler,
     createEmbedProxyFetch,
-    createPathMountedArrAssetHandler,
     isLeakedArrEmbedAssetPath,
     isPortalEmbedProxyPath,
     parseEmbedProxyFromReferer,
-    parsePathMountedArrFromReferer,
 } from './lib/custom-tab-embed-proxy.js';
 import { bufferFetchImage, discardFetchBody, pipeFetchBodyToResponse, sendFetchImage, sendImageBuffer } from './lib/fetch-body.js';
 import {
@@ -7496,14 +7494,6 @@ const handleCustomTabEmbedProxy = createCustomTabEmbedProxyHandler({
     withBasePath,
     fetchWithTimeout: embedProxyFetch,
     requestIsHttps,
-    getArrInstances,
-    resolvePublicBaseUrlFromConfig,
-    log,
-});
-
-const handlePathMountedArrAsset = createPathMountedArrAssetHandler({
-    loadConfig: () => loadFile(CONFIG_PATH, {}),
-    fetchWithTimeout: embedProxyFetch,
     getArrInstances,
     resolvePublicBaseUrlFromConfig,
     log,
@@ -19965,8 +19955,7 @@ const lockViewportForAppleClients = (html, userAgent = '') => {
 };
 
 // *arr SPAs request /Content/*.css and /api/v3/* from the portal origin. Catch those
-// leaked assets (embed proxy Referer, or direct /sonarr /radarr /lidarr iframe Referer)
-// before the HTML catch-all.
+// leaked assets (using the embed Referer) before the HTML catch-all.
 app.use((req, res, next) => {
     if (isLeakedSpotifyToPlexEmbedAssetPath(req.path)) {
         const parsed = parseSpotifyToPlexEmbedFromReferer(req.get('referer') || req.get('referrer'));
@@ -19982,17 +19971,8 @@ app.use((req, res, next) => {
         }
     }
     if (!isLeakedArrEmbedAssetPath(req.path)) return next();
-    const referer = req.get('referer') || req.get('referrer');
-    const parsed = parseEmbedProxyFromReferer(referer);
-    if (!parsed?.entityId) {
-        const publicBase = runtimePublicBaseUrl || getEnvPublicBaseUrl();
-        if (parsePathMountedArrFromReferer(referer, publicBase)) {
-            return requireAuth(req, res, () => {
-                Promise.resolve(requireMember(req, res, () => handlePathMountedArrAsset(req, res))).catch(next);
-            });
-        }
-        return next();
-    }
+    const parsed = parseEmbedProxyFromReferer(req.get('referer') || req.get('referrer'));
+    if (!parsed?.entityId) return next();
     req.params = {
         ...(req.params || {}),
         tabId: parsed.entityId,
