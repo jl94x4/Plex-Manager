@@ -474,8 +474,8 @@ export const en = {
         episode: 'Episode {number}',
         on: 'Now Playing on',
         off: 'Now Playing off',
-        showPref: 'Show Now Playing on the Discover hero',
-        hidePref: 'Hide Now Playing on the Discover hero',
+        showPref: 'Show Now Playing on the Home dashboard hero',
+        hidePref: 'Hide Now Playing on the Home dashboard hero',
         enabledToast: 'Now Playing strip enabled',
         disabledToast: 'Now Playing strip hidden',
         prefFailed: 'Could not update Now Playing preference',
@@ -681,7 +681,7 @@ export const en = {
         homeTitle: 'Home',
         homeSubtitle: 'What appears on your portal Home.',
         showNowPlaying: 'Now Playing on Home',
-        showNowPlayingHint: 'Show what you are watching on Home and Discover. Turn off to hide the Now Playing strip.',
+        showNowPlayingHint: 'Show what you are watching on the Home dashboard hero. Turn off to hide the Now Playing strip.',
     },
     pwa: {
         install: {
