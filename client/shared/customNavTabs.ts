@@ -226,8 +226,8 @@ export const isFrameOptionsBlockedAppUrl = (url: string) => {
 
 /**
  * Path-mounted *arr apps on the portal host that redirect to absolute http:// login URLs
- * (mixed content) or send frame-blocking headers. Sonarr is excluded — it works with a
- * direct iframe on this deployment.
+ * (mixed content) or send frame-blocking headers. Sonarr is excluded on deployments
+ * where a direct iframe already works; other mounts always use the embed proxy.
  */
 const PATH_MOUNTED_ARR_PROXY_TYPES = new Set([
     'radarr', 'lidarr', 'readarr', 'whisparr', 'prowlarr', 'bazarr',
