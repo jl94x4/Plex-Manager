@@ -224,11 +224,24 @@ export const isFrameOptionsBlockedAppUrl = (url: string) => {
     }
 };
 
-/** *arr apps mounted on a portal path (e.g. /radarr) still send framing headers from the app. */
+/** *arr apps mounted on a portal path (e.g. /radarr). */
 export const isPathMountedArrEmbedUrl = (url: string) => {
     try {
         const parsed = new URL(String(url || '').trim(), typeof window !== 'undefined' ? window.location.origin : 'https://localhost');
         return /^\/(?:radarr|sonarr|lidarr|readarr|whisparr|prowlarr|bazarr)(\/|$)/i.test(parsed.pathname);
+    } catch {
+        return false;
+    }
+};
+
+/** Path mounts that must use the embed proxy (Sonarr often works with a direct iframe on /sonarr). */
+export const isPathMountedArrProxyRequired = (url: string) => {
+    if (!isPathMountedArrEmbedUrl(url)) return false;
+    try {
+        const parsed = new URL(String(url || '').trim(), typeof window !== 'undefined' ? window.location.origin : 'https://localhost');
+        const mount = parsed.pathname.replace(/\/+$/, '').split('/').filter(Boolean)[0]?.toLowerCase().replace(/4k$/, '') || '';
+        if (mount === 'sonarr') return false;
+        return true;
     } catch {
         return false;
     }
@@ -267,7 +280,7 @@ const wouldNeedEmbedProxy = (
         const portalHost = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : '';
         const targetHost = parsed.hostname.toLowerCase();
         if (!portalHost || targetHost === portalHost) {
-            return isPathMountedArrEmbedUrl(url);
+            return isPathMountedArrProxyRequired(url);
         }
         if (isFrameOptionsBlockedAppUrl(url) && !isDirectEmbedOnlyAppUrl(url)) return true;
         if (
