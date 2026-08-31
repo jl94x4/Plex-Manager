@@ -252,14 +252,39 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', 
     return (
         <div className={`flex w-full min-h-0 flex-1 flex-col ${toolbarCollapsed ? 'gap-0' : 'gap-2 md:gap-3'}`}>
             {toolbarCollapsed ? null : (
-                <div className="flex shrink-0 flex-wrap items-start justify-between gap-3 rounded-2xl border border-white/10 bg-black/20 px-4 py-2.5 md:py-3">
-                    <div className="min-w-0">
-                        <h1 className="truncate text-lg font-bold text-text">{tab.name}</h1>
-                        {tab.description ? (
-                            <p className="mt-1 max-w-3xl text-sm text-muted">{tab.description}</p>
-                        ) : null}
+                <div className="flex shrink-0 flex-col gap-2 rounded-2xl border border-white/10 bg-black/20 px-3 py-2.5 sm:px-4 md:py-3">
+                    <div className="flex min-w-0 items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                            <h1 className="truncate text-base font-bold text-text sm:text-lg">{tab.name}</h1>
+                            {tab.description ? (
+                                <p className="mt-1 max-w-3xl text-sm text-muted">{tab.description}</p>
+                            ) : null}
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1.5">
+                            <button
+                                type="button"
+                                className="inline-flex items-center justify-center rounded-xl border border-white/10 px-2.5 py-2 text-text hover:bg-white/5"
+                                onClick={() => applyToolbarCollapsed(true)}
+                                aria-expanded={!toolbarCollapsed}
+                                aria-label={t('settings.navigation.customTabs.embed.collapseBar')}
+                                title={t('settings.navigation.customTabs.embed.collapseBar')}
+                            >
+                                <ChevronUp className="h-4 w-4" />
+                            </button>
+                            {onClose ? (
+                                <button
+                                    type="button"
+                                    className="inline-flex items-center justify-center rounded-xl border border-white/10 px-2.5 py-2 text-text hover:bg-red-500/80 hover:text-white"
+                                    onClick={onClose}
+                                    aria-label={t('navigation.closeApplet', { name: tab.name })}
+                                    title={t('navigation.closeApplet', { name: tab.name })}
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
+                            ) : null}
+                        </div>
                     </div>
-                    <div className="flex shrink-0 flex-wrap items-center gap-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:gap-2">
                         {!predictedEmbedIssue ? (
                             <>
                                 <div className="inline-flex items-center rounded-xl border border-white/10 bg-black/20">
@@ -275,7 +300,7 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', 
                                     </button>
                                     <button
                                         type="button"
-                                        className="min-w-[3.5rem] px-1 py-2 text-center text-xs font-bold tabular-nums text-text hover:bg-white/5"
+                                        className="min-w-[3rem] px-1 py-2 text-center text-xs font-bold tabular-nums text-text hover:bg-white/5 sm:min-w-[3.5rem]"
                                         onClick={resetView}
                                         title={t('settings.navigation.customTabs.embed.zoomReset')}
                                     >
@@ -294,7 +319,7 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', 
                                 </div>
                                 <button
                                     type="button"
-                                    className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
+                                    className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-2 text-sm font-semibold transition-colors sm:gap-2 sm:px-3 ${
                                         editMode
                                             ? 'border-plex/50 bg-plex/15 text-plex'
                                             : 'border-white/10 text-text hover:bg-white/5'
@@ -308,21 +333,27 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', 
                                         ? t('settings.navigation.customTabs.embed.editMoveDone')
                                         : t('settings.navigation.customTabs.embed.editMoveHint')}
                                 >
-                                    <Edit3 className="h-4 w-4" />
-                                    {editMode
-                                        ? t('settings.navigation.customTabs.embed.editMoveDone')
-                                        : t('settings.navigation.customTabs.embed.editMove')}
+                                    <Edit3 className="h-4 w-4 shrink-0" />
+                                    <span className="hidden sm:inline">
+                                        {editMode
+                                            ? t('settings.navigation.customTabs.embed.editMoveDone')
+                                            : t('settings.navigation.customTabs.embed.editMove')}
+                                    </span>
                                 </button>
                                 <button
                                     type="button"
-                                    className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm font-semibold text-text hover:bg-white/5"
+                                    className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 px-2.5 py-2 text-sm font-semibold text-text hover:bg-white/5 sm:gap-2 sm:px-3"
                                     onClick={() => {
                                         setEmbedBlocked(false);
                                         setIframeKey((value) => value + 1);
                                     }}
+                                    aria-label={t('settings.navigation.customTabs.embed.reload')}
+                                    title={t('settings.navigation.customTabs.embed.reload')}
                                 >
-                                    <RefreshCw className="h-4 w-4" />
-                                    {t('settings.navigation.customTabs.embed.reload')}
+                                    <RefreshCw className="h-4 w-4 shrink-0" />
+                                    <span className="hidden sm:inline">
+                                        {t('settings.navigation.customTabs.embed.reload')}
+                                    </span>
                                 </button>
                             </>
                         ) : null}
@@ -330,32 +361,15 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', 
                             href={deepResolvedUrl || tab.url}
                             target="_blank"
                             rel="noreferrer"
-                            className="inline-flex items-center gap-2 rounded-xl bg-plex px-3 py-2 text-sm font-bold text-background hover:bg-plex-hover"
+                            className="inline-flex items-center gap-1.5 rounded-xl bg-plex px-2.5 py-2 text-sm font-bold text-background hover:bg-plex-hover sm:gap-2 sm:px-3"
+                            aria-label={t('settings.navigation.customTabs.embed.openInBrowser')}
+                            title={t('settings.navigation.customTabs.embed.openInBrowser')}
                         >
-                            <ExternalLink className="h-4 w-4" />
-                            {t('settings.navigation.customTabs.embed.openInBrowser')}
+                            <ExternalLink className="h-4 w-4 shrink-0" />
+                            <span className="hidden sm:inline">
+                                {t('settings.navigation.customTabs.embed.openInBrowser')}
+                            </span>
                         </a>
-                        <button
-                            type="button"
-                            className="inline-flex items-center justify-center rounded-xl border border-white/10 px-2.5 py-2 text-text hover:bg-white/5"
-                            onClick={() => applyToolbarCollapsed(true)}
-                            aria-expanded={!toolbarCollapsed}
-                            aria-label={t('settings.navigation.customTabs.embed.collapseBar')}
-                            title={t('settings.navigation.customTabs.embed.collapseBar')}
-                        >
-                            <ChevronUp className="h-4 w-4" />
-                        </button>
-                        {onClose ? (
-                            <button
-                                type="button"
-                                className="inline-flex items-center justify-center rounded-xl border border-white/10 px-2.5 py-2 text-text hover:bg-red-500/80 hover:text-white"
-                                onClick={onClose}
-                                aria-label={t('navigation.closeApplet', { name: tab.name })}
-                                title={t('navigation.closeApplet', { name: tab.name })}
-                            >
-                                <X className="h-4 w-4" />
-                            </button>
-                        ) : null}
                     </div>
                 </div>
             )}
