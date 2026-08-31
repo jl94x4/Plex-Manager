@@ -84,7 +84,7 @@ const AppletTile: React.FC<{
         >
             {editMode ? (
                 <div
-                    className={`flex min-h-[3.75rem] w-full flex-col items-center justify-center gap-1 rounded-xl border px-1 py-1 text-center ${
+                    className={`flex min-h-[4rem] w-full flex-col items-center justify-center gap-1 rounded-xl border px-2 py-1.5 text-center ${
                         isDropTarget ? 'border-plex/40 bg-plex/10' : 'border-white/10 bg-white/[0.03]'
                     }`}
                 >
@@ -124,7 +124,7 @@ const AppletTile: React.FC<{
                     <button
                         type="button"
                         onClick={() => onActivate(tab)}
-                        className={`group flex min-h-[3.75rem] w-full flex-col items-center justify-center gap-1 rounded-xl border bg-transparent px-1 py-1 text-center transition-all duration-200 hover:bg-white/[0.07] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ${
+                        className={`group flex min-h-[4rem] w-full flex-col items-center justify-center gap-1 rounded-xl border bg-transparent px-2 py-1.5 text-center transition-all duration-200 hover:bg-white/[0.07] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ${
                             isActive
                                 ? 'border-plex/50 bg-plex/10'
                                 : isOpen
@@ -285,7 +285,7 @@ export const AppletsPalette: React.FC<Props> = ({
             const anchor = anchorRef.current;
             if (!anchor) return;
             const rect = anchor.getBoundingClientRect();
-            const width = Math.min(320, window.innerWidth - 24);
+            const width = Math.min(352, window.innerWidth - 24);
             let left = rect.right + 12;
             if (left + width > window.innerWidth - 12) left = Math.max(12, window.innerWidth - width - 12);
             const panelHeight = panelRef.current?.offsetHeight || 240;
@@ -346,7 +346,7 @@ export const AppletsPalette: React.FC<Props> = ({
             style={pos
                 ? { position: 'fixed', top: pos.top, left: pos.left, zIndex: 80 }
                 : { position: 'fixed', top: 0, left: 0, visibility: 'hidden', zIndex: 80 }}
-            className={`glass-card relative isolate w-[min(20rem,calc(100vw-1.5rem))] overflow-hidden p-3.5 shadow-[0_24px_80px_-12px_rgba(0,0,0,0.7)] ring-1 backdrop-saturate-150 ${editMode ? 'ring-plex/30' : 'ring-inset ring-white/[0.06]'}`}
+            className={`glass-card relative isolate w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden p-4 shadow-[0_24px_80px_-12px_rgba(0,0,0,0.7)] ring-1 backdrop-saturate-150 ${editMode ? 'ring-plex/30' : 'ring-inset ring-white/[0.06]'}`}
             role="dialog"
             aria-label={t('navigation.applets')}
         >
@@ -380,10 +380,10 @@ export const AppletsPalette: React.FC<Props> = ({
                 </div>
                 {orderedTabs.length ? (
                     <>
-                        <div className={`grid grid-cols-3 ${editMode ? 'max-h-[18rem] gap-0 overflow-y-auto custom-scrollbar' : 'grid-rows-3'}`}>
+                        <div className={`grid grid-cols-3 gap-2 ${editMode ? 'max-h-[20rem] overflow-y-auto custom-scrollbar' : 'grid-rows-3'}`}>
                             {Array.from({ length: editMode ? orderedTabs.length : PAGE_SIZE }, (_, index) => {
                                 const tab = pageTabs[index];
-                                if (!tab) return <div key={`empty-${index}`} className="min-h-[3.75rem]" />;
+                                if (!tab) return <div key={`empty-${index}`} className="min-h-[4rem]" />;
                                 const globalIndex = editMode ? index : page * PAGE_SIZE + index;
                                 return (
                                     <AppletTile
