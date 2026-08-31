@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronDown, ChevronUp, ExternalLink, Globe, Minus, Plus, RefreshCw, X } from 'lucide-react';
+import { ChevronDown, ChevronUp, Edit3, ExternalLink, Globe, Minus, Plus, RefreshCw, X } from 'lucide-react';
 import { useDiscoverI18n } from '../discovery/i18n';
 import type { CustomNavTab } from '../shared/types';
 import type { OpenAppletSession } from '../shared/openApplets';
@@ -27,7 +27,10 @@ const ZOOM_STEP = 5;
 const ZOOM_DEFAULT = 100;
 const TOOLBAR_STORAGE_KEY = 'portal.embedToolbarCollapsed';
 
+type EmbedPan = { x: number; y: number };
+
 const embedZoomStorageKey = (id: string) => `portal.embedZoom.${id}`;
+const embedPanStorageKey = (id: string) => `portal.embedPan.${id}`;
 
 const clampZoom = (value: number) => {
     if (!Number.isFinite(value)) return ZOOM_DEFAULT;
@@ -41,6 +44,22 @@ const readStoredZoom = (id: string) => {
         return clampZoom(Number(raw));
     } catch {
         return ZOOM_DEFAULT;
+    }
+};
+
+const readStoredPan = (id: string): EmbedPan => {
+    try {
+        const raw = window.localStorage.getItem(embedPanStorageKey(id));
+        if (!raw) return { x: 0, y: 0 };
+        const parsed = JSON.parse(raw);
+        const x = Number(parsed?.x);
+        const y = Number(parsed?.y);
+        return {
+            x: Number.isFinite(x) ? x : 0,
+            y: Number.isFinite(y) ? y : 0,
+        };
+    } catch {
+        return { x: 0, y: 0 };
     }
 };
 
@@ -61,8 +80,11 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', 
     const [iframeKey, setIframeKey] = useState(0);
     const [embedBlocked, setEmbedBlocked] = useState(false);
     const [zoom, setZoom] = useState(ZOOM_DEFAULT);
+    const [pan, setPan] = useState<EmbedPan>({ x: 0, y: 0 });
+    const [editMode, setEditMode] = useState(false);
     const [toolbarCollapsed, setToolbarCollapsed] = useState(readToolbarCollapsed);
     const skipRemountRef = useRef(true);
+    const panDragRef = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
     const resolvedUrl = useMemo(() => normalizeCustomTabEmbedUrl(tab?.url || ''), [tab?.url]);
     const safeEmbedPath = useMemo(
         () => (isSafeArrEmbedPath(embedPath) ? String(embedPath).replace(/^\/+/, '') : ''),
@@ -98,11 +120,15 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', 
         if (skipRemountRef.current) {
             skipRemountRef.current = false;
             setZoom(tab?.id ? readStoredZoom(tab.id) : ZOOM_DEFAULT);
+            setPan(tab?.id ? readStoredPan(tab.id) : { x: 0, y: 0 });
+            setEditMode(false);
             return;
         }
         setEmbedBlocked(false);
         setIframeKey((value) => value + 1);
         setZoom(tab?.id ? readStoredZoom(tab.id) : ZOOM_DEFAULT);
+        setPan(tab?.id ? readStoredPan(tab.id) : { x: 0, y: 0 });
+        setEditMode(false);
     }, [tab?.id, tab?.url, useEmbedProxy, safeEmbedPath]);
 
     const applyZoom = (next: number) => {
@@ -113,6 +139,59 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', 
             window.localStorage.setItem(embedZoomStorageKey(tab.id), String(clamped));
         } catch {
             // ignore quota / private mode
+        }
+    };
+
+    const applyPan = (next: EmbedPan) => {
+        setPan(next);
+        if (!tab?.id) return;
+        try {
+            window.localStorage.setItem(embedPanStorageKey(tab.id), JSON.stringify(next));
+        } catch {
+            // ignore quota / private mode
+        }
+    };
+
+    const resetView = () => {
+        applyZoom(ZOOM_DEFAULT);
+        applyPan({ x: 0, y: 0 });
+    };
+
+    const handlePanPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+        if (!editMode) return;
+        event.preventDefault();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        panDragRef.current = {
+            startX: event.clientX,
+            startY: event.clientY,
+            panX: pan.x,
+            panY: pan.y,
+        };
+    };
+
+    const handlePanPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+        if (!panDragRef.current) return;
+        const dx = event.clientX - panDragRef.current.startX;
+        const dy = event.clientY - panDragRef.current.startY;
+        setPan({
+            x: panDragRef.current.panX + dx,
+            y: panDragRef.current.panY + dy,
+        });
+    };
+
+    const finishPanDrag = (event: React.PointerEvent<HTMLDivElement>) => {
+        if (!panDragRef.current) return;
+        const dx = event.clientX - panDragRef.current.startX;
+        const dy = event.clientY - panDragRef.current.startY;
+        applyPan({
+            x: panDragRef.current.panX + dx,
+            y: panDragRef.current.panY + dy,
+        });
+        panDragRef.current = null;
+        try {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+        } catch {
+            /* ignore */
         }
     };
 
@@ -192,7 +271,7 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', 
                                     <button
                                         type="button"
                                         className="min-w-[3.5rem] px-1 py-2 text-center text-xs font-bold tabular-nums text-text hover:bg-white/5"
-                                        onClick={() => applyZoom(ZOOM_DEFAULT)}
+                                        onClick={resetView}
                                         title={t('settings.navigation.customTabs.embed.zoomReset')}
                                     >
                                         {zoom}%
@@ -208,6 +287,27 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', 
                                         <Plus className="h-4 w-4" />
                                     </button>
                                 </div>
+                                <button
+                                    type="button"
+                                    className={`inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold transition-colors ${
+                                        editMode
+                                            ? 'border-plex/50 bg-plex/15 text-plex'
+                                            : 'border-white/10 text-text hover:bg-white/5'
+                                    }`}
+                                    onClick={() => setEditMode((active) => !active)}
+                                    aria-pressed={editMode}
+                                    aria-label={editMode
+                                        ? t('settings.navigation.customTabs.embed.editMoveDone')
+                                        : t('settings.navigation.customTabs.embed.editMove')}
+                                    title={editMode
+                                        ? t('settings.navigation.customTabs.embed.editMoveDone')
+                                        : t('settings.navigation.customTabs.embed.editMoveHint')}
+                                >
+                                    <Edit3 className="h-4 w-4" />
+                                    {editMode
+                                        ? t('settings.navigation.customTabs.embed.editMoveDone')
+                                        : t('settings.navigation.customTabs.embed.editMove')}
+                                </button>
                                 <button
                                     type="button"
                                     className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-3 py-2 text-sm font-semibold text-text hover:bg-white/5"
@@ -283,7 +383,7 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', 
                     </a>
                 </div>
             ) : (
-                <div className={`relative flex min-h-0 flex-1 flex-col overflow-hidden border border-white/10 bg-black/30 ${toolbarCollapsed ? 'rounded-t-xl rounded-b-none md:rounded-2xl' : 'rounded-2xl'}`}>
+                <div className={`relative flex min-h-0 flex-1 flex-col overflow-hidden border bg-black/30 ${editMode ? 'border-plex/40 ring-1 ring-plex/30' : 'border-white/10'} ${toolbarCollapsed ? 'rounded-t-xl rounded-b-none md:rounded-2xl' : 'rounded-2xl'}`}>
                     {toolbarCollapsed ? (
                         <div className="absolute left-1/2 top-2 z-10 flex -translate-x-1/2 items-center gap-1">
                             <button
@@ -297,6 +397,26 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', 
                                 <ChevronDown className="h-3.5 w-3.5" />
                                 <span className="max-w-[10rem] truncate">{tab.name}</span>
                             </button>
+                            {!predictedEmbedIssue ? (
+                                <button
+                                    type="button"
+                                    className={`inline-flex h-7 items-center gap-1 rounded-full border px-2 text-[11px] font-semibold shadow-lg backdrop-blur-md ${
+                                        editMode
+                                            ? 'border-plex/50 bg-plex/20 text-plex'
+                                            : 'border-white/15 bg-black/70 text-text hover:bg-black/85'
+                                    }`}
+                                    onClick={() => setEditMode((active) => !active)}
+                                    aria-pressed={editMode}
+                                    title={editMode
+                                        ? t('settings.navigation.customTabs.embed.editMoveDone')
+                                        : t('settings.navigation.customTabs.embed.editMoveHint')}
+                                >
+                                    <Edit3 className="h-3.5 w-3.5" />
+                                    {editMode
+                                        ? t('settings.navigation.customTabs.embed.editMoveDone')
+                                        : t('settings.navigation.customTabs.embed.editMove')}
+                                </button>
+                            ) : null}
                             {onClose ? (
                                 <button
                                     type="button"
@@ -310,19 +430,33 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', 
                             ) : null}
                         </div>
                     ) : null}
+                    {editMode ? (
+                        <>
+                            <div
+                                className="absolute inset-0 z-20 cursor-grab touch-none bg-plex/[0.04] active:cursor-grabbing"
+                                onPointerDown={handlePanPointerDown}
+                                onPointerMove={handlePanPointerMove}
+                                onPointerUp={finishPanDrag}
+                                onPointerCancel={finishPanDrag}
+                            />
+                            <div className="pointer-events-none absolute left-3 top-3 z-30 rounded-lg border border-plex/30 bg-black/75 px-2.5 py-1 text-[11px] font-semibold text-plex shadow-lg backdrop-blur-sm">
+                                {t('settings.navigation.customTabs.embed.editMoveHint')}
+                            </div>
+                        </>
+                    ) : null}
                     <div
                         className="absolute left-0 top-0 origin-top-left"
                         style={{
                             width: `${100 / scale}%`,
                             height: `${100 / scale}%`,
-                            transform: `scale(${scale})`,
+                            transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
                         }}
                     >
                         <iframe
                             key={iframeKey}
                             title={tab.name}
                             src={iframeSrc}
-                            className="block h-full w-full border-0 bg-white"
+                            className={`block h-full w-full border-0 bg-white ${editMode ? 'pointer-events-none select-none' : ''}`}
                             style={{ colorScheme: 'normal' }}
                             sandbox="allow-forms allow-modals allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts allow-downloads"
                             referrerPolicy="same-origin"
