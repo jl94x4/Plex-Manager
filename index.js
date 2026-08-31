@@ -7494,6 +7494,8 @@ const handleCustomTabEmbedProxy = createCustomTabEmbedProxyHandler({
     withBasePath,
     fetchWithTimeout: embedProxyFetch,
     requestIsHttps,
+    getArrInstances,
+    resolvePublicBaseUrlFromConfig,
     log,
 });
 
