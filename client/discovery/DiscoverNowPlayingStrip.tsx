@@ -9,8 +9,10 @@ type Props = {
     others?: NowPlayingOther[];
     onNavigate?: (path: string) => void;
     onOpenProfile?: (accountId: string) => void;
-    /** Extra classes on the outer absolute wrapper. */
+    /** Extra classes on the outer wrapper. */
     className?: string;
+    /** overlay = absolute bottom bar on hero; footer = in-flow strip at card bottom */
+    placement?: 'overlay' | 'footer';
 };
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -19,7 +21,14 @@ const pad = (n: number) => String(n).padStart(2, '0');
  * Trakt-style thin green Now Playing bar.
  * The full strip width is the item runtime; the brighter fill is watch progress.
  */
-export const DiscoverNowPlayingStrip: React.FC<Props> = ({ session, others = [], onNavigate, onOpenProfile, className = '' }) => {
+export const DiscoverNowPlayingStrip: React.FC<Props> = ({
+    session,
+    others = [],
+    onNavigate,
+    onOpenProfile,
+    className = '',
+    placement = 'overlay',
+}) => {
     const { t } = useDiscoverI18n();
     const hasTmdb = Number.isFinite(Number(session.tmdbId)) && Number(session.tmdbId) > 0;
     const basePath = hasTmdb
@@ -58,9 +67,14 @@ export const DiscoverNowPlayingStrip: React.FC<Props> = ({ session, others = [],
         ? 'font-semibold text-white hover:underline underline-offset-2 decoration-white/80'
         : 'font-semibold text-white';
 
+    const footerPlacement = placement === 'footer';
+    const wrapperClass = footerPlacement
+        ? `relative w-full z-30 shrink-0 rounded-b-2xl overflow-hidden ${className}`.trim()
+        : `absolute bottom-0 inset-x-0 z-30 rounded-b-2xl overflow-hidden ${className}`.trim();
+
     return (
         <div
-            className={`absolute bottom-0 inset-x-0 z-20 rounded-b-2xl overflow-hidden ${className}`.trim()}
+            className={wrapperClass}
             role="status"
             aria-live="polite"
             aria-label={`${paused ? t('nowPlaying.paused') : t('nowPlaying.watching')}: ${session.title}${hasSeason ? `, ${t('nowPlaying.season', { number: season })}` : ''}${hasEpisode ? `, ${t('nowPlaying.episode', { number: episode })}` : ''}, ${Math.round(progress)}%`}
