@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ReactDOM from 'react-dom';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { resolvePortalAssetUrl } from './basePath';
 import { resolveCustomNavIcon } from './customNavTabs';
 import type { CustomNavTab } from './types';
@@ -8,50 +8,98 @@ import { useDiscoverI18n } from '../discovery/i18n';
 
 type Props = {
     tabs: CustomNavTab[];
+    openIds?: string[];
+    activeId?: string | null;
     onActivate: (tab: CustomNavTab) => void;
+    onCloseSession?: (tab: CustomNavTab) => void;
     onClose: () => void;
     anchorRef: React.RefObject<HTMLElement | null>;
 };
 
 const PAGE_SIZE = 9;
 
-const AppletTile: React.FC<{ tab: CustomNavTab; onActivate: (tab: CustomNavTab) => void }> = ({ tab, onActivate }) => {
+export const AppletCloseButton: React.FC<{
+    name: string;
+    onClick: () => void;
+    className?: string;
+}> = ({ name, onClick, className = '' }) => {
+    const { t } = useDiscoverI18n();
+    return (
+        <button
+            type="button"
+            className={`absolute z-10 flex h-5 w-5 items-center justify-center rounded-full bg-black/80 text-muted shadow-sm ring-1 ring-white/20 hover:bg-red-500 hover:text-white ${className}`}
+            aria-label={t('navigation.closeApplet', { name })}
+            title={t('navigation.closeApplet', { name })}
+            onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onClick();
+            }}
+        >
+            <X className="h-3 w-3" />
+        </button>
+    );
+};
+
+const AppletTile: React.FC<{
+    tab: CustomNavTab;
+    isOpen?: boolean;
+    isActive?: boolean;
+    onActivate: (tab: CustomNavTab) => void;
+    onCloseSession?: (tab: CustomNavTab) => void;
+}> = ({ tab, isOpen = false, isActive = false, onActivate, onCloseSession }) => {
     const Icon = resolveCustomNavIcon(tab.icon);
     const [logoFailed, setLogoFailed] = useState(false);
     const logoSrc = tab.logoUrl && !logoFailed ? resolvePortalAssetUrl(tab.logoUrl) : '';
     const showLabel = tab.showPaletteLabel !== false;
 
     return (
-        <button
-            type="button"
-            onClick={() => onActivate(tab)}
-            className="group flex min-h-[3.75rem] w-full flex-col items-center justify-center gap-1 rounded-xl border border-transparent bg-transparent px-1 py-1 text-center transition-all duration-200 hover:border-white/10 hover:bg-white/[0.07] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
-            title={tab.description || tab.name}
-        >
-            {logoSrc ? (
-                <img
-                    src={logoSrc}
-                    alt=""
-                    className="h-8 w-8 object-contain drop-shadow-[0_4px_8px_rgba(0,0,0,0.35)] transition-transform duration-200 group-hover:scale-105"
-                    onError={() => setLogoFailed(true)}
+        <div className="relative">
+            <button
+                type="button"
+                onClick={() => onActivate(tab)}
+                className={`group flex min-h-[3.75rem] w-full flex-col items-center justify-center gap-1 rounded-xl border bg-transparent px-1 py-1 text-center transition-all duration-200 hover:bg-white/[0.07] hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ${
+                    isActive
+                        ? 'border-plex/50 bg-plex/10'
+                        : isOpen
+                            ? 'border-white/15 bg-white/[0.04]'
+                            : 'border-transparent hover:border-white/10'
+                }`}
+                title={tab.description || tab.name}
+                aria-current={isActive ? 'page' : undefined}
+            >
+                {logoSrc ? (
+                    <img
+                        src={logoSrc}
+                        alt=""
+                        className="h-8 w-8 object-contain drop-shadow-[0_4px_8px_rgba(0,0,0,0.35)] transition-transform duration-200 group-hover:scale-105"
+                        onError={() => setLogoFailed(true)}
+                    />
+                ) : (
+                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.04] text-plex">
+                        <Icon className="h-5 w-5" />
+                    </span>
+                )}
+                {showLabel ? (
+                    <span className={`max-w-[4.5rem] truncate text-[11px] font-semibold ${isActive ? 'text-plex' : 'text-text/90 group-hover:text-plex'}`}>
+                        {tab.name}
+                    </span>
+                ) : (
+                    <span className="sr-only">{tab.name}</span>
+                )}
+            </button>
+            {isOpen && onCloseSession ? (
+                <AppletCloseButton
+                    name={tab.name}
+                    className="right-0.5 top-0.5"
+                    onClick={() => onCloseSession(tab)}
                 />
-            ) : (
-                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.04] text-plex">
-                    <Icon className="h-5 w-5" />
-                </span>
-            )}
-            {showLabel ? (
-                <span className="max-w-[4.5rem] truncate text-[11px] font-semibold text-text/90 group-hover:text-plex">
-                    {tab.name}
-                </span>
-            ) : (
-                <span className="sr-only">{tab.name}</span>
-            )}
-        </button>
+            ) : null}
+        </div>
     );
 };
 
-export const AppletsPalette: React.FC<Props> = ({ tabs, onActivate, onClose, anchorRef }) => {
+export const AppletsPalette: React.FC<Props> = ({ tabs, openIds = [], activeId = null, onActivate, onCloseSession, onClose, anchorRef }) => {
     const { t } = useDiscoverI18n();
     const panelRef = useRef<HTMLDivElement>(null);
     const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -141,7 +189,16 @@ export const AppletsPalette: React.FC<Props> = ({ tabs, onActivate, onClose, anc
                             {Array.from({ length: PAGE_SIZE }, (_, index) => {
                                 const tab = pageTabs[index];
                                 if (!tab) return <div key={`empty-${index}`} className="min-h-[3.75rem]" />;
-                                return <AppletTile key={tab.id} tab={tab} onActivate={onActivate} />;
+                                return (
+                                    <AppletTile
+                                        key={tab.id}
+                                        tab={tab}
+                                        isOpen={openIds.includes(tab.id)}
+                                        isActive={activeId === tab.id}
+                                        onActivate={onActivate}
+                                        onCloseSession={onCloseSession}
+                                    />
+                                );
                             })}
                         </div>
                         {pageCount > 1 ? (

@@ -51,6 +51,8 @@ import { filterNavOrder, ensureCompleteNavOrder, resolveMemberNavOrder, MOBILE_N
 import { customNavTabKey, resolveCustomNavIcon, APPLETS_NAV_KEY, buildDesktopNavOrder, canAccessCustomNavTab } from './shared/customNavTabs';
 import { AppletsPalette } from './shared/AppletsPalette';
 import { readDesktopNavIconsOnly, writeDesktopNavIconsOnly } from './shared/desktopNavCollapse';
+import type { OpenAppletSession } from './shared/openApplets';
+import { buildArrPortalEmbedHref } from '../lib/arr-portal-embed.js';
 import type { CustomNavTab } from './shared/types';
 import { isFirefoxMobileClient, useFirefoxMobileNavShell } from './shared/useFirefoxMobileNavShell';
 import { ProfileBadgeRack, AchievementsHomeWidget } from './achievements/AchievementsDashboard';
@@ -12037,9 +12039,11 @@ interface NavigationProps {
     mediaServerType?: string;
     sidebarIdentityPosition?: 'top' | 'bottom';
     externalTabId?: string | null;
+    openApplets?: OpenAppletSession[];
+    onCloseApplet?: (id: string) => void;
 }
 
-export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate, onLogout, isAdmin, serverName, adminThumb, customLogoUrl, requestUrl, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, navFeatures, appVersion, activeTheme, setActiveTheme, pendingRequestCount = 0, supportUnreadCount = 0, chatUnreadCount = 0, watchingCount = 0, downloadCount = 0, mediaAutomationActiveCount = 0, showDashboardWatchingBadge = false, sessionInfo, mediaServerType = 'plex', sidebarIdentityPosition = 'bottom', externalTabId = null }) => {
+export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate, onLogout, isAdmin, serverName, adminThumb, customLogoUrl, requestUrl, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, navFeatures, appVersion, activeTheme, setActiveTheme, pendingRequestCount = 0, supportUnreadCount = 0, chatUnreadCount = 0, watchingCount = 0, downloadCount = 0, mediaAutomationActiveCount = 0, showDashboardWatchingBadge = false, sessionInfo, mediaServerType = 'plex', sidebarIdentityPosition = 'bottom', externalTabId = null, openApplets = [], onCloseApplet }) => {
     const { t } = useDiscoverI18n();
     const serverIcon = customLogoUrl ? resolvePortalAssetUrl(customLogoUrl) : (adminThumb ? (adminThumb.startsWith('http') ? adminThumb : portalUrl(`/api/plex/image?path=${encodeURIComponent(adminThumb)}&width=256&height=256`)) : logoUrl());
     const providerName = String(mediaServerType || 'plex').toLowerCase() === 'jellyfin'
@@ -12857,12 +12861,20 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                     {appletsOpen ? (
                                         <AppletsPalette
                                             tabs={visibleApplets}
+                                            openIds={openApplets.map((session) => session.id)}
+                                            activeId={externalTabId}
                                             anchorRef={appletsButtonRef}
                                             onClose={() => setAppletsOpen(false)}
+                                            onCloseSession={onCloseApplet ? (tab) => onCloseApplet(tab.id) : undefined}
                                             onActivate={(tab) => {
                                                 setAppletsOpen(false);
                                                 if (tab.openMode === 'embed') {
-                                                    onNavigate('external', { path: `/external/${encodeURIComponent(tab.id)}` });
+                                                    const existing = openApplets.find((session) => session.id === tab.id);
+                                                    onNavigate('external', {
+                                                        path: existing
+                                                            ? buildArrPortalEmbedHref(existing.id, existing.embedPath)
+                                                            : `/external/${encodeURIComponent(tab.id)}`,
+                                                    });
                                                     return;
                                                 }
                                                 if (tab.openMode === 'newTab') {

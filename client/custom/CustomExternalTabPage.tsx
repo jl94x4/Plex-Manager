@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { ChevronDown, ChevronUp, ExternalLink, Globe, Minus, Plus, RefreshCw } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronDown, ChevronUp, ExternalLink, Globe, Minus, Plus, RefreshCw, X } from 'lucide-react';
 import { useDiscoverI18n } from '../discovery/i18n';
 import type { CustomNavTab } from '../shared/types';
+import type { OpenAppletSession } from '../shared/openApplets';
 import {
     canAccessCustomNavTab,
     detectCustomTabEmbedIssue,
@@ -16,6 +17,7 @@ type Props = {
     embedPath?: string;
     customNavTabs?: CustomNavTab[];
     isAdmin?: boolean;
+    onClose?: () => void;
 };
 
 const ZOOM_MIN = 50;
@@ -49,7 +51,7 @@ const readToolbarCollapsed = () => {
     }
 };
 
-export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', customNavTabs = [], isAdmin = false }) => {
+export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', customNavTabs = [], isAdmin = false, onClose }) => {
     const { t } = useDiscoverI18n();
     const tab = useMemo(
         () => customNavTabs.find((entry) => String(entry.id) === String(tabId || '')),
@@ -59,6 +61,7 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', 
     const [embedBlocked, setEmbedBlocked] = useState(false);
     const [zoom, setZoom] = useState(ZOOM_DEFAULT);
     const [toolbarCollapsed, setToolbarCollapsed] = useState(readToolbarCollapsed);
+    const skipRemountRef = useRef(true);
     const resolvedUrl = useMemo(() => normalizeCustomTabEmbedUrl(tab?.url || ''), [tab?.url]);
     const safeEmbedPath = useMemo(
         () => (isSafeArrEmbedPath(embedPath) ? String(embedPath).replace(/^\/+/, '') : ''),
@@ -91,6 +94,11 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', 
     }, [tab, useEmbedProxy, resolvedUrl, deepResolvedUrl, safeEmbedPath]);
 
     useEffect(() => {
+        if (skipRemountRef.current) {
+            skipRemountRef.current = false;
+            setZoom(tab?.id ? readStoredZoom(tab.id) : ZOOM_DEFAULT);
+            return;
+        }
         setEmbedBlocked(false);
         setIframeKey((value) => value + 1);
         setZoom(tab?.id ? readStoredZoom(tab.id) : ZOOM_DEFAULT);
@@ -231,6 +239,17 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', 
                         >
                             <ChevronUp className="h-4 w-4" />
                         </button>
+                        {onClose ? (
+                            <button
+                                type="button"
+                                className="inline-flex items-center justify-center rounded-xl border border-white/10 px-2.5 py-2 text-text hover:bg-red-500/80 hover:text-white"
+                                onClick={onClose}
+                                aria-label={t('navigation.closeApplet', { name: tab.name })}
+                                title={t('navigation.closeApplet', { name: tab.name })}
+                            >
+                                <X className="h-4 w-4" />
+                            </button>
+                        ) : null}
                     </div>
                 </div>
             )}
@@ -265,17 +284,30 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', 
             ) : (
                 <div className={`relative flex min-h-0 flex-1 flex-col overflow-hidden border border-white/10 bg-black/30 ${toolbarCollapsed ? 'rounded-t-xl rounded-b-none md:rounded-2xl' : 'rounded-2xl'}`}>
                     {toolbarCollapsed ? (
-                        <button
-                            type="button"
-                            className="absolute left-1/2 top-2 z-10 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/15 bg-black/70 px-3 py-1 text-xs font-semibold text-text shadow-lg backdrop-blur-md hover:bg-black/85"
-                            onClick={() => applyToolbarCollapsed(false)}
-                            aria-expanded={!toolbarCollapsed}
-                            aria-label={t('settings.navigation.customTabs.embed.expandBar')}
-                            title={t('settings.navigation.customTabs.embed.expandBar')}
-                        >
-                            <ChevronDown className="h-3.5 w-3.5" />
-                            <span className="max-w-[10rem] truncate">{tab.name}</span>
-                        </button>
+                        <div className="absolute left-1/2 top-2 z-10 flex -translate-x-1/2 items-center gap-1">
+                            <button
+                                type="button"
+                                className="inline-flex items-center gap-1.5 rounded-full border border-white/15 bg-black/70 px-3 py-1 text-xs font-semibold text-text shadow-lg backdrop-blur-md hover:bg-black/85"
+                                onClick={() => applyToolbarCollapsed(false)}
+                                aria-expanded={!toolbarCollapsed}
+                                aria-label={t('settings.navigation.customTabs.embed.expandBar')}
+                                title={t('settings.navigation.customTabs.embed.expandBar')}
+                            >
+                                <ChevronDown className="h-3.5 w-3.5" />
+                                <span className="max-w-[10rem] truncate">{tab.name}</span>
+                            </button>
+                            {onClose ? (
+                                <button
+                                    type="button"
+                                    className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/70 text-text shadow-lg backdrop-blur-md hover:bg-red-500 hover:text-white"
+                                    onClick={onClose}
+                                    aria-label={t('navigation.closeApplet', { name: tab.name })}
+                                    title={t('navigation.closeApplet', { name: tab.name })}
+                                >
+                                    <X className="h-3.5 w-3.5" />
+                                </button>
+                            ) : null}
+                        </div>
                     ) : null}
                     <div
                         className="absolute left-0 top-0 origin-top-left"
@@ -314,4 +346,48 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', 
             )}
         </div>
     );
+};
+
+type HostProps = {
+    sessions: OpenAppletSession[];
+    activeId: string | null;
+    visible: boolean;
+    customNavTabs?: CustomNavTab[];
+    isAdmin?: boolean;
+    onClose: (id: string) => void;
+};
+
+export const OpenAppletsHost: React.FC<HostProps> = ({
+    sessions,
+    activeId,
+    visible,
+    customNavTabs = [],
+    isAdmin = false,
+    onClose,
+}) => {
+    const panes = sessions.map((session) => {
+        const shown = visible && session.id === activeId;
+        return (
+            <div
+                key={session.id}
+                className={shown
+                    ? 'relative flex min-h-0 flex-1 flex-col'
+                    : 'pointer-events-none invisible fixed left-0 top-0 -z-10 h-[100dvh] w-screen'}
+                aria-hidden={!shown}
+                inert={!shown}
+            >
+                <CustomExternalTabPage
+                    tabId={session.id}
+                    embedPath={session.embedPath}
+                    customNavTabs={customNavTabs}
+                    isAdmin={isAdmin}
+                    onClose={() => onClose(session.id)}
+                />
+            </div>
+        );
+    });
+    if (visible) {
+        return <div className="relative flex min-h-0 flex-1 flex-col">{panes}</div>;
+    }
+    return <>{panes}</>;
 };

@@ -2378,7 +2378,7 @@ Object.assign(fr, { homeDashboard: { ...fr.homeDashboard, nowPlayingCompanion: {
 } } });
 Object.assign(fr, { notifications: { ...fr.notifications, repeat: { expand: 'Afficher {count} mises à jour', expand_plural: 'Afficher {count} mises à jour', collapse: 'Masquer les mises à jour répétées', legacyHint: 'Affichage de la plus récente parmi {count} alertes similaires.' } } });
 Object.assign(fr, {
-    navigation: { ...fr.navigation, chat: 'Chat', spotifySync: 'Synchronisation Spotify', applets: 'Applets', appletsHint: 'Lancer une application intégrée', appletsEmpty: 'Aucune application n’est encore activée.', appletsPrev: 'Page précédente', appletsNext: 'Page suivante', appletsPage: 'Page {current} sur {total}' },
+    navigation: { ...fr.navigation, chat: 'Chat', spotifySync: 'Synchronisation Spotify', applets: 'Applets', appletsHint: 'Les applications ouvertes restent actives', appletsEmpty: 'Aucune application n’est encore activée.', appletsPrev: 'Page précédente', appletsNext: 'Page suivante', appletsPage: 'Page {current} sur {total}', closeApplet: 'Fermer {name}' },
     spotifySyncPage: { betaTitle: 'Fonctionnalité bêta', betaNotice: 'La synchronisation Spotify est en BÊTA et reste en plein développement. Attendez-vous à des imperfections, des fonctionnalités manquantes et des changements incompatibles.' },
     posterSetsPage: { betaTitle: 'Fonctionnalité bêta', betaNotice: 'Poster Sets est en BÊTA et reste en plein développement. Attendez-vous à des imperfections, des fonctionnalités manquantes et des changements incompatibles.' },
     profilePage: { ...fr.profilePage, watchedLabel: 'Regardé', listenedLabel: 'Écouté', libraryAccess: 'Accès aux bibliothèques' },

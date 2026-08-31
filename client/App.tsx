@@ -39,7 +39,7 @@ const EditionsDashboard = lazy(() => import('./editions/EditionsDashboard').then
 const AchievementsDashboard = lazy(() => import('./achievements/AchievementsDashboard').then(m => ({ default: m.AchievementsDashboard })));
 const SupportInbox = lazy(() => import('./support/SupportInbox').then(m => ({ default: m.SupportInbox })));
 const ChatRoom = lazy(() => import('./chat/ChatRoom').then(m => ({ default: m.ChatRoom })));
-const CustomExternalTabPage = lazy(() => import('./custom/CustomExternalTabPage').then(m => ({ default: m.CustomExternalTabPage })));
+const OpenAppletsHost = lazy(() => import('./custom/CustomExternalTabPage').then(m => ({ default: m.OpenAppletsHost })));
 const PreferencesPage = lazy(() => import('./preferences/PreferencesPage').then(m => ({ default: m.PreferencesPage })));
 const ProfilePage = lazy(() => import('./profile/ProfilePage').then(m => ({ default: m.ProfilePage })));
 import {
@@ -60,6 +60,7 @@ import {
 } from './screens';
 import { DiscoveryDashboard } from './discovery/DiscoveryDashboard';
 import { canAccessCustomNavTab } from './shared/customNavTabs';
+import { closeOpenApplet, nextAppletAfterClose, upsertOpenApplet, type OpenAppletSession } from './shared/openApplets';
 import {
     ARR_OPEN_IN_PORTAL_EVENT,
     buildArrPortalEmbedHref,
@@ -159,6 +160,7 @@ export const MainApp: React.FC = () => {
     ));
     const [externalTabId, setExternalTabId] = useState<string | null>(null);
     const [externalEmbedPath, setExternalEmbedPath] = useState('');
+    const [openApplets, setOpenApplets] = useState<OpenAppletSession[]>([]);
     const [sessionInfo, setSessionInfo] = useState<any>(null);
     // Default temporary access off so login never flashes the trial panel before public config arrives.
     const [publicConfig, setPublicConfig] = useState<any>({ allowTemporaryAccess: false });
@@ -419,12 +421,22 @@ export const MainApp: React.FC = () => {
                 const custom = String(options?.path || '').trim();
                 path = custom.startsWith('/external') ? custom : '/external';
                 const match = path.match(/^\/external\/([^/?#]+)/i);
-                setExternalTabId(match?.[1] ? decodeURIComponent(match[1]) : null);
+                const nextId = match?.[1] ? decodeURIComponent(match[1]) : null;
+                setExternalTabId(nextId);
+                let nextEmbedPath = '';
                 try {
                     const parsed = new URL(path, 'http://local.invalid');
-                    setExternalEmbedPath(readArrEmbedQuery(parsed.search));
+                    nextEmbedPath = readArrEmbedQuery(parsed.search);
+                    setExternalEmbedPath(nextEmbedPath);
                 } catch {
                     setExternalEmbedPath('');
+                }
+                if (nextId) {
+                    setOpenApplets((prev) => {
+                        const existing = prev.find((session) => session.id === nextId);
+                        const embed = nextEmbedPath || existing?.embedPath || '';
+                        return upsertOpenApplet(prev, nextId, embed);
+                    });
                 }
             } else {
                 setExternalTabId(null);
@@ -586,8 +598,17 @@ export const MainApp: React.FC = () => {
             }
             else if (path.startsWith('/external/')) {
                 const match = path.match(/^\/external\/([^/?#]+)/i);
-                setExternalTabId(match?.[1] ? decodeURIComponent(match[1]) : null);
-                setExternalEmbedPath(readArrEmbedQuery(window.location.search));
+                const nextId = match?.[1] ? decodeURIComponent(match[1]) : null;
+                const nextEmbedPath = readArrEmbedQuery(window.location.search);
+                setExternalTabId(nextId);
+                setExternalEmbedPath(nextEmbedPath);
+                if (nextId) {
+                    setOpenApplets((prev) => {
+                        const existing = prev.find((session) => session.id === nextId);
+                        const embed = nextEmbedPath || existing?.embedPath || '';
+                        return upsertOpenApplet(prev, nextId, embed);
+                    });
+                }
                 setCurrentRoute('external');
             }
             else if (path.startsWith('/admin') || path.startsWith('/users')) {
@@ -676,8 +697,28 @@ export const MainApp: React.FC = () => {
     const handleLogout = async () => {
         await apiFetch('/api/auth/logout', { method: 'POST' });
         setSessionInfo(null);
+        setOpenApplets([]);
         setRoute('login');
     };
+
+    const buildOpenAppletPath = useCallback((session: OpenAppletSession) => (
+        buildArrPortalEmbedHref(session.id, session.embedPath)
+    ), []);
+
+    const handleCloseApplet = useCallback((id: string) => {
+        const closingActive = currentRoute === 'external' && externalTabId === id;
+        if (closingActive) {
+            const fallback = nextAppletAfterClose(openApplets, id);
+            setOpenApplets(closeOpenApplet(openApplets, id));
+            if (fallback) {
+                setRoute('external', { path: buildOpenAppletPath(fallback) });
+            } else {
+                setRoute('dashboard');
+            }
+            return;
+        }
+        setOpenApplets((prev) => closeOpenApplet(prev, id));
+    }, [buildOpenAppletPath, currentRoute, externalTabId, openApplets, setRoute]);
 
     const handleStopImpersonation = async () => {
         try {
@@ -849,18 +890,6 @@ export const MainApp: React.FC = () => {
                 </Suspense>
             );
         }
-        if (currentRoute === 'external') {
-            return (
-                <Suspense fallback={<Loader isLoading={true} isCinematic={!!publicConfig?.useCinematicLoading} />}>
-                    <CustomExternalTabPage
-                        tabId={externalTabId}
-                        embedPath={externalEmbedPath}
-                        customNavTabs={sessionInfo?.customNavTabs || []}
-                        isAdmin={isAdmin}
-                    />
-                </Suspense>
-            );
-        }
         if (currentRoute === 'about') return <AboutDashboard appVersion={publicConfig?.appVersion} mediaServerType={sessionInfo?.mediaServerType || publicConfig?.mediaServerType} />;
         if (currentRoute === 'preferences') {
             return (
@@ -918,7 +947,7 @@ export const MainApp: React.FC = () => {
                     onClose={() => setSummaryDigestId(null)}
                 />
             )}
-            {!isPublicView && <Navigation currentRoute={currentRoute} onNavigate={setRoute as any} onLogout={handleLogout} isAdmin={isAdmin} serverName={sessionInfo?.serverName || 'Server Portal'} adminThumb={sessionInfo?.adminThumb} customLogoUrl={publicConfig?.customLogoUrl} requestUrl={sessionInfo?.requestUrl || 'https://yourdomain.com'} navOrder={sessionInfo?.navOrder || [...DEFAULT_NAV_ORDER]} navHiddenKeys={sessionInfo?.navHiddenKeys} memberNavOrder={sessionInfo?.memberNavOrder} memberNavHiddenKeys={sessionInfo?.memberNavHiddenKeys} navFeatures={sessionInfo?.navFeatures} appVersion={publicConfig.appVersion} activeTheme={activeTheme} setActiveTheme={setActiveTheme} pendingRequestCount={queueBadgeCount} supportUnreadCount={supportUnreadCount} chatUnreadCount={chatUnreadCount} watchingCount={watchingCount} downloadCount={downloadCount} mediaAutomationActiveCount={mediaAutomationActiveCount} showDashboardWatchingBadge={showDashboardWatchingBadge} sessionInfo={sessionInfo} mediaServerType={sessionInfo?.mediaServerType || publicConfig?.mediaServerType || 'plex'} sidebarIdentityPosition={publicConfig?.sidebarIdentityPosition || 'bottom'} externalTabId={externalTabId} />}
+            {!isPublicView && <Navigation currentRoute={currentRoute} onNavigate={setRoute as any} onLogout={handleLogout} isAdmin={isAdmin} serverName={sessionInfo?.serverName || 'Server Portal'} adminThumb={sessionInfo?.adminThumb} customLogoUrl={publicConfig?.customLogoUrl} requestUrl={sessionInfo?.requestUrl || 'https://yourdomain.com'} navOrder={sessionInfo?.navOrder || [...DEFAULT_NAV_ORDER]} navHiddenKeys={sessionInfo?.navHiddenKeys} memberNavOrder={sessionInfo?.memberNavOrder} memberNavHiddenKeys={sessionInfo?.memberNavHiddenKeys} navFeatures={sessionInfo?.navFeatures} appVersion={publicConfig.appVersion} activeTheme={activeTheme} setActiveTheme={setActiveTheme} pendingRequestCount={queueBadgeCount} supportUnreadCount={supportUnreadCount} chatUnreadCount={chatUnreadCount} watchingCount={watchingCount} downloadCount={downloadCount} mediaAutomationActiveCount={mediaAutomationActiveCount} showDashboardWatchingBadge={showDashboardWatchingBadge} sessionInfo={sessionInfo} mediaServerType={sessionInfo?.mediaServerType || publicConfig?.mediaServerType || 'plex'} sidebarIdentityPosition={publicConfig?.sidebarIdentityPosition || 'bottom'} externalTabId={externalTabId} openApplets={openApplets} onCloseApplet={handleCloseApplet} />}
             <div id="main-scroll-container" className={`relative z-10 flex-1 min-w-0 min-h-0 flex flex-col items-center px-4 pb-[calc(5rem+env(safe-area-inset-bottom,0px))] md:px-8 md:pb-8 overflow-x-visible custom-scrollbar ${currentRoute === 'external' ? 'overflow-hidden md:pb-4' : 'md:overflow-y-auto'} ${isPublicView ? '!pb-8' : ''}`}>
                 {isImpersonating && (
                     <div className="w-full max-w-[100%] pt-[calc(5rem+env(safe-area-inset-top,0px))] md:pt-0 md:sticky md:top-0 md:z-30">
@@ -938,14 +967,28 @@ export const MainApp: React.FC = () => {
                 )}
                 <div className={`w-full min-w-0 max-w-[100%] flex flex-col min-h-0 ${isImpersonating ? 'pt-3 md:pt-4' : currentRoute === 'external' ? 'flex-1 pt-[calc(5rem+env(safe-area-inset-top,0px))] md:pt-4' : 'pt-[calc(5rem+env(safe-area-inset-top,0px))] md:pt-8'}`}>
                     <Suspense fallback={<div className="flex w-full items-center justify-center pt-20"><Loader isLoading={true} isCinematic={false} /></div>}>
-                        {isAdmin && !isPublicView ? (
-                            <PortalJobsBanner
-                                currentRoute={currentRoute}
-                                collexionsEnabled={!!sessionInfo?.navFeatures?.collexions}
-                                onNavigate={(route) => setRoute(route as any)}
+                        {(openApplets.length > 0 || currentRoute === 'external') ? (
+                            <OpenAppletsHost
+                                sessions={openApplets}
+                                activeId={externalTabId}
+                                visible={currentRoute === 'external'}
+                                customNavTabs={sessionInfo?.customNavTabs || []}
+                                isAdmin={isAdmin}
+                                onClose={handleCloseApplet}
                             />
                         ) : null}
-                        {renderView()}
+                        {currentRoute !== 'external' ? (
+                            <>
+                                {isAdmin && !isPublicView ? (
+                                    <PortalJobsBanner
+                                        currentRoute={currentRoute}
+                                        collexionsEnabled={!!sessionInfo?.navFeatures?.collexions}
+                                        onNavigate={(route) => setRoute(route as any)}
+                                    />
+                                ) : null}
+                                {renderView()}
+                            </>
+                        ) : null}
                     </Suspense>
                 </div>
 
