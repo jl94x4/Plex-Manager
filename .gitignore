@@ -57,6 +57,7 @@ status-config.json
 backup/
 unneeded/
 v2/
+.cursor
 
 # Environment secrets
 .env

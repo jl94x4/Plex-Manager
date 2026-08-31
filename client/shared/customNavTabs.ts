@@ -210,6 +210,20 @@ export const isDirectEmbedOnlyAppUrl = (url: string) => {
     }
 };
 
+/** Apps that send X-Frame-Options: sameorigin even on a sibling HTTPS subdomain. */
+export const isFrameOptionsBlockedAppUrl = (url: string) => {
+    try {
+        const parsed = new URL(String(url || '').trim(), typeof window !== 'undefined' ? window.location.origin : 'https://localhost');
+        const host = parsed.hostname.toLowerCase();
+        const first = host.split('.')[0] || '';
+        if (['sab', 'sabnzbd', 'nzbget'].includes(first)) return true;
+        if (host.includes('sabnzbd')) return true;
+        return false;
+    } catch {
+        return false;
+    }
+};
+
 /** Upgrade HTTP sibling subdomains to HTTPS when the portal is served over TLS. */
 export const normalizeCustomTabEmbedUrl = (url: string) => {
     const trimmed = String(url || '').trim();
@@ -243,6 +257,7 @@ const wouldNeedEmbedProxy = (
         const portalHost = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : '';
         const targetHost = parsed.hostname.toLowerCase();
         if (!portalHost || targetHost === portalHost) return false;
+        if (isFrameOptionsBlockedAppUrl(url) && !isDirectEmbedOnlyAppUrl(url)) return true;
         if (
             portalProtocol === 'https:'
             && parsed.protocol === 'https:'

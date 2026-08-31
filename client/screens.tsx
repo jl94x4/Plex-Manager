@@ -12699,57 +12699,81 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
         );
     };
 
-    const renderServerIdentity = (placement: 'top' | 'bottom') => (
-        <div
-            className={`flex flex-col items-center w-full shrink-0 ${placement === 'top' ? identityDensity.sectionTop : identityDensity.sectionBottom} border-white/10 ${placement === 'top' ? 'border-b' : 'border-t'}`}
-            title={desktopNavIconsOnly ? serverName : undefined}
-        >
-            <div className={`relative ${identityDensity.logoMb} ${customLogoUrl ? `${identityDensity.customWrap} flex items-center justify-center` : ''}`}>
-                {customLogoUrl ? (
-                    <img
-                        src={serverIcon}
-                        alt="Server Logo"
-                        className={`${identityDensity.customImg} object-contain drop-shadow-[0_0_24px_rgba(0,0,0,0.75)]`}
-                        onError={(e) => {
-                            (e.target as HTMLImageElement).src = logoUrl();
-                        }}
-                    />
-                ) : (
-                    <>
-                        <div className="absolute inset-0 bg-plex blur-[29px] opacity-20 rounded-full"></div>
-                        <div className="absolute -inset-1 rounded-full bg-gradient-to-tr from-plex via-amber-300 to-orange-600 opacity-60"></div>
-                        <div className={`relative ${identityDensity.round} rounded-full p-[3px] shadow-2xl bg-card`}>
-                            <div className="w-full h-full rounded-full overflow-hidden bg-background">
-                                <img
-                                    src={serverIcon}
-                                    alt="Server Logo"
-                                    className="w-full h-full object-cover"
-                                    onError={(e) => {
-                                        (e.target as HTMLImageElement).src = logoUrl();
-                                    }}
-                                />
-                            </div>
-                        </div>
-                    </>
-                )}
-            </div>
+    const renderServerIdentity = (placement: 'top' | 'bottom') => {
+        const sectionClass = `flex flex-col items-center w-full shrink-0 ${placement === 'top' ? identityDensity.sectionTop : identityDensity.sectionBottom} border-white/10 ${placement === 'top' ? 'border-b' : 'border-t'}`;
+        const logoActiveClass = desktopNavIconsOnly && currentRoute === 'profile'
+            ? 'ring-2 ring-plex/60 ring-offset-2 ring-offset-[rgb(var(--color-card))]'
+            : '';
 
-            <div className={`flex flex-col items-center text-center px-2 ${desktopNavIconsOnly ? 'sr-only' : ''}`}>
-                <h2 className={`${identityDensity.title} font-black text-text tracking-tight leading-tight line-clamp-2`}>
-                    {serverName}
-                </h2>
-                {identityDensity.showPortal && (
-                    <div className="mt-1 flex items-center gap-2">
-                        <div className="h-px w-6 bg-gradient-to-r from-transparent to-plex/50"></div>
-                        <span className="text-[10px] uppercase tracking-[0.3em] text-plex font-bold">
-                            Portal
-                        </span>
-                        <div className="h-px w-6 bg-gradient-to-l from-transparent to-plex/50"></div>
-                    </div>
-                )}
+        const identityContent = (
+            <>
+                <div className={`relative ${identityDensity.logoMb} ${customLogoUrl ? `${identityDensity.customWrap} flex items-center justify-center` : ''}`}>
+                    {customLogoUrl ? (
+                        <img
+                            src={serverIcon}
+                            alt="Server Logo"
+                            className={`${identityDensity.customImg} object-contain drop-shadow-[0_0_24px_rgba(0,0,0,0.75)] ${logoActiveClass}`}
+                            onError={(e) => {
+                                (e.target as HTMLImageElement).src = logoUrl();
+                            }}
+                        />
+                    ) : (
+                        <>
+                            <div className="absolute inset-0 bg-plex blur-[29px] opacity-20 rounded-full"></div>
+                            <div className="absolute -inset-1 rounded-full bg-gradient-to-tr from-plex via-amber-300 to-orange-600 opacity-60"></div>
+                            <div className={`relative ${identityDensity.round} rounded-full p-[3px] shadow-2xl bg-card ${logoActiveClass}`}>
+                                <div className="w-full h-full rounded-full overflow-hidden bg-background">
+                                    <img
+                                        src={serverIcon}
+                                        alt="Server Logo"
+                                        className="w-full h-full object-cover"
+                                        onError={(e) => {
+                                            (e.target as HTMLImageElement).src = logoUrl();
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </div>
+
+                <div className={`flex flex-col items-center text-center px-2 ${desktopNavIconsOnly ? 'sr-only' : ''}`}>
+                    <h2 className={`${identityDensity.title} font-black text-text tracking-tight leading-tight line-clamp-2`}>
+                        {serverName}
+                    </h2>
+                    {identityDensity.showPortal && (
+                        <div className="mt-1 flex items-center gap-2">
+                            <div className="h-px w-6 bg-gradient-to-r from-transparent to-plex/50"></div>
+                            <span className="text-[10px] uppercase tracking-[0.3em] text-plex font-bold">
+                                Portal
+                            </span>
+                            <div className="h-px w-6 bg-gradient-to-l from-transparent to-plex/50"></div>
+                        </div>
+                    )}
+                </div>
+            </>
+        );
+
+        if (desktopNavIconsOnly) {
+            return (
+                <button
+                    type="button"
+                    onClick={() => onNavigate('profile')}
+                    title={profileName}
+                    aria-label={profileName}
+                    className={`${sectionClass} p-0 bg-transparent border-0 cursor-pointer hover:opacity-90 transition-opacity`}
+                >
+                    {identityContent}
+                </button>
+            );
+        }
+
+        return (
+            <div className={sectionClass}>
+                {identityContent}
             </div>
-        </div>
-    );
+        );
+    };
 
     return (
         <>
@@ -12926,32 +12950,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                 {sidebarIdentityPosition !== 'top' && renderServerIdentity('bottom')}
 
                 {desktopNavIconsOnly ? (
-                    <div className="mt-1 pt-1 border-t border-white/10 shrink-0 w-full flex flex-col items-center gap-1.5">
-                        <button
-                            type="button"
-                            onClick={() => onNavigate('profile')}
-                            title={profileName}
-                            aria-label={profileName}
-                            className={`p-0.5 rounded-xl border bg-white/5 hover:border-plex/40 transition-all ${currentRoute === 'profile' ? 'border-plex/50 bg-plex/10' : 'border-white/10'}`}
-                        >
-                            <img
-                                src={profileIcon}
-                                alt=""
-                                className="w-8 h-8 rounded-full object-cover bg-background/60"
-                                onError={(e) => {
-                                    (e.target as HTMLImageElement).src = logoUrl();
-                                }}
-                            />
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setProfileOpen(true)}
-                            className="p-1.5 rounded-lg text-plex hover:bg-white/10 transition-colors"
-                            title="Change theme"
-                            aria-label="Change theme"
-                        >
-                            <Palette className="w-4 h-4" />
-                        </button>
+                    <div className="mt-1 pt-1 border-t border-white/10 shrink-0 w-full flex flex-col items-center">
                         <InAppNotificationsBell
                             onNavigate={(route, options) => onNavigate(route as any, options)}
                             className="overflow-visible"
