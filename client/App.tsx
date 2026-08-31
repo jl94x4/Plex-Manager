@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef, lazy, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from 'react';
 const SettingsDashboard = lazy(() => import('./settings/SettingsDashboard').then(m => ({ default: m.SettingsDashboard })));
 import { bindAppConfirm, bindAskConfirm, bindAppAlert, type AskConfirmOptions } from './shared/confirm';
 import { apiFetch } from './shared/api';
@@ -11,7 +11,7 @@ import { WhatsNewModal } from './shared/WhatsNewModal';
 import { SummaryDigestCard, openSummaryDigestFromUrl } from './shared/SummaryDigestCard';
 import { DiscoverI18nProvider } from './discovery/i18n';
 import { PortalJobsBanner } from './shared/PortalJobsBanner';
-import { DEFAULT_NAV_ORDER } from './shared/nav';
+import { DEFAULT_NAV_ORDER, ensureCompleteNavOrder, filterNavOrder, resolveMemberNavOrder } from './shared/nav';
 import {
     getLastSeenVersion,
     parseAppSemver,
@@ -60,7 +60,7 @@ import {
 } from './screens';
 import { DiscoveryDashboard } from './discovery/DiscoveryDashboard';
 import { canAccessCustomNavTab } from './shared/customNavTabs';
-import { closeOpenApplet, nextAppletAfterClose, upsertOpenApplet, type OpenAppletSession } from './shared/openApplets';
+import { closeOpenApplet, clearStoredOpenApplets, nextAppletAfterClose, readStoredOpenApplets, upsertOpenApplet, writeStoredOpenApplets, type OpenAppletSession } from './shared/openApplets';
 import {
     ARR_OPEN_IN_PORTAL_EVENT,
     buildArrPortalEmbedHref,
@@ -69,6 +69,10 @@ import {
     readArrEmbedQuery,
     resolveArrEmbedPath,
 } from '../lib/arr-portal-embed.js';
+
+const getOpenAppletsAccountKey = (info: any) => (
+    String(info?.account?.id ?? info?.session?.id ?? info?.session?.username ?? '')
+);
 
 export const MainApp: React.FC = () => {
     const [confirmState, setConfirmState] = useState<{
@@ -161,6 +165,7 @@ export const MainApp: React.FC = () => {
     const [externalTabId, setExternalTabId] = useState<string | null>(null);
     const [externalEmbedPath, setExternalEmbedPath] = useState('');
     const [openApplets, setOpenApplets] = useState<OpenAppletSession[]>([]);
+    const openAppletsHydratedRef = useRef(false);
     const [sessionInfo, setSessionInfo] = useState<any>(null);
     // Default temporary access off so login never flashes the trial panel before public config arrives.
     const [publicConfig, setPublicConfig] = useState<any>({ allowTemporaryAccess: false });
@@ -696,14 +701,76 @@ export const MainApp: React.FC = () => {
 
     const handleLogout = async () => {
         await apiFetch('/api/auth/logout', { method: 'POST' });
+        if (sessionInfo) clearStoredOpenApplets(getOpenAppletsAccountKey(sessionInfo));
+        openAppletsHydratedRef.current = false;
+        openAppletsPersistReadyRef.current = false;
+        openAppletsAccountRef.current = '';
         setSessionInfo(null);
         setOpenApplets([]);
         setRoute('login');
     };
 
+    const isAdminSession = !!sessionInfo?.session?.isAdmin;
+    const openAppletsAccountRef = useRef('');
+    const openAppletsPersistReadyRef = useRef(false);
+
+    useEffect(() => {
+        if (!sessionInfo) return;
+        const accountKey = getOpenAppletsAccountKey(sessionInfo);
+        if (openAppletsAccountRef.current === accountKey && openAppletsHydratedRef.current) return;
+        openAppletsAccountRef.current = accountKey;
+        openAppletsHydratedRef.current = true;
+        openAppletsPersistReadyRef.current = false;
+        const stored = readStoredOpenApplets(accountKey);
+        const tabs = Array.isArray(sessionInfo.customNavTabs) ? sessionInfo.customNavTabs : [];
+        if (stored.length) {
+            setOpenApplets((prev) => {
+                const merged = [...stored];
+                for (const session of prev) {
+                    if (!merged.some((entry) => entry.id === session.id)) merged.push(session);
+                }
+                return merged.filter((session) => {
+                    const tab = tabs.find((entry) => String(entry.id) === session.id);
+                    return tab && canAccessCustomNavTab(tab, isAdminSession) && tab.openMode === 'embed';
+                });
+            });
+        } else {
+            openAppletsPersistReadyRef.current = true;
+        }
+    }, [sessionInfo, isAdminSession]);
+
+    useEffect(() => {
+        if (!openAppletsHydratedRef.current) return;
+        openAppletsPersistReadyRef.current = true;
+    }, [openApplets]);
+
+    useEffect(() => {
+        if (!sessionInfo || !openAppletsPersistReadyRef.current) return;
+        writeStoredOpenApplets(getOpenAppletsAccountKey(sessionInfo), openApplets);
+    }, [openApplets, sessionInfo]);
+
+    const appletNavOrder = useMemo(() => {
+        if (!sessionInfo) return [...DEFAULT_NAV_ORDER];
+        const customNavTabs = Array.isArray(sessionInfo.customNavTabs) ? sessionInfo.customNavTabs : [];
+        const order = isAdminSession
+            ? ensureCompleteNavOrder(sessionInfo.navOrder)
+            : resolveMemberNavOrder(sessionInfo.memberNavOrder, sessionInfo.navOrder, customNavTabs);
+        const hiddenKeys = isAdminSession ? sessionInfo.navHiddenKeys : sessionInfo.memberNavHiddenKeys;
+        return filterNavOrder(order, {
+            isAdmin: isAdminSession,
+            features: sessionInfo.navFeatures,
+            hiddenKeys,
+            customTabs: customNavTabs,
+        });
+    }, [sessionInfo, isAdminSession]);
+
     const buildOpenAppletPath = useCallback((session: OpenAppletSession) => (
         buildArrPortalEmbedHref(session.id, session.embedPath)
     ), []);
+
+    const handleActivateApplet = useCallback((session: OpenAppletSession) => {
+        setRoute('external', { path: buildOpenAppletPath(session) });
+    }, [buildOpenAppletPath, setRoute]);
 
     const handleCloseApplet = useCallback((id: string) => {
         const closingActive = currentRoute === 'external' && externalTabId === id;
@@ -973,7 +1040,9 @@ export const MainApp: React.FC = () => {
                                 activeId={externalTabId}
                                 visible={currentRoute === 'external'}
                                 customNavTabs={sessionInfo?.customNavTabs || []}
+                                navOrder={appletNavOrder}
                                 isAdmin={isAdmin}
+                                onActivate={handleActivateApplet}
                                 onClose={handleCloseApplet}
                             />
                         ) : null}

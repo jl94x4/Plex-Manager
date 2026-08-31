@@ -51,7 +51,7 @@ import { filterNavOrder, ensureCompleteNavOrder, resolveMemberNavOrder, MOBILE_N
 import { customNavTabKey, resolveCustomNavIcon, APPLETS_NAV_KEY, buildDesktopNavOrder, canAccessCustomNavTab } from './shared/customNavTabs';
 import { AppletsPalette } from './shared/AppletsPalette';
 import { readDesktopNavIconsOnly, writeDesktopNavIconsOnly } from './shared/desktopNavCollapse';
-import type { OpenAppletSession } from './shared/openApplets';
+import { sortCustomNavTabsByNavOrder, type OpenAppletSession } from './shared/openApplets';
 import { buildArrPortalEmbedHref } from '../lib/arr-portal-embed.js';
 import type { CustomNavTab } from './shared/types';
 import { isFirefoxMobileClient, useFirefoxMobileNavShell } from './shared/useFirefoxMobileNavShell';
@@ -12384,10 +12384,13 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
     }, [navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, isAdmin, navFeatures, customNavTabs]);
 
     const visibleApplets = useMemo(
-        () => customNavTabs.filter((tab) => (
-            canAccessCustomNavTab(tab, isAdmin)
-            && normalizedNavOrder.includes(customNavTabKey(tab.id))
-        )),
+        () => sortCustomNavTabsByNavOrder(
+            customNavTabs.filter((tab) => (
+                canAccessCustomNavTab(tab, isAdmin)
+                && normalizedNavOrder.includes(customNavTabKey(tab.id))
+            )),
+            normalizedNavOrder,
+        ),
         [customNavTabs, isAdmin, normalizedNavOrder],
     );
 

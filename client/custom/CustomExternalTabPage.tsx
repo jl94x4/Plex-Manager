@@ -3,6 +3,7 @@ import { ChevronDown, ChevronUp, ExternalLink, Globe, Minus, Plus, RefreshCw, X 
 import { useDiscoverI18n } from '../discovery/i18n';
 import type { CustomNavTab } from '../shared/types';
 import type { OpenAppletSession } from '../shared/openApplets';
+import { OpenAppletsTabBar } from '../shared/OpenAppletsTabBar';
 import {
     canAccessCustomNavTab,
     detectCustomTabEmbedIssue,
@@ -353,7 +354,9 @@ type HostProps = {
     activeId: string | null;
     visible: boolean;
     customNavTabs?: CustomNavTab[];
+    navOrder?: string[];
     isAdmin?: boolean;
+    onActivate: (session: OpenAppletSession) => void;
     onClose: (id: string) => void;
 };
 
@@ -362,7 +365,9 @@ export const OpenAppletsHost: React.FC<HostProps> = ({
     activeId,
     visible,
     customNavTabs = [],
+    navOrder = [],
     isAdmin = false,
+    onActivate,
     onClose,
 }) => {
     const panes = sessions.map((session) => {
@@ -387,7 +392,19 @@ export const OpenAppletsHost: React.FC<HostProps> = ({
         );
     });
     if (visible) {
-        return <div className="relative flex min-h-0 flex-1 flex-col">{panes}</div>;
+        return (
+            <div className="relative flex min-h-0 flex-1 flex-col">
+                <OpenAppletsTabBar
+                    sessions={sessions}
+                    activeId={activeId}
+                    customNavTabs={customNavTabs}
+                    navOrder={navOrder}
+                    onActivate={onActivate}
+                    onClose={onClose}
+                />
+                {panes}
+            </div>
+        );
     }
     return <>{panes}</>;
 };

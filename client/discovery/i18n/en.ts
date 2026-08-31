@@ -76,6 +76,7 @@ export const en = {
         applets: 'Applets',
         appletsHint: 'Open apps stay running',
         closeApplet: 'Close {name}',
+        openAppletsTabs: 'Open apps',
         appletsEmpty: 'No apps are enabled yet.',
         appletsPrev: 'Previous page',
         appletsNext: 'Next page',
