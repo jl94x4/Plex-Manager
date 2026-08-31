@@ -7493,6 +7493,7 @@ const handleCustomTabEmbedProxy = createCustomTabEmbedProxyHandler({
     effectiveViewerIsAdmin,
     withBasePath,
     fetchWithTimeout: embedProxyFetch,
+    requestIsHttps,
     log,
 });
 
@@ -7504,6 +7505,7 @@ const handleHomeModuleEmbedProxy = createHomeModuleEmbedProxyHandler({
     effectiveViewerIsAdmin,
     withBasePath,
     fetchWithTimeout: embedProxyFetch,
+    requestIsHttps,
     log,
 });
 
@@ -7514,6 +7516,7 @@ const handleSpotifyToPlexEmbedProxy = createSpotifyToPlexEmbedProxyHandler({
     effectiveViewerIsAdmin,
     withBasePath,
     fetchWithTimeout: embedProxyFetch,
+    requestIsHttps,
     allowPrivateIntegrationUrls: ALLOW_PRIVATE_INTEGRATION_URLS,
     log,
 });
@@ -7530,6 +7533,7 @@ const handleSpotifyToPlexCallback = createSpotifyToPlexCallbackHandler({
     withBasePath,
     resolvePublicBaseUrlFromConfig,
     fetchWithTimeout: embedProxyFetch,
+    requestIsHttps,
     allowPrivateIntegrationUrls: ALLOW_PRIVATE_INTEGRATION_URLS,
     log,
 });
