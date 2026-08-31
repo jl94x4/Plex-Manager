@@ -12781,8 +12781,8 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
             {/* Mobile Top Nav — height grows with safe-area so content clears the iOS status bar in PWA */}
             <div className="md:hidden fixed top-0 left-0 right-0 z-50 nav-shell border-b shadow-lg pt-[env(safe-area-inset-top,0px)] overflow-visible">
-                <div className="h-16 flex items-center justify-between page-x overflow-visible">
-                <div className="flex items-center gap-2 min-w-0">
+                <div className="h-16 flex items-center justify-between gap-2 page-x min-w-0 overflow-hidden">
+                <div className="flex items-center gap-2 min-w-0 flex-1">
                     <img
                         src={serverIcon}
                         alt="Logo"
@@ -12793,7 +12793,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                     />
                     <span className="font-bold text-text uppercase tracking-widest text-xs truncate">{serverName}</span>
                 </div>
-                <div className="flex items-center gap-2 shrink-0 overflow-visible">
+                <div className="flex items-center gap-1.5 shrink-0">
                     <InAppNotificationsBell
                         onNavigate={(route, options) => onNavigate(route as any, options)}
                         className="overflow-visible"
@@ -12843,7 +12843,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                         )}
                     </div>
                     {isAdmin && (
-                        <button onClick={(e) => { e.preventDefault(); onNavigate('logs'); }} className={`text-muted hover:text-text transition-colors ${currentRoute === 'logs' ? 'text-plex' : ''}`}>
+                        <button onClick={(e) => { e.preventDefault(); onNavigate('logs'); }} className={`w-8 h-8 flex items-center justify-center rounded-md border border-border text-muted hover:border-plex/50 hover:text-text transition-colors ${currentRoute === 'logs' ? 'text-plex border-plex/50' : ''}`}>
                             <FileText className="w-4 h-4" />
                         </button>
                     )}
@@ -12851,7 +12851,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                         <button
                             type="button"
                             onClick={(e) => { e.preventDefault(); void handleInstallApp(); }}
-                            className={`inline-flex items-center gap-1 rounded-md border px-1.5 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors ${
+                            className={`w-8 h-8 inline-flex items-center justify-center rounded-md border transition-colors ${
                                 installPrompt
                                     ? 'border-plex/50 bg-plex/15 text-plex'
                                     : 'border-border text-muted hover:border-plex/40 hover:text-text'
@@ -12860,10 +12860,9 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                             aria-label={t('pwa.install.button')}
                         >
                             <MonitorSmartphone className="w-3.5 h-3.5 shrink-0" />
-                            {t('pwa.install.button')}
                         </button>
                     )}
-                    <button onClick={(e) => { e.preventDefault(); onLogout(); }} className="text-muted hover:text-red-500 transition-colors">
+                    <button onClick={(e) => { e.preventDefault(); onLogout(); }} className="w-8 h-8 flex items-center justify-center rounded-md border border-border text-muted hover:border-red-500/50 hover:text-red-500 transition-colors">
                         <LogOut className="w-4 h-4" />
                     </button>
                 </div>
