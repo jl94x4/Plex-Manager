@@ -224,6 +224,31 @@ export const isFrameOptionsBlockedAppUrl = (url: string) => {
     }
 };
 
+/**
+ * Path-mounted *arr apps on the portal host that redirect to absolute http:// login URLs
+ * (mixed content) or send frame-blocking headers. Sonarr is excluded — it works with a
+ * direct iframe on this deployment.
+ */
+const PATH_MOUNTED_ARR_PROXY_TYPES = new Set([
+    'radarr', 'lidarr', 'readarr', 'whisparr', 'prowlarr', 'bazarr',
+]);
+
+export const isPathMountedArrProxyRequired = (url: string) => {
+    try {
+        const parsed = new URL(String(url || '').trim(), typeof window !== 'undefined' ? window.location.origin : 'https://localhost');
+        const portalHost = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : '';
+        const targetHost = parsed.hostname.toLowerCase();
+        if (!portalHost || targetHost !== portalHost) return false;
+        const parts = parsed.pathname.replace(/\/+$/, '').split('/').filter(Boolean);
+        if (parts.length !== 1) return false;
+        const mount = parts[0].toLowerCase();
+        const stripped = mount.replace(/4k$/, '');
+        return PATH_MOUNTED_ARR_PROXY_TYPES.has(mount) || PATH_MOUNTED_ARR_PROXY_TYPES.has(stripped);
+    } catch {
+        return false;
+    }
+};
+
 /** Upgrade HTTP sibling subdomains to HTTPS when the portal is served over TLS. */
 export const normalizeCustomTabEmbedUrl = (url: string) => {
     const trimmed = String(url || '').trim();
@@ -256,6 +281,8 @@ const wouldNeedEmbedProxy = (
         if (portalProtocol === 'https:' && parsed.protocol === 'http:') return true;
         const portalHost = typeof window !== 'undefined' ? window.location.hostname.toLowerCase() : '';
         const targetHost = parsed.hostname.toLowerCase();
+        // Same-host /radarr etc. still need the proxy: Radarr issues http:// login redirects.
+        if (isPathMountedArrProxyRequired(url)) return true;
         if (!portalHost || targetHost === portalHost) return false;
         if (isFrameOptionsBlockedAppUrl(url) && !isDirectEmbedOnlyAppUrl(url)) return true;
         if (
