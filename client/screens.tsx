@@ -12460,7 +12460,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
 
     /** Nav link styles — stay readable; logo steps first, then these three. */
     const DESKTOP_NAV_STYLES = [
-        { gap: 'gap-2.5', px: 'px-3', py: 'py-1', text: 'text-[15px]', icon: 'w-5 h-5' },
+        { gap: 'gap-2.5', px: 'px-3', py: 'py-1.5', text: 'text-[15px]', icon: 'w-5 h-5' },
         { gap: 'gap-2', px: 'px-3', py: 'py-0.5', text: 'text-sm', icon: 'w-[18px] h-[18px]' },
         { gap: 'gap-1.5', px: 'px-2.5', py: 'py-0.5', text: 'text-[13px]', icon: 'w-4 h-4' },
     ];
@@ -12624,7 +12624,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
             ? `relative flex flex-col items-center justify-center gap-0.5 h-full flex-1 min-w-0 px-0.5 text-center text-[0.6rem] sm:text-[0.65rem] transition-colors ${options.isCurrent ? 'text-plex font-bold' : 'text-muted hover:text-text'}`
             : iconsOnly
                 ? `relative flex w-full items-center justify-center px-0 py-1.5 no-underline rounded-lg transition-colors ${options.isCurrent ? 'nav-item-active' : 'text-muted hover:bg-white/5 hover:text-text'}`
-                : `flex flex-1 w-full max-h-11 items-center ${desktopDensity?.gap || 'gap-2.5'} ${desktopDensity?.px || 'px-3'} ${desktopDensity?.py || 'py-1'} no-underline rounded-lg transition-colors ${desktopDensity?.text || 'text-[15px]'} font-medium ${options.isCurrent ? 'nav-item-active' : 'text-muted hover:bg-white/5 hover:text-text'}`;
+                : `flex w-full items-center ${desktopDensity?.gap || 'gap-2.5'} ${desktopDensity?.px || 'px-3'} ${desktopDensity?.py || 'py-1.5'} no-underline rounded-lg transition-colors ${desktopDensity?.text || 'text-[15px]'} font-medium ${options.isCurrent ? 'nav-item-active' : 'text-muted hover:bg-white/5 hover:text-text'}`;
 
         if (item.href) {
             return (
@@ -12638,7 +12638,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                     className={options.mobile ? baseClass : (
                         iconsOnly
                             ? `${baseClass} text-muted hover:bg-white/5 hover:text-text`
-                            : `flex flex-1 w-full max-h-11 items-center ${desktopDensity?.gap || 'gap-2.5'} ${desktopDensity?.px || 'px-3'} ${desktopDensity?.py || 'py-1'} text-muted no-underline rounded-lg transition-colors ${desktopDensity?.text || 'text-[15px]'} font-medium hover:bg-white/5 hover:text-text`
+                            : `flex w-full items-center ${desktopDensity?.gap || 'gap-2.5'} ${desktopDensity?.px || 'px-3'} ${desktopDensity?.py || 'py-1.5'} text-muted no-underline rounded-lg transition-colors ${desktopDensity?.text || 'text-[15px]'} font-medium hover:bg-white/5 hover:text-text`
                     )}
                 >
                     {mark}
@@ -12893,7 +12893,7 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                                         type="button"
                                         className={desktopNavIconsOnly
                                             ? `relative flex w-full items-center justify-center px-0 py-1.5 bg-transparent border-0 cursor-pointer no-underline rounded-lg transition-colors ${isCurrent || appletsOpen ? 'nav-item-active' : 'text-muted hover:bg-white/5 hover:text-text'}`
-                                            : `flex flex-1 w-full max-h-11 items-center ${desktopDensity?.gap || 'gap-2.5'} ${desktopDensity?.px || 'px-3'} ${desktopDensity?.py || 'py-1'} bg-transparent border-0 cursor-pointer no-underline rounded-lg transition-colors ${desktopDensity?.text || 'text-[15px]'} font-medium ${isCurrent || appletsOpen ? 'nav-item-active' : 'text-muted hover:bg-white/5 hover:text-text'}`}
+                                            : `flex w-full items-center ${desktopDensity?.gap || 'gap-2.5'} ${desktopDensity?.px || 'px-3'} ${desktopDensity?.py || 'py-1.5'} bg-transparent border-0 cursor-pointer no-underline rounded-lg transition-colors ${desktopDensity?.text || 'text-[15px]'} font-medium ${isCurrent || appletsOpen ? 'nav-item-active' : 'text-muted hover:bg-white/5 hover:text-text'}`}
                                         onClick={() => setAppletsOpen((open) => !open)}
                                         aria-expanded={appletsOpen}
                                         aria-haspopup="dialog"
