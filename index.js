@@ -20246,10 +20246,22 @@ const buildSummaryDigestDeps = async (config, { force = false } = {}) => {
 
 const checkAndSendSummaryDigest = async (config, force = false) => {
     if (!config.summaryNotifyEnabled && !force) return { skipped: 'disabled' };
+    const now = new Date();
+    if (!force && !shouldSendSummaryNow(config, now)) return { skipped: 'not-due' };
+
+    // Reserve the slot before building/sending so the timer and batch catch-up
+    // cannot both deliver the same digest.
+    if (!force) {
+        config.lastSummarySent = getSummaryLocalDateKey(config, now);
+        config.lastSummarySentAt = now.toISOString();
+        config.lastSummaryPeriodEnd = now.toISOString();
+        await saveFile(CONFIG_PATH, config);
+        scheduleSummaryDigestTimer(config);
+    }
+
     const deps = await buildSummaryDigestDeps(config, { force });
-    const result = await runSummaryDigestCycle(config, deps);
-    if (result?.markedSent) {
-        const now = new Date();
+    const result = await runSummaryDigestCycle(config, { ...deps, force: true });
+    if (force && result?.digestId) {
         config.lastSummarySent = getSummaryLocalDateKey(config, now);
         config.lastSummarySentAt = now.toISOString();
         config.lastSummaryPeriodEnd = now.toISOString();
