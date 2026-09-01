@@ -787,6 +787,15 @@ export const MainApp: React.FC = () => {
         setOpenApplets((prev) => closeOpenApplet(prev, id));
     }, [buildOpenAppletPath, currentRoute, externalTabId, openApplets, setRoute]);
 
+    const handleCloseAllApplets = useCallback(() => {
+        if (!openApplets.length) return;
+        if (sessionInfo) clearStoredOpenApplets(getOpenAppletsAccountKey(sessionInfo));
+        setOpenApplets([]);
+        if (currentRoute === 'external') {
+            setRoute('dashboard');
+        }
+    }, [currentRoute, openApplets.length, sessionInfo, setRoute]);
+
     const handleStopImpersonation = async () => {
         try {
             await apiFetch('/api/admin/stop-impersonation', { method: 'POST' });
@@ -1044,6 +1053,7 @@ export const MainApp: React.FC = () => {
                                 isAdmin={isAdmin}
                                 onActivate={handleActivateApplet}
                                 onClose={handleCloseApplet}
+                                onCloseAll={handleCloseAllApplets}
                             />
                         ) : null}
                         {currentRoute !== 'external' ? (

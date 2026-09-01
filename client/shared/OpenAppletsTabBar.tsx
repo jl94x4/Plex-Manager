@@ -13,6 +13,7 @@ type Props = {
     navOrder?: string[];
     onActivate: (session: OpenAppletSession) => void;
     onClose: (id: string) => void;
+    onCloseAll?: () => void;
 };
 
 const TabItem: React.FC<{
@@ -39,6 +40,12 @@ const TabItem: React.FC<{
             <button
                 type="button"
                 onClick={onActivate}
+                onMouseDown={(event) => {
+                    if (event.button === 1) {
+                        event.preventDefault();
+                        onClose();
+                    }
+                }}
                 className="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1.5 text-left"
                 aria-current={isActive ? 'page' : undefined}
                 title={name}
@@ -81,6 +88,7 @@ export const OpenAppletsTabBar: React.FC<Props> = ({
     navOrder = [],
     onActivate,
     onClose,
+    onCloseAll,
 }) => {
     const { t } = useDiscoverI18n();
     const orderedSessions = useMemo(
@@ -111,6 +119,17 @@ export const OpenAppletsTabBar: React.FC<Props> = ({
                         onClose={() => onClose(session.id)}
                     />
                 ))}
+                {onCloseAll ? (
+                    <button
+                        type="button"
+                        className="ml-auto shrink-0 rounded-lg border border-white/10 px-2.5 py-1.5 text-xs font-semibold text-muted transition-colors hover:border-red-500/40 hover:bg-red-500/15 hover:text-red-200"
+                        onClick={onCloseAll}
+                        aria-label={t('navigation.closeAllApplets')}
+                        title={t('navigation.closeAllApplets')}
+                    >
+                        {t('navigation.closeAllApplets')}
+                    </button>
+                ) : null}
             </div>
         </div>
     );

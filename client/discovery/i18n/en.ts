@@ -79,6 +79,7 @@ export const en = {
         appletsEditHint: 'Drag icons to reorder',
         appletsEditDone: 'Done',
         closeApplet: 'Close {name}',
+        closeAllApplets: 'Close all',
         openAppletsTabs: 'Open apps',
         appletsEmpty: 'No apps are enabled yet.',
         appletsPrev: 'Previous page',

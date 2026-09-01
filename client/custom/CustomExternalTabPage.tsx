@@ -505,6 +505,7 @@ type HostProps = {
     isAdmin?: boolean;
     onActivate: (session: OpenAppletSession) => void;
     onClose: (id: string) => void;
+    onCloseAll?: () => void;
 };
 
 export const OpenAppletsHost: React.FC<HostProps> = ({
@@ -516,6 +517,7 @@ export const OpenAppletsHost: React.FC<HostProps> = ({
     isAdmin = false,
     onActivate,
     onClose,
+    onCloseAll,
 }) => {
     const panes = sessions.map((session) => {
         const shown = visible && session.id === activeId;
@@ -548,6 +550,7 @@ export const OpenAppletsHost: React.FC<HostProps> = ({
                     navOrder={navOrder}
                     onActivate={onActivate}
                     onClose={onClose}
+                    onCloseAll={onCloseAll}
                 />
                 {panes}
             </div>
