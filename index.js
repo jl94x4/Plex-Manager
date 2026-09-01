@@ -7853,9 +7853,11 @@ const buildPlexNowPlayingIdentity = async (config, uri, reqUser, localUser = nul
     const email = reqUser?.email || localUser?.email || '';
     const plexId = reqUser?.plexId || localUser?.plexId || adminCloudId || null;
     const aliases = [username, email, localUser?.username, localUser?.email].filter(Boolean);
+    let plexAccounts = [];
 
     try {
         const { map: accountMap, list: accounts } = await fetchPlexServerAccounts(uri, config);
+        plexAccounts = accounts;
         const account = accountMap?.[String(accountId)];
         if (account?.name) aliases.push(account.name);
         if (account?.email) aliases.push(account.email);
@@ -7890,9 +7892,12 @@ const buildPlexNowPlayingIdentity = async (config, uri, reqUser, localUser = nul
             .map((id) => String(id))
             .filter((id) => id !== '1'),
     );
-    // Owners always match local PMS account "1"; never use a cloud plex.tv id as the sole accountId.
-    if (isAdmin && (!accountId || cloudIds.has(String(accountId)))) {
-        accountId = '1';
+    // Owners always match local PMS account "1"; never use a cloud plex.tv id as accountId.
+    if (isAdmin) {
+        const homeAccount = plexAccounts.find((a) => String(a.id) === '1');
+        if (homeAccount || !accountId || cloudIds.has(String(accountId))) {
+            accountId = '1';
+        }
     }
 
     const accountIds = [
