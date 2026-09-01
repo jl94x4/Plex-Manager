@@ -11794,6 +11794,9 @@ app.post('/api/discovery/request', requireAuth, requireMember, async (req, res) 
             languageProfileId,
             tags,
             posterPath: posterPathFromBody,
+            title: titleFromBody,
+            overview: overviewFromBody,
+            year: yearFromBody,
         } = req.body || {};
         if (!mediaType || !mediaId) return res.status(400).json({ error: 'Missing media details' });
 
@@ -11841,17 +11844,29 @@ app.post('/api/discovery/request', requireAuth, requireMember, async (req, res) 
                 rootFolder,
                 languageProfileId,
                 tags,
+                title: titleFromBody,
+                posterPath: posterPathFromBody,
+                overview: overviewFromBody,
+                year: yearFromBody,
             });
 
             const createdStatus = Number(created?.status);
             if (created.autoApproveError) {
                 log(`Portal auto-approve failed for request ${created.id}: ${created.autoApproveError}`);
             }
-            if (createdStatus !== 2) {
-                await notifyAdminNewRequest(config, created);
-            }
-            await maybeNotifyRequestNotReleased(config, created);
-            return res.status(201).json(created);
+            res.status(201).json(created);
+            // Notifications can wait on email / push — don't block the request dialog.
+            void (async () => {
+                try {
+                    if (createdStatus !== 2) {
+                        await notifyAdminNewRequest(config, created);
+                    }
+                    await maybeNotifyRequestNotReleased(config, created);
+                } catch (notifyError) {
+                    log(`[RequestLifecycle] post-create notify failed: ${notifyError?.message || notifyError}`);
+                }
+            })();
+            return;
         }
 
         const gate = getRequestAppGate(config);

@@ -631,6 +631,9 @@ export const RequestModal: React.FC<Props> = ({
         if (posterPath) body.posterPath = posterPath;
         const requestTitle = String(options.title || fallbackTitle || '').trim();
         if (requestTitle) body.title = requestTitle;
+        const requestOverview = String(options.overview || fallbackOverview || '').trim();
+        if (requestOverview) body.overview = requestOverview;
+        if (options.year != null) body.year = options.year;
         if (mediaType === 'tv') {
             // Prefer explicit season lists when Specials are in play so we never
             // accidentally request season 0 via Seerr's seasons:"all".
@@ -686,6 +689,7 @@ export const RequestModal: React.FC<Props> = ({
         }
 
         setSubmitting(true);
+        onCloseRef.current();
         const successes: string[] = [];
         const failures: string[] = [];
 
@@ -712,13 +716,11 @@ export const RequestModal: React.FC<Props> = ({
                         ? t('request.submittedSeries', { qualities: successes.join(' + ') })
                         : t('request.submittedMovie', { qualities: successes.join(' + ') }),
                 );
-                onCloseRef.current();
             } else if (successes.length && failures.length) {
                 onSuccessRef.current(t('request.submittedPartial', {
                     successes: successes.join(' + '),
                     failures: failures.join('; '),
                 }));
-                onCloseRef.current();
             } else {
                 onErrorRef.current(failures.join('; ') || t('request.submitFailed'));
             }
