@@ -15386,7 +15386,9 @@ app.get('/api/plex/dashboard', requireAuth, requireMember, async (req, res) => {
                     user: m.User ? m.User.title : 'Unknown User',
                     userThumb: m.User ? m.User.thumb : null,
                     playerTitle: player.title || 'Unknown Player',
-                    accountId: m.User?.id != null ? String(m.User.id) : null,
+                    accountId: m.accountID != null
+                        ? String(m.accountID)
+                        : (m.User?.id != null ? String(m.User.id) : null),
                 }, findPortalUserForStream(portalUsers, {
                     user: m.User?.title,
                     plexUserId: m.User?.id,

@@ -336,6 +336,7 @@ export const ProfilePage: React.FC<Props> = ({
             setNowPlaying(null);
             return undefined;
         }
+        const isSelfProfile = !!data.viewer?.isSelf;
         const subjectId = String(data.identity?.accountId || accountId || '').trim();
         const subjectName = String(data.identity?.username || '').trim().toLowerCase();
         const nameHidden = !subjectName || subjectName === 'anonymous' || /^viewer\s+\d+$/.test(subjectName);
@@ -346,6 +347,34 @@ export const ProfilePage: React.FC<Props> = ({
         let cancelled = false;
         const load = async () => {
             try {
+                if (isSelfProfile) {
+                    const payload = await apiFetch('/api/streams/now-playing') as {
+                        session?: {
+                            mediaType?: string;
+                            title?: string;
+                            episodeTitle?: string | null;
+                            progress?: number;
+                            state?: string;
+                            tmdbId?: number | null;
+                        } | null;
+                    };
+                    if (cancelled) return;
+                    const session = payload?.session;
+                    if (!session) {
+                        setNowPlaying(null);
+                        return;
+                    }
+                    const isTv = session.mediaType === 'tv';
+                    setNowPlaying({
+                        type: isTv ? 'episode' : 'movie',
+                        title: isTv ? (session.episodeTitle || session.title) : session.title,
+                        grandparentTitle: isTv ? session.title : null,
+                        progress: session.progress,
+                        state: session.state,
+                        tmdbId: session.tmdbId,
+                    });
+                    return;
+                }
                 const payload = await apiFetch(
                     isJellyfinPortal ? '/api/jellyfin/dashboard?limit=5' : '/api/plex/dashboard?limit=5',
                 );
