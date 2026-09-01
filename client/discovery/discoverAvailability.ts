@@ -128,6 +128,34 @@ export const resolveMediaAvailabilityState = (item: any): MediaAvailabilityState
         };
     }
 
+    if (mediaType === 'movie') {
+        const radarr = item?.radarrLibraryStatus;
+        if (radarr?.matched && radarr?.hasFile) {
+            if (radarr.downloading) {
+                return {
+                    ...base,
+                    kind: 'processing',
+                    label: 'Processing',
+                    detail: 'Your request is being downloaded or imported.',
+                };
+            }
+            return {
+                ...base,
+                kind: 'available',
+                label: 'Available in library',
+                detail: 'This movie is already in your media library.',
+            };
+        }
+        if (mediaStatus === MEDIA_STATUS.AVAILABLE) {
+            return {
+                ...base,
+                kind: 'available',
+                label: 'Available in library',
+                detail: 'This movie is already in your media library.',
+            };
+        }
+    }
+
     const seasonRows = mediaType === 'tv' ? buildTvSeasonStatusRows(item) : [];
     const inProgressDisplay = resolveInProgressDisplay(mediaInfo, mediaStatus, item);
     if (inProgressDisplay?.kind === 'processing' || hasActiveShowDownloads(item, mediaInfo)) {

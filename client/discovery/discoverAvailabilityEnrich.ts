@@ -36,11 +36,24 @@ const REQUEST_PRESERVE_STATUSES = new Set<number>([
     MEDIA_STATUS.PROCESSING,
 ]);
 
+const SKIP_ENRICH_STATUSES = new Set<number>([
+    MEDIA_STATUS.AVAILABLE,
+    MEDIA_STATUS.PARTIAL,
+    MEDIA_STATUS.BLACKLISTED,
+]);
+
 const LIBRARY_OWNED_STATUSES = new Set<number>([
     MEDIA_STATUS.PARTIAL,
     MEDIA_STATUS.AVAILABLE,
     MEDIA_STATUS.BLACKLISTED,
 ]);
+
+const patchShowsLibraryAvailable = (patch: any) => (
+    LIBRARY_OWNED_STATUSES.has(Number(patch?.mediaInfo?.status))
+    || Boolean(patch?.radarrLibraryStatus?.hasFile && !patch?.radarrLibraryStatus?.downloading)
+    || Boolean(patch?.sonarrLibraryStatus?.showComplete && !patch?.sonarrLibraryStatus?.hasActiveDownloads)
+    || Boolean(patch?.inLibrary && !patch?.downloading)
+);
 
 const hasActiveMediaRequests = (mediaInfo: any) => (
     Array.isArray(mediaInfo?.requests)
@@ -64,15 +77,24 @@ export const mergeAvailabilityOntoItems = <T,>(items: T[], availabilityByKey: Re
             ...existingInfo,
             ...patchInfo,
         };
+        const libraryWins = patchShowsLibraryAvailable(patch);
         // Library AVAILABLE/PARTIAL/BLACKLISTED always wins.
         // Don't let empty Radarr/cache patches wipe Seerr/portal PENDING/PROCESSING
         // (or an active requests[] stamp) — that left detail CTAs on "Request Movie"
         // while the modal correctly said already requested.
-        const preserveRequest = (
+        const preserveRequest = !libraryWins && (
             (REQUEST_PRESERVE_STATUSES.has(existingStatus) || hasActiveMediaRequests(existingInfo))
             && !LIBRARY_OWNED_STATUSES.has(patchStatus)
         );
-        if (preserveRequest) {
+        if (libraryWins) {
+            if (LIBRARY_OWNED_STATUSES.has(patchStatus)) {
+                mergedInfo.status = patchStatus;
+            } else if (patch.radarrLibraryStatus?.hasFile && !patch.radarrLibraryStatus?.downloading) {
+                mergedInfo.status = MEDIA_STATUS.AVAILABLE;
+            } else if (patch.sonarrLibraryStatus?.showComplete) {
+                mergedInfo.status = MEDIA_STATUS.AVAILABLE;
+            }
+        } else if (preserveRequest) {
             if (REQUEST_PRESERVE_STATUSES.has(existingStatus)) {
                 mergedInfo.status = existingStatus;
             } else if (!Number.isFinite(patchStatus) || patchStatus <= 1) {
@@ -111,7 +133,7 @@ export async function enrichDiscoverItemsWithAvailability<T>(items: T[]): Promis
             const status = Number((item as any)?.mediaInfo?.status);
             const hasRequests = Array.isArray((item as any)?.mediaInfo?.requests)
                 && (item as any).mediaInfo.requests.length > 0;
-            if (RESOLVED_MEDIA_STATUSES.has(status) || hasRequests) return null;
+            if (SKIP_ENRICH_STATUSES.has(status)) return null;
             const normalized = normalizeRawDiscoveryItem(item) || item;
             if (key.startsWith('music:')) {
                 const mbid = key.slice('music:'.length);

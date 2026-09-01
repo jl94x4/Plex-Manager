@@ -429,6 +429,27 @@ export const DiscoverHome: React.FC<{
                     setTvGenres(TV_GENRES.map((g) => ({ id: g.id, name: g.name, image: buildGenreSliderImage(g.id) })));
                 }
             })();
+
+            // Refresh stale request badges on home rails (e.g. finished downloads still stamped Processing).
+            void (async () => {
+                try {
+                    if (gen !== loadGenRef.current) return;
+                    const [trendingFresh, popularMoviesFresh, popularSeriesFresh] = await Promise.all([
+                        enrichDiscoverItemsWithAvailability(trendingRes),
+                        enrichDiscoverItemsWithAvailability(popularMovies),
+                        enrichDiscoverItemsWithAvailability(popularSeries),
+                    ]);
+                    if (gen !== loadGenRef.current) return;
+                    setRows((prev) => ({
+                        ...prev,
+                        trending: filterHiddenAvailableItems(trendingFresh, hideAvailable),
+                        popularMovies: filterHiddenAvailableItems(popularMoviesFresh, hideAvailable),
+                        popularSeries: filterHiddenAvailableItems(popularSeriesFresh, hideAvailable),
+                    }));
+                } catch {
+                    // Best-effort badge refresh.
+                }
+            })();
         } catch (e) {
             console.error(e);
             if (gen === loadGenRef.current) setLoading(false);

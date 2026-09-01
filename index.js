@@ -1583,6 +1583,7 @@ import {
     lookupDiscoveryAvailability,
     lookupDiscoveryAvailabilityForItem,
     mergeAvailabilityEntryOntoItem,
+    discoveryAvailabilityCacheNeedsLiveRecheck,
     applyDiscoveryAvailabilityCacheToPayload,
     rebuildDiscoveryAvailabilityCache,
     createPortalRequestService,
@@ -9570,6 +9571,26 @@ const pruneMemberActiveRequestsOverlayCache = () => {
     }
 };
 
+/** Prefer on-disk library state over stale request PROCESSING stamps on browse cards. */
+const resolveDiscoveryItemLibraryMediaStatus = (item = {}, mediaInfo = {}) => {
+    const current = Number(mediaInfo?.status);
+    if (current === 5) return 5;
+    if (current === 4) return 4;
+    const radarr = item?.radarrLibraryStatus;
+    if (radarr?.matched && radarr?.hasFile) {
+        return radarr.downloading ? 3 : 5;
+    }
+    const sonarr = item?.sonarrLibraryStatus;
+    if (sonarr?.matched && sonarr?.showComplete && !sonarr?.hasActiveDownloads) {
+        return 5;
+    }
+    const lidarr = item?.lidarrLibraryStatus;
+    if (lidarr?.matched && !lidarr?.hasActiveDownloads) {
+        return lidarr?.hasFile ? 5 : 4;
+    }
+    return null;
+};
+
 const overlayPortalPendingRequestsOntoItems = async (config, sessionUser, items = []) => {
     if (getRequestEngine(config) !== 'portal' || !sessionUser || !Array.isArray(items) || !items.length) {
         return items;
@@ -9646,6 +9667,24 @@ const overlayPortalPendingRequestsOntoItems = async (config, sessionUser, items 
                 },
                 ...(Array.isArray(mediaInfo.requests) ? mediaInfo.requests : []),
             ];
+            const libraryStatus = resolveDiscoveryItemLibraryMediaStatus(item, mediaInfo);
+            if (libraryStatus === 5) {
+                mediaInfo.status = 5;
+                return { ...item, mediaInfo };
+            }
+            if (libraryStatus === 4) {
+                mediaInfo.status = 4;
+                return { ...item, mediaInfo };
+            }
+            if (libraryStatus === 3) {
+                mediaInfo.status = 3;
+                return { ...item, mediaInfo };
+            }
+            const syncedMediaStatus = Number(active.mediaStatus);
+            if (syncedMediaStatus === 5 || syncedMediaStatus === 4) {
+                mediaInfo.status = syncedMediaStatus;
+                return { ...item, mediaInfo };
+            }
             const currentStatus = Number(mediaInfo.status);
             // Don't clobber library available/partial — only fill unknown/empty.
             if (!Number.isFinite(currentStatus) || currentStatus === 1) {
@@ -9754,6 +9793,24 @@ const overlaySeerrPendingRequestsOntoItems = async (config, sessionUser, items =
                 },
                 ...(Array.isArray(mediaInfo.requests) ? mediaInfo.requests : []),
             ];
+            const libraryStatus = resolveDiscoveryItemLibraryMediaStatus(item, mediaInfo);
+            if (libraryStatus === 5) {
+                mediaInfo.status = 5;
+                return { ...item, mediaInfo };
+            }
+            if (libraryStatus === 4) {
+                mediaInfo.status = 4;
+                return { ...item, mediaInfo };
+            }
+            if (libraryStatus === 3) {
+                mediaInfo.status = 3;
+                return { ...item, mediaInfo };
+            }
+            const syncedMediaStatus = Number(active.mediaStatus);
+            if (syncedMediaStatus === 5 || syncedMediaStatus === 4) {
+                mediaInfo.status = syncedMediaStatus;
+                return { ...item, mediaInfo };
+            }
             const currentStatus = Number(mediaInfo.status);
             const seerrMediaStatus = Number(active.mediaStatus);
             if (!Number.isFinite(currentStatus) || currentStatus === 1) {
@@ -10130,7 +10187,7 @@ app.post('/api/discovery/availability-batch', requireAuth, requireMember, async 
         const misses = [];
         for (const item of items) {
             const hit = lookupDiscoveryAvailabilityForItem(cache, item);
-            if (hit?.mediaInfo) {
+            if (hit?.mediaInfo && !discoveryAvailabilityCacheNeedsLiveRecheck(hit)) {
                 cachedHits.push(mergeAvailabilityEntryOntoItem(item, hit));
             } else {
                 misses.push(item);
