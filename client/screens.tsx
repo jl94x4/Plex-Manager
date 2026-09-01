@@ -7724,8 +7724,7 @@ export const UserDashboard: React.FC<{
         readNowPlayingCompanionEnabled(wrapUpSubjectId)
     ));
     // Members can hide Now Playing in Preferences; admins honor the same switch.
-    const nowPlayingEnabled = publicConfig?.discoverNowPlayingEnabled !== false
-        && (!user || user.showDiscoverNowPlaying !== false);
+    const nowPlayingEnabled = !user || user.showDiscoverNowPlaying !== false;
     const { session: nowPlaying, others: nowPlayingOthers } = useNowPlaying(nowPlayingEnabled);
     const showQualityBadges = publicConfig?.showPosterQualityBadges !== false;
     const mediaServerType = String(publicConfig?.mediaServerType || 'plex').toLowerCase();
@@ -8414,9 +8413,9 @@ export const UserDashboard: React.FC<{
             )}
 
             {/* Massive Hero Banner */}
-            <div className="home-hero-banner relative flex flex-col w-full rounded-2xl overflow-visible shadow-2xl bg-card border border-border">
+            <div className="home-hero-banner relative w-full rounded-2xl overflow-hidden shadow-2xl bg-card border border-border">
                 {/* Blurred Background */}
-                <div className="absolute inset-0 z-0 rounded-2xl overflow-hidden bg-background">
+                <div className="absolute inset-0 bg-background overflow-hidden">
                     {publicConfig?.useTrendingSlideshow && publicConfig?.trendingBackgrounds?.length > 0 ? (
                         <>
                             <div className="absolute inset-0 opacity-100">
@@ -8499,7 +8498,7 @@ export const UserDashboard: React.FC<{
                     ) : null}
                 </div>
 
-                <div className={`relative z-10 pt-14 px-4 md:pt-32 md:px-12 flex flex-col items-center md:items-start text-center md:text-left ${nowPlaying ? 'pb-4 md:pb-6' : 'pb-5 md:pb-12'}`}>
+                <div className={`relative pt-14 px-4 md:pt-32 md:px-12 flex flex-col items-center md:items-start text-center md:text-left z-10 ${nowPlaying ? 'pb-12 md:pb-16' : 'pb-5 md:pb-12'}`}>
                     <div className="flex flex-col md:flex-row items-center md:items-center gap-3 md:gap-6">
                         {/* Avatar */}
                         {(() => {
@@ -8572,15 +8571,12 @@ export const UserDashboard: React.FC<{
                 </div>
 
                 {nowPlaying ? (
-                    <div className="relative z-20 shrink-0">
-                        <DiscoverNowPlayingStrip
-                            session={nowPlaying}
-                            others={nowPlayingOthers}
-                            onNavigate={(path) => onNavigate?.('discovery', { path })}
-                            onOpenProfile={(id) => goToProfile(onNavigate, id)}
-                            placement="footer"
-                        />
-                    </div>
+                    <DiscoverNowPlayingStrip
+                        session={nowPlaying}
+                        others={nowPlayingOthers}
+                        onNavigate={(path) => onNavigate?.('discovery', { path })}
+                        onOpenProfile={(id) => goToProfile(onNavigate, id)}
+                    />
                 ) : null}
             </div>
 
