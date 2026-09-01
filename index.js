@@ -12036,10 +12036,10 @@ app.post('/api/discovery/request', requireAuth, requireMember, async (req, res) 
         });
         const seerrStatus = Number(data?.status);
         const users = await loadFile(USERS_PATH, []);
-        const titleFromBody = String(req.body?.title || '').trim();
+        const trimmedTitleFromBody = String(titleFromBody || '').trim();
         const lifecycleRecord = mapSeerrRequestToLifecycleRecord({
             ...data,
-            title: data?.media?.title || data?.media?.name || titleFromBody || undefined,
+            title: data?.media?.title || data?.media?.name || trimmedTitleFromBody || undefined,
             type,
             tmdbId,
             posterPath: data?.posterPath || data?.media?.posterPath || data?.media?.poster
@@ -12053,7 +12053,7 @@ app.post('/api/discovery/request', requireAuth, requireMember, async (req, res) 
             },
         }, users);
         if (!lifecycleRecord.title || /^your request$/i.test(lifecycleRecord.title)) {
-            if (titleFromBody) lifecycleRecord.title = titleFromBody;
+            if (trimmedTitleFromBody) lifecycleRecord.title = trimmedTitleFromBody;
         }
         lifecycleRecord.mediaType = type;
         lifecycleRecord.tmdbId = tmdbId;
