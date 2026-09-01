@@ -4,6 +4,7 @@
  */
 
 import { apiFetch } from '../shared/api';
+import { resolveMediaAvailabilityState } from './discoverAvailability';
 import { normalizeRawDiscoveryItem } from './discoverItemUtils';
 import { MEDIA_STATUS } from './requestSeasonUtils';
 
@@ -119,6 +120,14 @@ export const mergeAvailabilityOntoItems = <T,>(items: T[], availabilityByKey: Re
         };
     });
 };
+
+/** Live Radarr/Sonarr lookup for browse rows when the disk cache missed a title. */
+export async function enrichDiscoverBrowseRows<T>(items: T[]): Promise<T[]> {
+    if (!Array.isArray(items) || items.length === 0) return items;
+    const needsLive = items.some((item) => resolveMediaAvailabilityState(item).kind === 'none');
+    if (!needsLive) return items;
+    return enrichDiscoverItemsWithAvailability(items);
+}
 
 /** Fetch availability for a list of discover items and merge mediaInfo back on. */
 export async function enrichDiscoverItemsWithAvailability<T>(items: T[]): Promise<T[]> {

@@ -12,6 +12,7 @@ import { apiFetch } from '../shared/api';
 import { portalUrl, stripBasePath } from '../shared/basePath';
 import { getDiscoverItemKey, normalizeRawDiscoveryItem } from './discoverItemUtils';
 import { resolveMediaAvailabilityState } from './discoverAvailability';
+import { enrichDiscoverBrowseRows } from './discoverAvailabilityEnrich';
 import { DiscoverStatusOverlay } from './DiscoverStatusOverlay';
 import { MyRequestsPage } from './MyRequestsPage';
 import { MyIssuesPage } from './MyIssuesPage';
@@ -380,8 +381,13 @@ const DiscoveryDashboardInner: React.FC<{
                     { signal: controller.signal },
                 );
                 if (seq !== searchSeqRef.current) return;
-                setSearchResults(Array.isArray(res?.results) ? res.results : []);
+                const rawResults = Array.isArray(res?.results) ? res.results : [];
+                setSearchResults(rawResults);
                 setSearchError(null);
+                void enrichDiscoverBrowseRows(rawResults).then((enriched) => {
+                    if (seq !== searchSeqRef.current) return;
+                    setSearchResults(enriched);
+                }).catch(() => {});
             } catch (e: any) {
                 if (seq !== searchSeqRef.current) return;
                 const aborted = controller.signal.aborted

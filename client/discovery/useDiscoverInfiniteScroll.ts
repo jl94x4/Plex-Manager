@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type { UpgraderGridSize } from '../shared/portalLayout';
 import { mergeDiscoverResults } from './discoverItemUtils';
 import { filterDiscoverBrowseItems } from './discoverAvailability';
+import { enrichDiscoverBrowseRows } from './discoverAvailabilityEnrich';
 import { DISCOVER_LOAD_MORE_TARGET } from './discoverPaginationUtils';
 
 export type DiscoverPagePayload = {
@@ -149,6 +150,16 @@ export function useDiscoverInfiniteScroll({
             setTotalPages(cachedOnKey.totalPages);
             setLoading(false);
             void prefetchNextBatch(cachedOnKey.loadedPage + 1, cachedOnKey.totalPages);
+            void enrichDiscoverBrowseRows(cachedOnKey.results).then((enriched) => {
+                if (cancelled || committedKeyRef.current !== resetKey) return;
+                const filtered = filterDiscoverBrowseItems(enriched, filterOptionsRef.current || {});
+                setResults(filtered);
+                writeBrowseCache(resetKey, {
+                    results: filtered,
+                    loadedPage: cachedOnKey.loadedPage,
+                    totalPages: cachedOnKey.totalPages,
+                });
+            }).catch(() => {});
             return () => {
                 cancelled = true;
             };
@@ -182,7 +193,7 @@ export function useDiscoverInfiniteScroll({
 
                 if (!cancelled) {
                     // Server stamps mediaInfo (disk cache + warm catalog). Re-apply hide only —
-                    // do not client availability-batch (that made badges pop in after paint).
+                    // then live-enrich rows the cache missed so browse badges match detail pages.
                     const nextResults = filterDiscoverBrowseItems(merged, filterOptionsRef.current || {});
                     committedKeyRef.current = resetKey;
                     setResults(nextResults);
@@ -194,6 +205,16 @@ export function useDiscoverInfiniteScroll({
                         totalPages: maxTotalPages,
                     });
                     void prefetchNextBatch(lastPage + 1, maxTotalPages);
+                    void enrichDiscoverBrowseRows(nextResults).then((enriched) => {
+                        if (cancelled || committedKeyRef.current !== resetKey) return;
+                        const filtered = filterDiscoverBrowseItems(enriched, filterOptionsRef.current || {});
+                        setResults(filtered);
+                        writeBrowseCache(resetKey, {
+                            results: filtered,
+                            loadedPage: lastPage,
+                            totalPages: maxTotalPages,
+                        });
+                    }).catch(() => {});
                 }
             } catch (e) {
                 console.error(e);
@@ -232,6 +253,10 @@ export function useDiscoverInfiniteScroll({
                 setLoadedPage(prefetched.lastPage);
                 setTotalPages(prefetched.totalPages);
                 void prefetchNextBatch(prefetched.lastPage + 1, prefetched.totalPages);
+                void enrichDiscoverBrowseRows(prefetched.mergedBatch).then((enrichedBatch) => {
+                    if (fetchingRef.current) return;
+                    setResults((prev) => mergeDiscoverResults(prev, enrichedBatch));
+                }).catch(() => {});
                 return;
             }
 
@@ -255,6 +280,10 @@ export function useDiscoverInfiniteScroll({
             setTotalPages(maxTotalPages);
             prefetchRef.current = null;
             void prefetchNextBatch(lastPage + 1, maxTotalPages);
+            void enrichDiscoverBrowseRows(mergedBatch).then((enrichedBatch) => {
+                if (fetchingRef.current) return;
+                setResults((prev) => mergeDiscoverResults(prev, enrichedBatch));
+            }).catch(() => {});
         } catch (e) {
             console.error(e);
             setLoadedPage(totalPages);

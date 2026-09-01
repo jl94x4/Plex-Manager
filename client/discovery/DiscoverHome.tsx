@@ -15,7 +15,7 @@ import { enrichDiscoveryItems, normalizeRawDiscoveryItem } from './discoverItemU
 import { portalRequestsToDiscoveryRowItems } from './myRequestUtils';
 import { filterHiddenAvailableItems, useDiscoveryPreferences } from './useDiscoveryPreferences';
 import { fetchDiscoverHomeRowResults } from './discoverFetchUtils';
-import { enrichDiscoverItemsWithAvailability } from './discoverAvailabilityEnrich';
+import { enrichDiscoverBrowseRows, enrichDiscoverItemsWithAvailability } from './discoverAvailabilityEnrich';
 import { WatchlistPanel } from './WatchlistPanel';
 import { DiscoverSectionHeader } from './DiscoverSectionHeader';
 import {
@@ -334,6 +334,37 @@ export const DiscoverHome: React.FC<{
             // Stagger enter only on the first successful paint.
             window.setTimeout(() => setEnterAnim(false), 700);
 
+            // Disk cache can miss titles that Radarr/Plex already have (common on upcoming rows).
+            // Enrich after first paint so browse badges match the detail page without blocking skeletons.
+            void (async () => {
+                try {
+                    const [
+                        trending,
+                        popularMovies,
+                        upcomingMovies,
+                        popularSeries,
+                        upcomingSeries,
+                    ] = await Promise.all([
+                        enrichDiscoverBrowseRows(trendingRes),
+                        enrichDiscoverBrowseRows(popularMovies),
+                        enrichDiscoverBrowseRows(upcomingMovies),
+                        enrichDiscoverBrowseRows(popularSeries),
+                        enrichDiscoverBrowseRows(upcomingSeries),
+                    ]);
+                    if (gen !== loadGenRef.current) return;
+                    setRows((prev) => ({
+                        ...prev,
+                        trending: filterHiddenAvailableItems(trending, hideAvailable),
+                        popularMovies: filterHiddenAvailableItems(popularMovies, hideAvailable),
+                        upcomingMovies: filterHiddenAvailableItems(upcomingMovies, hideAvailable),
+                        popularSeries: filterHiddenAvailableItems(popularSeries, hideAvailable),
+                        upcomingSeries: filterHiddenAvailableItems(upcomingSeries, hideAvailable),
+                    }));
+                } catch {
+                    // Best-effort — disk cache badges still render when present.
+                }
+            })();
+
             const extraRowOpts = {
                 needsBackfill: hideAvailable,
                 maxPages: hideAvailable ? 3 : 1,
@@ -358,6 +389,18 @@ export const DiscoverHome: React.FC<{
                         const next = { ...prev };
                         batch.forEach((rail, idx) => {
                             next[rail.id] = filterHiddenAvailableItems(fetched[idx], hideAvailable);
+                        });
+                        return next;
+                    });
+                    if (gen !== loadGenRef.current) return;
+                    const enriched = await Promise.all(
+                        batch.map((rail, idx) => enrichDiscoverBrowseRows(fetched[idx] || [])),
+                    );
+                    if (gen !== loadGenRef.current) return;
+                    setExtraRows((prev) => {
+                        const next = { ...prev };
+                        batch.forEach((rail, idx) => {
+                            next[rail.id] = filterHiddenAvailableItems(enriched[idx], hideAvailable);
                         });
                         return next;
                     });
