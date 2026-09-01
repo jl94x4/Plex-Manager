@@ -6,6 +6,7 @@ import { DashboardHero, DashboardPageShell, DashboardPanel } from '../shared/das
 import { pushToast, ToastContainer, type ToastMessage } from '../shared/toast';
 import { subscribeWebPush, unsubscribeWebPush, webPushSupported, getIosWebPushBlockReason, isAndroidDevice, isStandalonePwa, syncExistingWebPushSubscription } from '../shared/webPushSubscribe';
 import { useDiscoverI18n } from '../discovery/i18n';
+import { DiscoverLocaleSelect } from '../discovery/i18n/DiscoverLocaleSelect';
 import { StickySaveBar } from '../shared/StickySaveBar';
 
 type Props = {
