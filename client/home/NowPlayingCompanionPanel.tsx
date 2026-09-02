@@ -369,80 +369,83 @@ const CompanionHeroCard: React.FC<CompanionHeroCardProps> = ({
     metaChips,
     overviewBlocks,
     unavailableLabel,
-}) => (
-    <div className="relative overflow-hidden rounded-2xl border border-white/15 bg-black/35 shadow-[0_24px_70px_rgba(0,0,0,0.45)]">
-        <div className="relative h-44 sm:h-52 lg:h-56">
-            {heroArtPath ? (
-                <img
-                    src={posterUrl(heroArtPath, 'w780')}
-                    alt=""
-                    className="absolute inset-0 h-full w-full object-cover"
-                />
-            ) : (
-                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/20 via-violet-500/10 to-black" />
-            )}
-            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/55 to-black/10" />
-            <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-transparent to-black/35" />
-            <div className="absolute inset-x-0 bottom-0 p-3 sm:p-4 flex items-end gap-3 sm:gap-4">
-                <div className="relative shrink-0">
-                    {posterPath ? (
-                        <div className="relative">
-                            <CompanionProgressRing progress={progress} />
-                            <img
-                                src={posterUrl(posterPath, 'w342')}
-                                alt={title}
-                                className="relative z-[1] w-[4.5rem] sm:w-20 rounded-xl border border-white/25 shadow-[0_12px_30px_rgba(0,0,0,0.55)] object-cover aspect-[2/3]"
-                            />
-                        </div>
-                    ) : null}
-                </div>
-                <div className="min-w-0 flex-1">
-                    <p className="text-[10px] uppercase tracking-[0.22em] text-emerald-200/90 font-bold">
-                        {t('homeDashboard.nowPlayingCompanion.header.playbackProgress', {
-                            type: mediaType === 'tv' ? t('mediaType.series') : t('mediaType.movie'),
-                            progress,
-                        })}
-                    </p>
-                    <h4 className="text-lg sm:text-xl font-black text-white leading-tight truncate">
-                        {title}{year ? ` (${year})` : ''}
-                    </h4>
-                    {mediaType === 'tv' && seasonNumber > 0 && episodeNumber > 0 ? (
-                        <p className="text-xs sm:text-sm text-white/80 mt-1 truncate">
-                            S{seasonNumber}E{episodeNumber}
-                            {episodeTitle ? ` · ${episodeTitle}` : ''}
+}) => {
+    const { t } = useDiscoverI18n();
+    return (
+        <div className="relative overflow-hidden rounded-2xl border border-white/15 bg-black/35 shadow-[0_24px_70px_rgba(0,0,0,0.45)]">
+            <div className="relative h-44 sm:h-52 lg:h-56">
+                {heroArtPath ? (
+                    <img
+                        src={posterUrl(heroArtPath, 'w780')}
+                        alt=""
+                        className="absolute inset-0 h-full w-full object-cover"
+                    />
+                ) : (
+                    <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/20 via-violet-500/10 to-black" />
+                )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/55 to-black/10" />
+                <div className="absolute inset-0 bg-gradient-to-r from-black/70 via-transparent to-black/35" />
+                <div className="absolute inset-x-0 bottom-0 p-3 sm:p-4 flex items-end gap-3 sm:gap-4">
+                    <div className="relative shrink-0">
+                        {posterPath ? (
+                            <div className="relative">
+                                <CompanionProgressRing progress={progress} />
+                                <img
+                                    src={posterUrl(posterPath, 'w342')}
+                                    alt={title}
+                                    className="relative z-[1] w-[4.5rem] sm:w-20 rounded-xl border border-white/25 shadow-[0_12px_30px_rgba(0,0,0,0.55)] object-cover aspect-[2/3]"
+                                />
+                            </div>
+                        ) : null}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <p className="text-[10px] uppercase tracking-[0.22em] text-emerald-200/90 font-bold">
+                            {t('homeDashboard.nowPlayingCompanion.header.playbackProgress', {
+                                type: mediaType === 'tv' ? t('mediaType.series') : t('mediaType.movie'),
+                                progress,
+                            })}
                         </p>
-                    ) : null}
-                    {tagline ? (
-                        <p className="text-xs italic text-emerald-100/90 mt-1.5 line-clamp-2">{tagline}</p>
-                    ) : null}
+                        <h4 className="text-lg sm:text-xl font-black text-white leading-tight truncate">
+                            {title}{year ? ` (${year})` : ''}
+                        </h4>
+                        {mediaType === 'tv' && seasonNumber > 0 && episodeNumber > 0 ? (
+                            <p className="text-xs sm:text-sm text-white/80 mt-1 truncate">
+                                S{seasonNumber}E{episodeNumber}
+                                {episodeTitle ? ` · ${episodeTitle}` : ''}
+                            </p>
+                        ) : null}
+                        {tagline ? (
+                            <p className="text-xs italic text-emerald-100/90 mt-1.5 line-clamp-2">{tagline}</p>
+                        ) : null}
+                    </div>
                 </div>
             </div>
+            <div className="relative border-t border-white/10 bg-black/45 backdrop-blur-md p-3 sm:p-4 space-y-3">
+                {metaChips.length ? (
+                    <div className="flex flex-wrap gap-1.5">
+                        {metaChips.map((chip) => (
+                            <span
+                                key={chip}
+                                className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-semibold text-white/85"
+                            >
+                                {chip}
+                            </span>
+                        ))}
+                    </div>
+                ) : null}
+                {overviewBlocks.length ? (
+                    <div className="space-y-2.5">
+                        {overviewBlocks.map((block) => (
+                            <CompanionOverviewText key={block.key} title={block.title} text={block.text} />
+                        ))}
+                    </div>
+                ) : (
+                    <p className="text-xs text-white/60">{unavailableLabel}</p>
+                )}
+            </div>
         </div>
-        <div className="relative border-t border-white/10 bg-black/45 backdrop-blur-md p-3 sm:p-4 space-y-3">
-            {metaChips.length ? (
-                <div className="flex flex-wrap gap-1.5">
-                    {metaChips.map((chip) => (
-                        <span
-                            key={chip}
-                            className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-semibold text-white/85"
-                        >
-                            {chip}
-                        </span>
-                    ))}
-                </div>
-            ) : null}
-            {overviewBlocks.length ? (
-                <div className="space-y-2.5">
-                    {overviewBlocks.map((block) => (
-                        <CompanionOverviewText key={block.key} title={block.title} text={block.text} />
-                    ))}
-                </div>
-            ) : (
-                <p className="text-xs text-white/60">{unavailableLabel}</p>
-            )}
-        </div>
-    </div>
-);
+    );
+};
 
 type EpisodeNavItem = {
     episode?: any;
