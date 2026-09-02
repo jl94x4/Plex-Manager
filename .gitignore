@@ -71,13 +71,10 @@ test*.cjs
 patch.cjs
 index.html
 version.txt
-static/bundle.js
 static/index.js
 static/chunk-*.js
-static/*Dashboard-*.js
-static/RequestsAdminPanel-*.js
-static/PreferencesPage-*.js
-static/SupportInbox-*.js
+static/*-*.js
+static/bundle.js
 static/tailwind.css
 static/release-notes.json
 
