@@ -525,6 +525,8 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
 
     const title = String(payload?.details?.title || payload?.details?.name || session?.title || t('homeDashboard.nowPlayingCompanion.fallbacks.nowPlaying')).trim();
     const year = formatYear(payload?.details?.release_date || payload?.details?.first_air_date);
+    const sessionTitle = String(session?.title || '').trim();
+    const playbackKey = String(session?.ratingKey || session?.sourceRatingKey || `${mediaType}:${tmdbId}:${seasonNumber}:${episodeNumber}`);
 
     useEffect(() => {
         setOpen(readCompanionExpanded(userKey));
@@ -777,7 +779,12 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
         let cancelled = false;
         setFactLoading(true);
         setFactPayload(null);
-        apiFetch(`/api/discovery/fact?mediaType=${mediaType}&mediaId=${tmdbId}`)
+        const factQuery = new URLSearchParams({
+            mediaType,
+            mediaId: String(tmdbId),
+        });
+        if (sessionTitle) factQuery.set('title', sessionTitle);
+        apiFetch(`/api/discovery/fact?${factQuery.toString()}`)
             .then((res) => {
                 if (cancelled) return;
                 setFactPayload(res && typeof res === 'object' ? res : null);
@@ -793,7 +800,7 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
         return () => {
             cancelled = true;
         };
-    }, [open, mediaType, tmdbId]);
+    }, [open, mediaType, tmdbId, playbackKey, sessionTitle]);
 
     const normalizedDetails = useMemo(() => {
         const details = payload?.details;
@@ -1112,7 +1119,16 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
 
     const overloadFacts = useMemo(() => {
         const apiFacts = Array.isArray(factPayload?.facts) ? factPayload.facts : [];
-        const combined = [...apiFacts, ...triviaFacts];
+        const titleTokens = sessionTitle.toLowerCase().split(/[^a-z0-9]+/).filter((token) => token.length >= 4);
+        const relatesToSession = (text: string) => {
+            if (!titleTokens.length) return true;
+            const lower = text.toLowerCase();
+            return titleTokens.some((token) => lower.includes(token));
+        };
+        const scopedApiFacts = titleTokens.length
+            ? apiFacts.filter((fact) => relatesToSession(String(fact || '')))
+            : apiFacts;
+        const combined = [...scopedApiFacts, ...triviaFacts];
         const seen = new Set<string>();
         const out: string[] = [];
         for (const raw of combined) {
@@ -1125,11 +1141,11 @@ export const NowPlayingCompanionPanel: React.FC<Props> = ({
             if (out.length >= 14) break;
         }
         return out;
-    }, [factPayload?.facts, triviaFacts]);
+    }, [factPayload?.facts, triviaFacts, sessionTitle]);
 
     useEffect(() => {
         setFactSpotlightIndex(0);
-    }, [tmdbId, mediaType]);
+    }, [playbackKey, mediaType]);
 
     useEffect(() => {
         if (factSpotlightIndex >= overloadFacts.length) {

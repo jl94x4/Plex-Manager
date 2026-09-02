@@ -4200,6 +4200,7 @@ export const SettingsDashboard: React.FC = () => {
                                     defaults={emailTemplateDefaults}
                                     events={emailTemplateEvents}
                                     eventFields={emailTemplateFields}
+                                    addToast={addToast}
                                 />
                             </div>
                             <div className="space-y-3">

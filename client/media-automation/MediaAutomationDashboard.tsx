@@ -323,6 +323,22 @@ const jobQueueOutcomeSummary = (job: MediaAutomationJob | null | undefined) => {
     return { skipped: false as const, skipReason: null, codecLine, sizeLine, savedLine, savingsPercent };
 };
 
+/** Source → output size for persisted history rows. */
+const historySizeSummary = (entry: { sourceBytes?: number; outputBytes?: number; bytesSaved?: number }) => {
+    const sourceBytes = Number(entry.sourceBytes || 0);
+    const outputBytes = Number(entry.outputBytes || 0);
+    const savedBytes = Number(entry.bytesSaved) || (sourceBytes > 0 && outputBytes > 0 ? Math.max(0, sourceBytes - outputBytes) : 0);
+    const sizeLine = sourceBytes > 0 && outputBytes > 0
+        ? `${formatMediaBytes(sourceBytes)} → ${formatMediaBytes(outputBytes)}`
+        : (sourceBytes > 0 ? `${formatMediaBytes(sourceBytes)} in` : (outputBytes > 0 ? `${formatMediaBytes(outputBytes)} out` : null));
+    if (!sizeLine) return null;
+    const savedLine = savedBytes > 0 ? formatMediaBytes(savedBytes) : null;
+    const savingsPercent = sourceBytes > 0 && outputBytes > 0 && savedBytes > 0
+        ? Math.round((savedBytes / sourceBytes) * 1000) / 10
+        : null;
+    return { sizeLine, savedLine, savingsPercent };
+};
+
 const formatSkipReasonLabel = (reason?: string | null) => {
     const raw = String(reason || 'skipped').trim();
     if (!raw) return 'skipped';
@@ -3700,16 +3716,25 @@ export const MediaAutomationDashboard: React.FC = () => {
                                     .toLowerCase()
                                     .includes(needle);
                             })
-                            .map((entry) => (
+                            .map((entry) => {
+                                const sizeSummary = historySizeSummary(entry);
+                                return (
                                 <article key={entry.id} className={`${panelClass} space-y-2 p-4`}>
                                     <div className="flex flex-wrap items-start justify-between gap-3">
                                         <div className="min-w-0">
-                                            <p
-                                                className="truncate font-semibold text-text"
-                                                title={entry.sourcePath}
-                                            >
-                                                {pathBasename(entry.sourcePath || entry.id)}
-                                            </p>
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <p
+                                                    className="truncate font-semibold text-text"
+                                                    title={entry.sourcePath}
+                                                >
+                                                    {pathBasename(entry.sourcePath || entry.id)}
+                                                </p>
+                                                {sizeSummary?.sizeLine ? (
+                                                    <span className="shrink-0 rounded border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[11px] text-emerald-200">
+                                                        {sizeSummary.sizeLine}
+                                                    </span>
+                                                ) : null}
+                                            </div>
                                             <p
                                                 className="mt-1 truncate font-mono text-xs text-muted"
                                                 title={entry.sourcePath}
@@ -3736,9 +3761,15 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         </div>
                                     </div>
                                     <div className="flex flex-wrap gap-2 text-[11px] text-muted">
-                                        <span>{formatBytes(entry.sourceBytes)} in</span>
-                                        <span>{formatBytes(entry.outputBytes)} out</span>
-                                        <span className="text-emerald-300">{formatBytes(entry.bytesSaved)} saved</span>
+                                        {sizeSummary?.sizeLine ? (
+                                            <span className="font-mono text-emerald-200">{sizeSummary.sizeLine}</span>
+                                        ) : (
+                                            <>
+                                                <span>{formatBytes(entry.sourceBytes)} in</span>
+                                                <span>{formatBytes(entry.outputBytes)} out</span>
+                                            </>
+                                        )}
+                                        <span className="text-emerald-300">{formatBytes(entry.bytesSaved)} saved{sizeSummary?.savingsPercent != null && sizeSummary.savingsPercent > 0 ? ` (${sizeSummary.savingsPercent}%)` : ''}</span>
                                         <span>{formatDurationSeconds(Math.round(Number(entry.durationMs || 0) / 1000)) || '0s'}</span>
                                         {entry.adapterLabel || entry.adapter ? <span>{entry.adapterLabel || entry.adapter}</span> : null}
                                         {(entry.tags || []).map((tag) => (
@@ -3760,7 +3791,8 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         Open job detail
                                     </button>
                                 </article>
-                            ))}
+                                );
+                            })}
                         {!historyEntries.length && (
                             <p className={`${panelClass} p-5 text-sm text-muted`}>No history yet. Finished jobs will appear here.</p>
                         )}

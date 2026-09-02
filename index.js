@@ -1629,6 +1629,9 @@ import {
     buildAccessAdjustedEmail,
     buildInviteEmail,
     buildAnnouncementEmail,
+    buildWelcomeEmail,
+    buildAutomatedEmailPreview,
+    renderEmailEventTemplates,
 } from './lib/email/templates/index.js';
 import { normalizeNtfyEvents, isNtfyConfigured, notifyNtfyEvent } from './lib/notifications/ntfy.js';
 import {
@@ -2192,6 +2195,26 @@ const sendEmail = async (config, to, subject, html, customTransporter = null) =>
     } catch (error) {
         log(`Error sending email to ${to}: ${error.message}`);
         throw error;
+    }
+};
+
+const sendWelcomeEmailToUser = async (config, user = {}) => {
+    if (!user?.email) return false;
+    try {
+        const adminProfile = await getAdminProfile(config).catch(() => null);
+        const serverName = adminProfile?.serverName || 'Our Plex Server';
+        const portalUrl = resolvePublicBaseUrlFromConfig(config) || config.publicDomain || '';
+        const mail = buildWelcomeEmail({
+            config,
+            username: user.username || user.name || 'there',
+            serverName,
+            portalUrl,
+        });
+        await sendEmail(config, user.email, mail.subject, mail.html);
+        return true;
+    } catch (error) {
+        log(`Welcome email failed for ${user.email}: ${error.message}`);
+        return false;
     }
 };
 
@@ -3790,6 +3813,122 @@ app.post('/api/users/broadcast/test', requireAdmin, async (req, res) => {
     } catch (error) {
         log(`Error sending test broadcast: ${error.message}`);
         res.status(500).json({ error: `Failed to send test broadcast: ${error.message}` });
+    }
+});
+
+app.post('/api/settings/email-templates/preview', requireAdmin, async (req, res) => {
+    try {
+        const event = String(req.body?.event || '').trim();
+        if (!EMAIL_TEMPLATE_EVENTS.includes(event)) {
+            return res.status(400).json({ error: 'Invalid email template event.' });
+        }
+        const config = await loadFile(CONFIG_PATH, {});
+        const draftFields = req.body?.templates && typeof req.body.templates === 'object'
+            ? req.body.templates
+            : {};
+
+        if (event === 'newsletter') {
+            const { html, attachments } = await generateNewsletterHtml(config, {
+                embedImages: true,
+                draftTemplates: { newsletter: draftFields },
+            });
+            const previewHtml = renderNewsletterHtmlForBrowser(html, attachments, req.user?.username || 'Preview User');
+            const { rendered } = renderEmailEventTemplates(
+                { ...config, emailTemplates: normalizeEmailTemplates({ ...(config.emailTemplates || {}), newsletter: draftFields }) },
+                'newsletter',
+                { serverName: 'Preview Server', username: req.user?.username || 'Preview User', portalUrl: resolvePublicBaseUrlFromConfig(config) || config.publicDomain || '#' },
+            );
+            return res.json({ subject: rendered.subject, html: previewHtml, event });
+        }
+
+        const adminProfile = await getAdminProfile(config).catch(() => null);
+        const serverName = adminProfile?.serverName || 'Preview Server';
+        const previewConfig = {
+            ...config,
+            contactEmail: config.contactEmail || req.user?.email || '',
+            contactWhatsApp: config.contactWhatsApp || '',
+            contactUrl: config.contactUrl || resolvePublicBaseUrlFromConfig(config) || config.publicDomain || '#',
+        };
+        const mail = buildAutomatedEmailPreview(previewConfig, event, draftFields);
+        if (mail?.unsupported) {
+            return res.status(400).json({ error: 'Preview is not available for this event.' });
+        }
+        return res.json({
+            subject: mail.subject,
+            html: mail.html,
+            event,
+            serverName,
+        });
+    } catch (error) {
+        log(`Email template preview error: ${error.message}`);
+        return res.status(500).json({ error: `Failed to render preview: ${error.message}` });
+    }
+});
+
+app.post('/api/settings/email-templates/test', requireAdmin, async (req, res) => {
+    try {
+        const event = String(req.body?.event || '').trim();
+        if (!EMAIL_TEMPLATE_EVENTS.includes(event)) {
+            return res.status(400).json({ error: 'Invalid email template event.' });
+        }
+        const config = await loadFile(CONFIG_PATH, {});
+        if (!config.smtpHost || !config.smtpUser) {
+            return res.status(400).json({ error: 'SMTP settings are not configured.' });
+        }
+        const adminEmail = req.user?.email;
+        if (!adminEmail) {
+            return res.status(400).json({ error: 'Admin email not found in session.' });
+        }
+        const draftFields = req.body?.templates && typeof req.body.templates === 'object'
+            ? req.body.templates
+            : {};
+
+        if (event === 'newsletter') {
+            const { html, attachments } = await generateNewsletterHtml(config, {
+                draftTemplates: { newsletter: draftFields },
+            });
+            const providerLabel = getNewsletterProviderLabel(config);
+            const { rendered } = renderEmailEventTemplates(
+                { ...config, emailTemplates: normalizeEmailTemplates({ ...(config.emailTemplates || {}), newsletter: draftFields }) },
+                'newsletter',
+                { serverName: providerLabel, username: req.user?.username || 'Admin', portalUrl: resolvePublicBaseUrlFromConfig(config) || config.publicDomain || '#' },
+            );
+            const transporter = nodemailer.createTransport({
+                host: config.smtpHost,
+                port: config.smtpPort,
+                secure: config.smtpSecure,
+                auth: { user: config.smtpUser, pass: config.smtpPass },
+            });
+            const personalizedHtml = personalizeNewsletterHtml(html, {
+                username: req.user?.username || 'Admin',
+                plexAccountId: req.user?.plexAccountId,
+            });
+            await transporter.sendMail({
+                from: config.smtpFrom || config.smtpUser,
+                to: adminEmail,
+                subject: `${rendered.subject || `${providerLabel} Newsletter`} (Test)`,
+                html: personalizedHtml,
+                attachments,
+            });
+            return res.json({ message: `Test newsletter sent to ${adminEmail}` });
+        }
+
+        const adminProfile = await getAdminProfile(config).catch(() => null);
+        const previewConfig = {
+            ...config,
+            contactEmail: config.contactEmail || adminEmail,
+            contactWhatsApp: config.contactWhatsApp || '',
+            contactUrl: config.contactUrl || resolvePublicBaseUrlFromConfig(config) || config.publicDomain || '#',
+        };
+        const mail = buildAutomatedEmailPreview(previewConfig, event, draftFields);
+        if (mail?.unsupported) {
+            return res.status(400).json({ error: 'Test send is not available for this event.' });
+        }
+        await sendEmail(config, adminEmail, `${mail.subject} (Test)`, mail.html);
+        return res.json({ message: `Test email sent to ${adminEmail}` });
+    } catch (error) {
+        log(`Email template test error: ${error.message}`);
+        return res.status(500).json({ error: `Failed to send test email: ${error.message}` });
     }
 });
 
@@ -8571,6 +8710,16 @@ const resolveNewsletterTestRecipient = async (config, actor = {}) => {
 
 const generateNewsletterHtml = async (config, options = {}) => {
     const embedImages = Boolean(options.embedImages);
+    const draftNewsletter = options.draftTemplates?.newsletter;
+    const effectiveConfig = draftNewsletter
+        ? {
+            ...config,
+            emailTemplates: normalizeEmailTemplates({
+                ...(config.emailTemplates || {}),
+                newsletter: draftNewsletter,
+            }),
+        }
+        : config;
     const mediaServerType = String(config?.mediaServerType || 'plex').toLowerCase();
     const isJellyfinLike = isEmbyLikeMediaServer(config);
     const providerLabel = getNewsletterProviderLabel(config);
@@ -8762,6 +8911,12 @@ const generateNewsletterHtml = async (config, options = {}) => {
 
     const uptimeStr = `${calculateUptime30Days(healthData).toFixed(2)}%`;
     const hasNewsletterLogo = attachments.some((entry) => entry.cid === 'logo');
+    const portalUrl = resolvePublicBaseUrlFromConfig(config) || config.publicDomain || '#';
+    const { rendered: newsletterCopy } = renderEmailEventTemplates(effectiveConfig, 'newsletter', {
+        serverName,
+        username: '{{USERNAME}}',
+        portalUrl,
+    });
 
     const htmlContent = `
                         <!-- Header -->
@@ -8798,7 +8953,7 @@ const generateNewsletterHtml = async (config, options = {}) => {
                         <tr>
                             <td style="padding: 0 30px 20px 30px; text-align: center;">
                                 <p style="margin: 0; color: #9ca3af; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.5;">
-                                    <strong>{{USERNAME}}</strong>, you are receiving this newsletter as you are a member of <strong>{{SERVER_NAME}}</strong>.
+                                    ${newsletterCopy.intro || `<strong>{{USERNAME}}</strong>, you are receiving this newsletter as you are a member of <strong>${escapeHtmlAttr(serverName)}</strong>.`}
                                 </p>
                             </td>
                         </tr>
@@ -8814,8 +8969,8 @@ const generateNewsletterHtml = async (config, options = {}) => {
                         <!-- Footer -->
                         <tr>
                             <td align="center" style="padding: 30px; background-color: #0b0f19; border-top: 1px solid #1f2937;">
-                                <p style="margin: 0 0 10px 0; color: #6b7280; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 12px;">This is an automated message from Server Portal Manager.</p>
-                                <p style="margin: 0; color: #6b7280; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 12px;">To opt out of these newsletters, please visit your <a href="${resolvePublicBaseUrlFromConfig(config) || config.publicDomain || '#'}" style="color: #eab308; text-decoration: none;">User Portal</a>.</p>
+                                ${newsletterCopy.footer ? `<p style="margin: 0 0 10px 0; color: #6b7280; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 12px;">${newsletterCopy.footer}</p>` : ''}
+                                ${newsletterCopy.footerSecondary ? `<p style="margin: 0; color: #6b7280; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; font-size: 12px;">${newsletterCopy.footerSecondary}</p>` : ''}
                             </td>
                         </tr>
                     `;
@@ -8826,7 +8981,7 @@ const generateNewsletterHtml = async (config, options = {}) => {
             <head>
                 <meta charset="utf-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <title>${providerLabel} Server Automated Newsletter</title>
+                <title>${newsletterCopy.subject || `${providerLabel} Server Automated Newsletter`}</title>
             </head>
             <body style="margin: 0; padding: 0; background-color: #000000; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;">
                 <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #000000;">
@@ -8842,7 +8997,7 @@ const generateNewsletterHtml = async (config, options = {}) => {
             </html>
     `.replace(/{{SERVER_NAME}}/g, serverName);
 
-    return { html: finalHtml, attachments };
+    return { html: finalHtml, attachments, subject: newsletterCopy.subject || `${providerLabel} Server Automated Newsletter` };
 };
 
 const personalizeNewsletterHtml = (html, user = {}) => {
@@ -8911,7 +9066,7 @@ app.post('/api/newsletter/test', requireAdmin, async (req, res) => {
 
         if (!adminEmail) return res.status(400).json({ error: 'Could not determine an admin email address for the test newsletter.' });
 
-        const { html, attachments } = await generateNewsletterHtml(config);
+        const { html, attachments, subject: newsletterSubject } = await generateNewsletterHtml(config);
         const providerLabel = getNewsletterProviderLabel(config);
         const transporter = nodemailer.createTransport({
             host: config.smtpHost,
@@ -8925,7 +9080,7 @@ app.post('/api/newsletter/test', requireAdmin, async (req, res) => {
         await transporter.sendMail({
             from: config.smtpFrom || config.smtpUser,
             to: adminEmail,
-            subject: `${providerLabel} Server Automated Newsletter (Test)`,
+            subject: `${newsletterSubject || `${providerLabel} Server Automated Newsletter`} (Test)`,
             html: personalizedHtml,
             attachments: attachments
         });
@@ -8945,7 +9100,7 @@ app.post('/api/newsletter/send-now', requireAdmin, async (req, res) => {
         const validUsers = users.filter(u => u.email);
         if (validUsers.length === 0) return res.status(400).json({ error: 'No users with email addresses found.' });
 
-        const { html, attachments } = await generateNewsletterHtml(config);
+        const { html, attachments, subject: newsletterSubject } = await generateNewsletterHtml(config);
         const providerLabel = getNewsletterProviderLabel(config);
         const transporter = nodemailer.createTransport({
             host: config.smtpHost,
@@ -8964,7 +9119,7 @@ app.post('/api/newsletter/send-now', requireAdmin, async (req, res) => {
                 await transporter.sendMail({
                     from: config.smtpFrom || config.smtpUser,
                     to: user.email,
-                    subject: `${providerLabel} Server Automated Newsletter`,
+                    subject: newsletterSubject || `${providerLabel} Server Automated Newsletter`,
                     html: personalizedHtml,
                     attachments: attachments
                 });
@@ -12004,7 +12159,12 @@ app.get('/api/discovery/fact', requireAuth, requireMember, async (req, res) => {
             opts.timeout || 8000,
         );
 
-        const payload = await buildDiscoveryFacts({ details, mediaType, fetchFn: wikiFetch });
+        const payload = await buildDiscoveryFacts({
+            details,
+            mediaType,
+            fetchFn: wikiFetch,
+            expectedTitle: String(req.query.title || '').trim(),
+        });
         res.json(payload);
     } catch (e) {
         log(`Discovery fact error: ${e.message}`);
@@ -13235,6 +13395,8 @@ app.post('/api/invites/:code/claim', authRateLimit, async (req, res) => {
         }
 
         await appendAuditLog('invite_claimed', { username: plexUser.username, id: plexUser.id }, newUser, { code: invite.code });
+
+        await sendWelcomeEmailToUser(config, newUser).catch((e) => log(`Welcome email after invite claim failed: ${e.message}`));
 
         // Log user in
         const adminId = await getAdminId(config);
@@ -14497,7 +14659,7 @@ app.post('/api/users/request-invite', requireAuth, async (req, res) => {
         await saveFile(USERS_PATH, users);
         await appendAuditLog('trial_invite_sent', req.user, newUser, { expiryDate: newUser.expiryDate });
 
-        // Optional: send welcome email here
+        await sendWelcomeEmailToUser(config, newUser).catch((e) => log(`Welcome email after trial invite failed: ${e.message}`));
 
         res.json({ message: 'Invite sent successfully', user: sanitizeUserForApi(newUser) });
     } catch (e) {
@@ -20170,7 +20332,7 @@ const checkAndSendNewsletter = async (config, force = false) => {
 
     try {
         log('Generating and sending automated newsletters...');
-        const { html, attachments } = await generateNewsletterHtml(config);
+        const { html, attachments, subject: newsletterSubject } = await generateNewsletterHtml(config);
         const providerLabel = getNewsletterProviderLabel(config);
         const transporter = nodemailer.createTransport({
             host: config.smtpHost,
@@ -20200,7 +20362,7 @@ const checkAndSendNewsletter = async (config, force = false) => {
                 await transporter.sendMail({
                     from: config.smtpFrom || config.smtpUser,
                     to: user.email,
-                    subject: `${providerLabel} Server Automated Newsletter`,
+                    subject: newsletterSubject || `${providerLabel} Server Automated Newsletter`,
                     html: personalizedHtml,
                     attachments: attachments
                 });
