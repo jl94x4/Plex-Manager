@@ -1619,6 +1619,17 @@ import {
     NOTIFY_EVENT_FIELDS,
     NOTIFY_EVENTS,
 } from './lib/notifications/templates/defaults.js';
+import {
+    normalizeEmailTemplates,
+    DEFAULT_EMAIL_TEMPLATES,
+    EMAIL_TEMPLATE_EVENTS,
+    EMAIL_EVENT_FIELDS,
+    buildExpiryWarningEmail,
+    buildAccessExpiredEmail,
+    buildAccessAdjustedEmail,
+    buildInviteEmail,
+    buildAnnouncementEmail,
+} from './lib/email/templates/index.js';
 import { normalizeNtfyEvents, isNtfyConfigured, notifyNtfyEvent } from './lib/notifications/ntfy.js';
 import {
     normalizeWebhookEvents,
@@ -2275,52 +2286,20 @@ const checkAndSendNotifications = async (config) => {
             if (alreadySent) continue;
 
             log(`Sending expiry warning to ${user.username} (${user.email}) - ${days} days remaining.`);
-            const subject = `[Plex Server] Your shared access expires in ${days} day${days === 1 ? '' : 's'}`;
-            const html = `
-                <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; padding: 30px; color: #333333; line-height: 1.6;">
-                    <div style="max-width: 600px; margin: auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-top: 6px solid #e5a00d;">
-                        <div style="background-color: #282A2D; padding: 25px; text-align: center;">
-                            ${hasLogo ? '<img src="cid:logo" alt="Logo" style="max-height: 100px; display: block; margin: 0 auto 10px auto;" />' : ''}
-                            <h1 style="color: #ffffff; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;">PLEX SERVER</h1>
-                        </div>
-                        <div style="padding: 30px 40px;">
-                            <h2 style="color: #282A2D; font-size: 20px; margin-top: 0; font-weight: 600;">Access Expiry Notification</h2>
-                            <p>Hello <strong>${user.username}</strong>,</p>
-                            <p>This is a notification that your shared access to the Plex media server is coming to an end soon. Below are your account details:</p>
-                            
-                            <div style="background-color: #fcf8f2; border-left: 4px solid #e5a00d; padding: 20px; margin: 25px 0; border-radius: 6px;">
-                                <table style="width: 100%; border-collapse: collapse; font-size: 15px;">
-                                    <tr>
-                                        <td style="padding: 6px 0; color: #718096; font-weight: 500;">Plex Username:</td>
-                                        <td style="padding: 6px 0; color: #2d3748; font-weight: bold; text-align: right;">${user.username}</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding: 6px 0; color: #718096; font-weight: 500;">Expiry Date:</td>
-                                        <td style="padding: 6px 0; color: #e5a00d; font-weight: bold; text-align: right;">${new Date(user.expiryDate).toLocaleDateString(undefined, { dateStyle: 'long' })}</td>
-                                    </tr>
-                                    <tr>
-                                        <td style="padding: 6px 0; color: #718096; font-weight: 500;">Time Remaining:</td>
-                                        <td style="padding: 6px 0; color: #e5a00d; font-weight: bold; text-align: right;">${days} day${days === 1 ? '' : 's'}</td>
-                                    </tr>
-                                </table>
-                            </div>
-
-                            <p>To ensure uninterrupted streaming of your favorite movies and shows, please get in touch with the server owner to renew your access before the expiry date.</p>
-                            
-                            <div style="text-align: center; margin: 35px 0 15px 0;">
-                                <a href="${config.contactUrl || 'mailto:' + (config.smtpFrom || config.smtpUser)}" style="background-color: #e5a00d; color: #ffffff; text-decoration: none; padding: 14px 35px; font-weight: bold; border-radius: 6px; display: inline-block; font-size: 16px; box-shadow: 0 4px 6px rgba(229, 160, 13, 0.2);">Request Extension</a>
-                            </div>
-                        </div>
-                        <div style="background-color: #f7fafc; padding: 20px 30px; border-top: 1px solid #edf2f7; text-align: center; font-size: 12px; color: #a0aec0;">
-                            <p style="margin: 0 0 5px 0;">Automated alert from the Plex Expiry Service.</p>
-                            <p style="margin: 0;">Please contact the administrator for any access queries.</p>
-                        </div>
-                    </div>
-                </div>
-            `;
+            const expiryDateLabel = new Date(user.expiryDate).toLocaleDateString(undefined, { dateStyle: 'long' });
+            const warningMail = buildExpiryWarningEmail({
+                config,
+                username: user.username,
+                expiryDate: expiryDateLabel,
+                days,
+                hasLogo,
+                serverName: config.serverName || config.serverIdentifier || 'Plex Server',
+            });
 
             try {
-                const emailSent = user.email && hasSmtp ? await sendEmail(config, user.email, subject, html) : false;
+                const emailSent = user.email && hasSmtp
+                    ? await sendEmail(config, user.email, warningMail.subject, warningMail.html)
+                    : false;
                 const gotifySent = hasGotify && alertRuleEnabled(config, 'expiryWarning') ? await sendGotifyAlert(
                     config,
                     'Portal access expiring',
@@ -3563,78 +3542,19 @@ const sendExpiryEmail = async (config, user, hasLogo) => {
     const alreadySent = await hasEmailBeenSent(user.id, 'access_expired', user.expiryDate || 'none');
     if (alreadySent) return true;
 
-    const subject = `[Plex Server] Your shared access has expired`;
-    const html = `
-        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; padding: 30px; color: #333333; line-height: 1.6;">
-            <div style="max-width: 600px; margin: auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-top: 6px solid #e53e3e;">
-                <div style="background-color: #282A2D; padding: 25px; text-align: center;">
-                    ${hasLogo ? '<img src="cid:logo" alt="Logo" style="max-height: 100px; display: block; margin: 0 auto 10px auto;" />' : ''}
-                    <h1 style="color: #ffffff; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;">PLEX SERVER</h1>
-                </div>
-                <div style="padding: 30px 40px;">
-                    <h2 style="color: #e53e3e; font-size: 20px; margin-top: 0; font-weight: 600;">Access Expired</h2>
-                    <p>Hello <strong>${user.username}</strong>,</p>
-                    <p>We're writing to let you know that your shared access to the Plex media server has <strong style="color: #e53e3e;">expired</strong> and your account has been removed from the server.</p>
-                    
-                    <div style="background-color: #fff5f5; border-left: 4px solid #e53e3e; padding: 20px; margin: 25px 0; border-radius: 6px;">
-                        <table style="width: 100%; border-collapse: collapse; font-size: 15px;">
-                            <tr>
-                                <td style="padding: 6px 0; color: #718096; font-weight: 500;">Plex Username:</td>
-                                <td style="padding: 6px 0; color: #2d3748; font-weight: bold; text-align: right;">${user.username}</td>
-                            </tr>
-                            <tr>
-                                <td style="padding: 6px 0; color: #718096; font-weight: 500;">Expiry Date:</td>
-                                <td style="padding: 6px 0; color: #e53e3e; font-weight: bold; text-align: right;">${new Date(user.expiryDate).toLocaleDateString(undefined, { dateStyle: 'long' })}</td>
-                            </tr>
-                            <tr>
-                                <td style="padding: 6px 0; color: #718096; font-weight: 500;">Status:</td>
-                                <td style="padding: 6px 0; color: #e53e3e; font-weight: bold; text-align: right;">Access Revoked</td>
-                            </tr>
-                        </table>
-                    </div>
-
-                    ${config.contactEmail || config.contactWhatsApp ? `
-                    <p style="font-size: 16px; font-weight: 600; color: #282A2D; margin-bottom: 5px;">Want to renew your access?</p>
-                    <p>If you'd like to continue enjoying all the content, simply get in touch using any of the methods below and we'll get you set up again:</p>
-
-                    <div style="background-color: #fcf8f2; border-radius: 8px; padding: 20px; margin: 20px 0;">
-                        <table style="width: 100%; border-collapse: collapse; font-size: 15px;">
-                            ${config.contactEmail ? `<tr>
-                                <td style="padding: 10px 0; vertical-align: middle;">
-                                    <span style="font-size: 20px; margin-right: 10px;">📧</span>
-                                    <strong style="color: #2d3748;">Email:</strong>
-                                </td>
-                                <td style="padding: 10px 0; text-align: right; vertical-align: middle;">
-                                    <a href="mailto:${escapeHtmlAttr(config.contactEmail)}" style="color: #e5a00d; text-decoration: none; font-weight: 600;">${escapeHtmlAttr(config.contactEmail)}</a>
-                                </td>
-                            </tr>` : ''}
-                            ${config.contactWhatsApp ? `<tr>
-                                <td style="padding: 10px 0; vertical-align: middle; border-top: 1px solid #edf2f7;">
-                                    <span style="font-size: 20px; margin-right: 10px;">💬</span>
-                                    <strong style="color: #2d3748;">WhatsApp:</strong>
-                                </td>
-                                <td style="padding: 10px 0; text-align: right; vertical-align: middle; border-top: 1px solid #edf2f7;">
-                                    <a href="https://wa.me/${escapeHtmlAttr(String(config.contactWhatsApp).replace(/\D/g, ''))}" style="color: #25d366; text-decoration: none; font-weight: 600;">${escapeHtmlAttr(config.contactWhatsApp)}</a>
-                                </td>
-                            </tr>` : ''}
-                        </table>
-                    </div>
-
-                    <div style="text-align: center; margin: 30px 0 15px 0;">
-                        ${config.contactWhatsApp ? `<a href="https://wa.me/${escapeHtmlAttr(String(config.contactWhatsApp).replace(/\D/g, ''))}" style="background-color: #25d366; color: #ffffff; text-decoration: none; padding: 14px 35px; font-weight: bold; border-radius: 6px; display: inline-block; font-size: 16px; box-shadow: 0 4px 6px rgba(37, 211, 102, 0.2); margin-right: 10px;">WhatsApp Me</a>` : ''}
-                        ${config.contactEmail ? `<a href="mailto:${escapeHtmlAttr(config.contactEmail)}" style="background-color: #e5a00d; color: #ffffff; text-decoration: none; padding: 14px 35px; font-weight: bold; border-radius: 6px; display: inline-block; font-size: 16px; box-shadow: 0 4px 6px rgba(229, 160, 13, 0.2);">Email Me</a>` : ''}
-                    </div>` : ''}
-                </div>
-                <div style="background-color: #f7fafc; padding: 20px 30px; border-top: 1px solid #edf2f7; text-align: center; font-size: 12px; color: #a0aec0;">
-                    <p style="margin: 0 0 5px 0;">Automated notification from the Plex Expiry Service.</p>
-                    <p style="margin: 0;">We'd love to have you back — don't hesitate to reach out!</p>
-                </div>
-            </div>
-        </div>
-    `;
+    const expiryDateLabel = user.expiryDate
+        ? new Date(user.expiryDate).toLocaleDateString(undefined, { dateStyle: 'long' })
+        : '';
+    const mail = buildAccessExpiredEmail({
+        config,
+        username: user.username,
+        expiryDate: expiryDateLabel,
+        hasLogo,
+        serverName: config.serverName || config.serverIdentifier || 'Plex Server',
+    });
 
     try {
-        const sent = await sendEmail(config, user.email, subject, html);
+        const sent = await sendEmail(config, user.email, mail.subject, mail.html);
         if (sent) {
             log(`Expiry notification email sent to ${user.username} (${user.email}).`);
             await logEmailSent(user.id, 'access_expired', user.expiryDate || 'none');
@@ -3649,50 +3569,21 @@ const sendExpiryEmail = async (config, user, hasLogo) => {
 const sendAdjustmentEmail = async (config, user, hasLogo) => {
     if (!user.email) return false;
 
-    const subject = `[Plex Server] Your access has been updated`;
     const days = getDaysUntilExpiry(user.expiryDate);
-    const html = `
-        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; padding: 30px; color: #333333; line-height: 1.6;">
-            <div style="max-width: 600px; margin: auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-top: 6px solid #e5a00d;">
-                <div style="background-color: #282A2D; padding: 25px; text-align: center;">
-                    ${hasLogo ? '<img src="cid:logo" alt="Logo" style="max-height: 100px; display: block; margin: 0 auto 10px auto;" />' : ''}
-                    <h1 style="color: #ffffff; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;">PLEX SERVER</h1>
-                </div>
-                <div style="padding: 30px 40px;">
-                    <h2 style="color: #282A2D; font-size: 20px; margin-top: 0; font-weight: 600;">Access Updated</h2>
-                    <p>Hello <strong>${user.username}</strong>,</p>
-                    <p>Your access to the Plex media server has been successfully updated. Here are your new account details:</p>
-                    
-                    <div style="background-color: #fcf8f2; border-left: 4px solid #e5a00d; padding: 20px; margin: 25px 0; border-radius: 6px;">
-                        <table style="width: 100%; border-collapse: collapse; font-size: 15px;">
-                            <tr>
-                                <td style="padding: 6px 0; color: #718096; font-weight: 500;">Plex Username:</td>
-                                <td style="padding: 6px 0; color: #2d3748; font-weight: bold; text-align: right;">${user.username}</td>
-                            </tr>
-                            <tr>
-                                <td style="padding: 6px 0; color: #718096; font-weight: 500;">New Expiry Date:</td>
-                                <td style="padding: 6px 0; color: #e5a00d; font-weight: bold; text-align: right;">${user.expiryDate ? new Date(user.expiryDate).toLocaleDateString(undefined, { dateStyle: 'long' }) : 'Unlimited'}</td>
-                            </tr>
-                            ${days !== null ? `
-                            <tr>
-                                <td style="padding: 6px 0; color: #718096; font-weight: 500;">Time Remaining:</td>
-                                <td style="padding: 6px 0; color: #e5a00d; font-weight: bold; text-align: right;">${days} day${days === 1 ? '' : 's'}</td>
-                            </tr>` : ''}
-                        </table>
-                    </div>
-
-                    <p>Thank you for continuing to be a part of our community!</p>
-                </div>
-                <div style="background-color: #f7fafc; padding: 20px 30px; border-top: 1px solid #edf2f7; text-align: center; font-size: 12px; color: #a0aec0;">
-                    <p style="margin: 0 0 5px 0;">Automated notification from the Plex Expiry Service.</p>
-                </div>
-            </div>
-        </div>
-    `;
-
+    const expiryDateLabel = user.expiryDate
+        ? new Date(user.expiryDate).toLocaleDateString(undefined, { dateStyle: 'long' })
+        : 'Unlimited';
+    const mail = buildAccessAdjustedEmail({
+        config,
+        username: user.username,
+        expiryDateLabel,
+        days,
+        hasLogo,
+        serverName: config.serverName || config.serverIdentifier || 'Plex Server',
+    });
 
     try {
-        const sent = await sendEmail(config, user.email, subject, html);
+        const sent = await sendEmail(config, user.email, mail.subject, mail.html);
         if (sent) {
             log(`Expiry notification email sent to ${user.username} (${user.email}).`);
         }
@@ -5567,6 +5458,10 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 notificationTemplateDefaults: DEFAULT_NOTIFY_TEMPLATES,
                 notificationTemplateEvents: NOTIFY_EVENTS,
                 notificationTemplateFields: NOTIFY_EVENT_FIELDS,
+                emailTemplates: normalizeEmailTemplates(config.emailTemplates),
+                emailTemplateDefaults: DEFAULT_EMAIL_TEMPLATES,
+                emailTemplateEvents: EMAIL_TEMPLATE_EVENTS,
+                emailTemplateFields: EMAIL_EVENT_FIELDS,
                 ntfyEnabled: !!config.ntfyEnabled,
                 ntfyServerUrl: config.ntfyServerUrl || '',
                 ntfyTopic: config.ntfyTopic || '',
@@ -5763,6 +5658,10 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 notificationTemplateDefaults: DEFAULT_NOTIFY_TEMPLATES,
                 notificationTemplateEvents: NOTIFY_EVENTS,
                 notificationTemplateFields: NOTIFY_EVENT_FIELDS,
+                emailTemplates: {},
+                emailTemplateDefaults: DEFAULT_EMAIL_TEMPLATES,
+                emailTemplateEvents: EMAIL_TEMPLATE_EVENTS,
+                emailTemplateFields: EMAIL_EVENT_FIELDS,
                 ntfyEnabled: false,
                 ntfyServerUrl: '',
                 ntfyTopic: '',
@@ -5829,7 +5728,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         inactiveCleanupEnabled, inactiveCleanupDays,
         primaryColor, customLogoUrl, customLoginLogoUrl, loginLogoCircleFrame, customFaviconUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, customNavTabs, customNavDisplay, arrOpenInPortalEmbed, homeCustomModules, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
-        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, spotifyToPlexEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, supportTicketsEnabled, chatEnabled, chatMentionNotifyInApp, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, scannerNotifyDeleted, scannerNotifyUpgrade, scannerNotifyImport, scannerNotifyGrab, scannerNotifyUpdate, scannerNotifyInteraction, notificationTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, spotifyToPlexInternalUrl, spotifyToPlexClientId, spotifyToPlexClientSecret, spotifyToPlexEncryptionKey, spotifyToPlexHomeWidgetEnabled, spotifyToPlexScheduleMode, spotifyToPlexScheduledSyncEnabled, spotifyToPlexScheduledSyncIntervalHours, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
+        autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, spotifyToPlexEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, supportTicketsEnabled, chatEnabled, chatMentionNotifyInApp, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, scannerNotifyDeleted, scannerNotifyUpgrade, scannerNotifyImport, scannerNotifyGrab, scannerNotifyUpdate, scannerNotifyInteraction, notificationTemplates, emailTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, spotifyToPlexInternalUrl, spotifyToPlexClientId, spotifyToPlexClientSecret, spotifyToPlexEncryptionKey, spotifyToPlexHomeWidgetEnabled, spotifyToPlexScheduleMode, spotifyToPlexScheduledSyncEnabled, spotifyToPlexScheduledSyncIntervalHours, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
     } = req.body;
 
@@ -6420,6 +6319,9 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         notificationTemplates: notificationTemplates !== undefined
             ? normalizeNotificationTemplates(notificationTemplates)
             : normalizeNotificationTemplates(existingConfig.notificationTemplates),
+        emailTemplates: emailTemplates !== undefined
+            ? normalizeEmailTemplates(emailTemplates)
+            : normalizeEmailTemplates(existingConfig.emailTemplates),
         ntfyEnabled: ntfyEnabled !== undefined ? !!ntfyEnabled : !!existingConfig.ntfyEnabled,
         ntfyServerUrl: ntfyServerUrl !== undefined
             ? String(ntfyServerUrl || '').trim().replace(/\/+$/, '')
@@ -9434,35 +9336,16 @@ app.post('/api/invites/email', requireAdmin, async (req, res) => {
                 .replace(/\{\{\s*EMAIL\s*\}\}/gi, escapeInviteText(email))
                 .replace(/\r\n|\n|\r/g, '<br>')
             : '';
-        const html = `
-            <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f6f9; padding: 30px; color: #333333; line-height: 1.6;">
-                <div style="max-width: 600px; margin: auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05); border-top: 6px solid #e5a00d;">
-                    <div style="background-color: #282A2D; padding: 25px; text-align: center;">
-                        ${hasLogo ? '<img src="cid:logo" alt="Logo" style="max-height: 100px; display: block; margin: 0 auto 10px auto;" />' : ''}
-                        <h1 style="color: #ffffff; margin: 0; font-size: 26px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;">${serverName}</h1>
-                    </div>
-                    <div style="padding: 30px 40px;">
-                        <h2 style="color: #e5a00d; font-size: 20px; margin-top: 0; font-weight: 600; text-align: center;">Welcome to the Server!</h2>
-                        <p style="text-align: center; font-size: 16px;">You have been invited to join our private media server.</p>
-                        ${noteHtml ? `<div style="margin: 24px 0 0 0; padding: 16px 18px; background-color: #fcf8f2; border-radius: 8px; font-size: 15px; color: #2d3748;">${noteHtml}</div>` : ''}
-                        
-                        <div style="text-align: center; margin: 35px 0;">
-                            <a href="${inviteUrl}" style="background-color: #e5a00d; color: #ffffff; text-decoration: none; padding: 14px 35px; font-weight: bold; border-radius: 6px; display: inline-block; font-size: 16px; box-shadow: 0 4px 6px rgba(229, 160, 13, 0.2);">Claim Your Access</a>
-                        </div>
-                        
-                        <div style="background-color: #fcf8f2; border-left: 4px solid #e5a00d; padding: 20px; margin: 25px 0 0 0; border-radius: 6px;">
-                            <p style="margin: 0; font-size: 14px; color: #718096; text-align: center;">This invite link is for single use only. It will grant you access for <strong>${newInvite.durationDays} days</strong>.</p>
-                        </div>
-                    </div>
-                    <div style="background-color: #f7fafc; padding: 20px 30px; border-top: 1px solid #edf2f7; text-align: center; font-size: 12px; color: #a0aec0;">
-                        <p style="margin: 0 0 5px 0;">Automated notification from the Server Manager Portal.</p>
-                        <p style="margin: 0;">We hope you enjoy the server!</p>
-                    </div>
-                </div>
-            </div>
-        `;
+        const mail = buildInviteEmail({
+            config,
+            serverName,
+            inviteUrl,
+            durationDays: newInvite.durationDays,
+            noteHtml,
+            hasLogo,
+        });
 
-        await sendEmail(config, email, subject, html);
+        await sendEmail(config, email, mail.subject || subject, mail.html);
         invites.push(newInvite);
         await saveFile(INVITES_PATH, invites);
         res.json({ message: 'Invite sent successfully', invite: newInvite });
@@ -16369,21 +16252,13 @@ app.post('/api/announcements/push', requireAdmin, async (req, res) => {
                     let sentCount = 0;
                     for (let i = 0; i < activeUsers.length; i++) {
                         const user = activeUsers[i];
-                        const escapedAnnouncement = escapeHtmlAttr(String(text || ''));
-                        const escapedServerId = escapeHtmlAttr(String(config.serverIdentifier || 'our Plex Server'));
-                        const html = `
-                            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #1a1b26; color: #a9b1d6; padding: 20px; border-radius: 10px;">
-                                <h2 style="color: #E5A00D; text-align: center; text-transform: uppercase; letter-spacing: 2px;">Server Announcement</h2>
-                                <div style="background-color: #24283b; padding: 20px; border-radius: 8px; margin-top: 20px; border-left: 4px solid #E5A00D;">
-                                    <p style="white-space: pre-wrap; font-size: 16px; line-height: 1.6; color: #c0caf5; margin: 0;">${escapedAnnouncement}</p>
-                                </div>
-                                <p style="text-align: center; margin-top: 30px; font-size: 12px; color: #565f89;">
-                                    You are receiving this message because you are an active user on ${escapedServerId}.
-                                </p>
-                            </div>
-                        `;
+                        const mail = buildAnnouncementEmail({
+                            config,
+                            serverName: config.serverIdentifier || config.serverName || 'Plex',
+                            announcementText: text,
+                        });
                         try {
-                            await sendEmail(config, user.email, `Server Announcement - ${config.serverIdentifier || 'Plex'}`, html);
+                            await sendEmail(config, user.email, mail.subject, mail.html);
                             sentCount++;
                         } catch (emailErr) {
                             log(`Failed to send announcement email to ${user.email}`);

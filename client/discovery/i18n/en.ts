@@ -1782,7 +1782,7 @@ export const en = {
                 status: 'Status Monitor',
                 notifications: 'Notifications',
                 newsletter: 'Newsletter',
-                broadcast: 'Broadcast Email',
+                broadcast: 'Email Templates',
                 invites: 'Invites',
                 cleanup: 'Cleanup',
                 streamRules: 'Stream Rules',
@@ -2913,7 +2913,9 @@ Object.assign(en, { homeDashboard: { ...en.homeDashboard, nowPlayingCompanion: {
 } } });
 
 Object.assign(en, { settings: { ...en.settings, broadcast: {
-    pageHint: 'Send a custom email to everyone, a group, or specific people you pick.',
+    pageHint: 'Edit automated email copy for your server, or compose a one-off broadcast to users.',
+    automatedTitle: 'Automated emails',
+    composeTitle: 'Compose & send',
     recipients: 'Recipients',
     recipientsHint: 'Send to a group, or pick specific people. Users without an email address cannot be selected and will be skipped.',
     filterAll: 'All users with email',
@@ -2947,6 +2949,33 @@ Object.assign(en, { settings: { ...en.settings, broadcast: {
     failed: 'Failed to send broadcast',
     failedTest: 'Failed to send test broadcast',
     pickSomeone: 'Select at least one user with an email address.',
+} } });
+
+Object.assign(en, { settings: { ...en.settings, emailTemplates: {
+    title: 'Automated email templates',
+    hint: 'Customize subject and body copy for system emails. Leave a field on the default (or clear it) to use the built-in text. Account detail tables and contact buttons stay automatic.',
+    variablesLabel: 'Variables:',
+    resetEvent: 'Reset event to defaults',
+    customBadge: 'custom',
+    saveHint: 'Save Settings to apply template changes.',
+    events: {
+        expiry_warning: 'Expiry warning',
+        access_expired: 'Access expired',
+        access_adjusted: 'Access updated',
+        invite: 'Invite',
+        announcement: 'Announcement blast',
+    },
+    fields: {
+        subject: 'Subject',
+        headline: 'Headline',
+        intro: 'Intro / greeting',
+        body: 'Body',
+        ctaLabel: 'Button label',
+        renewTitle: 'Renew section title',
+        renewBody: 'Renew section body',
+        footer: 'Footer',
+        footerSecondary: 'Footer (secondary)',
+    },
 } } });
 
 Object.assign(en, { settings: { ...en.settings, cleanup: {

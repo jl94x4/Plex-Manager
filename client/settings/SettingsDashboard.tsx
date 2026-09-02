@@ -50,6 +50,7 @@ import { InvitesSettings } from './InvitesSettings';
 import { StatusMonitorSettings } from './StatusMonitorSettings';
 import { ScannerSettingsPanel, defaultScannerSettings, type ScannerSettings } from './ScannerSettingsPanel';
 import { BroadcastSettingsTab } from './BroadcastSettingsTab';
+import { EmailAutomatedTemplatesPanel } from './EmailAutomatedTemplatesPanel';
 import { CleanupInactivePreview } from './CleanupInactivePreview';
 import { NotificationsSettingsTab } from './NotificationsSettingsTab';
 import { IntegrationTestButton } from '../shared/IntegrationTestButton';
@@ -747,6 +748,10 @@ export const SettingsDashboard: React.FC = () => {
     const [notificationTemplateDefaults, setNotificationTemplateDefaults] = useState<Record<string, Record<string, string>>>({});
     const [notificationTemplateEvents, setNotificationTemplateEvents] = useState<string[]>([]);
     const [notificationTemplateFields, setNotificationTemplateFields] = useState<Record<string, string[]>>({});
+    const [emailTemplates, setEmailTemplates] = useState<Record<string, Record<string, string>>>({});
+    const [emailTemplateDefaults, setEmailTemplateDefaults] = useState<Record<string, Record<string, string>>>({});
+    const [emailTemplateEvents, setEmailTemplateEvents] = useState<string[]>([]);
+    const [emailTemplateFields, setEmailTemplateFields] = useState<Record<string, string[]>>({});
     const [ntfyEnabled, setNtfyEnabled] = useState(false);
     const [ntfyServerUrl, setNtfyServerUrl] = useState('');
     const [ntfyTopic, setNtfyTopic] = useState('');
@@ -1753,6 +1758,26 @@ export const SettingsDashboard: React.FC = () => {
                     ? initialSettings.notificationTemplateFields
                     : {},
             );
+            setEmailTemplates(
+                initialSettings.emailTemplates && typeof initialSettings.emailTemplates === 'object'
+                    ? initialSettings.emailTemplates
+                    : {},
+            );
+            setEmailTemplateDefaults(
+                initialSettings.emailTemplateDefaults && typeof initialSettings.emailTemplateDefaults === 'object'
+                    ? initialSettings.emailTemplateDefaults
+                    : {},
+            );
+            setEmailTemplateEvents(
+                Array.isArray(initialSettings.emailTemplateEvents)
+                    ? initialSettings.emailTemplateEvents.map(String)
+                    : [],
+            );
+            setEmailTemplateFields(
+                initialSettings.emailTemplateFields && typeof initialSettings.emailTemplateFields === 'object'
+                    ? initialSettings.emailTemplateFields
+                    : {},
+            );
             setNtfyEnabled(!!initialSettings.ntfyEnabled);
             setNtfyServerUrl(initialSettings.ntfyServerUrl || '');
             setNtfyTopic(initialSettings.ntfyTopic || '');
@@ -2324,6 +2349,7 @@ export const SettingsDashboard: React.FC = () => {
             summaryNotifyEmail,
             summaryMetrics,
             notificationTemplates,
+            emailTemplates,
             ntfyEnabled,
             ntfyServerUrl,
             ntfyTopic,
@@ -4161,10 +4187,25 @@ export const SettingsDashboard: React.FC = () => {
                     )}
 
                     {activeTab === 'broadcast' && (
-                        <div className="mb-8 animate-fade-in">
-                            <h3 className="text-xl font-bold text-plex mb-2 border-b border-border pb-2">{t('settings.navigation.tabs.broadcast')}</h3>
-                            <p className="text-sm text-muted mb-6">{t('settings.broadcast.pageHint')}</p>
-                            <BroadcastSettingsTab users={users} selectedUserIds={[]} />
+                        <div className="mb-8 animate-fade-in space-y-10">
+                            <div>
+                                <h3 className="text-xl font-bold text-plex mb-2 border-b border-border pb-2">{t('settings.navigation.tabs.broadcast')}</h3>
+                                <p className="text-sm text-muted mb-6">{t('settings.broadcast.pageHint')}</p>
+                            </div>
+                            <div className="space-y-3">
+                                <h4 className="text-base font-bold text-text border-b border-border/60 pb-2">{t('settings.broadcast.automatedTitle')}</h4>
+                                <EmailAutomatedTemplatesPanel
+                                    emailTemplates={emailTemplates}
+                                    setEmailTemplates={setEmailTemplates}
+                                    defaults={emailTemplateDefaults}
+                                    events={emailTemplateEvents}
+                                    eventFields={emailTemplateFields}
+                                />
+                            </div>
+                            <div className="space-y-3">
+                                <h4 className="text-base font-bold text-text border-b border-border/60 pb-2">{t('settings.broadcast.composeTitle')}</h4>
+                                <BroadcastSettingsTab users={users} selectedUserIds={[]} />
+                            </div>
                         </div>
                     )}
 

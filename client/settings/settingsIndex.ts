@@ -84,7 +84,7 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
     { id: 'notifications/summary', tabId: 'notifications', sectionId: 'notifications-summary', label: 'Smart Summary Notifications', group: 'Comms', keywords: ['summary', 'digest', 'smart', 'scheduled', 'uptime', 'snapshot'] },
     { id: 'notifications/gotify', tabId: 'notifications', sectionId: 'gotify', label: 'Gotify Alerts', group: 'Comms', keywords: ['gotify', 'push', 'alerts', 'notifications', 'rules', 'self hosted'] },
     { id: 'newsletter', tabId: 'newsletter', label: 'Newsletter', group: 'Comms', keywords: ['digest', 'send', 'frequency', 'weekly', 'monthly'] },
-    { id: 'broadcast', tabId: 'broadcast', label: 'Broadcast Email', group: 'Comms', keywords: ['announcement', 'bulk', 'users', 'broadcast', 'custom email', 'select users', 'recipients'] },
+    { id: 'broadcast', tabId: 'broadcast', label: 'Email Templates', group: 'Comms', keywords: ['announcement', 'bulk', 'users', 'broadcast', 'custom email', 'select users', 'recipients', 'email templates', 'expiry email', 'invite email'] },
     { id: 'invites', tabId: 'invites', label: 'Invites', group: 'Comms', keywords: ['invite', 'link', 'code'] },
     { id: 'invites/referral', tabId: 'invites', sectionId: 'referral', label: 'Referral System', group: 'Comms', keywords: ['referral', 'reward', 'trial', 'invite friends'] },
     { id: 'invites/links', tabId: 'invites', sectionId: 'invite-links', label: 'Automated Invite Links', group: 'Comms', keywords: ['invite link', 'generate', 'email invite'] },
