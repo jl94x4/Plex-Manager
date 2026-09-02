@@ -4,7 +4,7 @@ const path = require('path');
 const staticDir = path.join(__dirname, '..', 'static');
 
 /** esbuild entry + code-split chunks written to static/ on npm run build:js */
-const BUILD_ARTIFACT = /^(index\.js|chunk-[A-Z0-9]+\.js|bundle\.js|tailwind\.css|release-notes\.json|[A-Za-z][A-Za-z0-9]+-[A-Z0-9]{6,10}\.js)$/;
+const BUILD_ARTIFACT = /^(index\.js|chunk-[A-Z0-9]+\.js|bundle\.js|release-notes\.json|[A-Za-z][A-Za-z0-9]+-[A-Z0-9]{6,10}\.js)$/;
 
 if (!fs.existsSync(staticDir)) {
     process.exit(0);
