@@ -84,6 +84,7 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', 
     const [editMode, setEditMode] = useState(false);
     const [toolbarCollapsed, setToolbarCollapsed] = useState(readToolbarCollapsed);
     const skipRemountRef = useRef(true);
+    const prevIframeSrcRef = useRef('');
     const panDragRef = useRef<{ startX: number; startY: number; panX: number; panY: number } | null>(null);
     const resolvedUrl = useMemo(() => normalizeCustomTabEmbedUrl(tab?.url || ''), [tab?.url]);
     const safeEmbedPath = useMemo(
@@ -117,6 +118,9 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', 
     }, [tab, useEmbedProxy, resolvedUrl, deepResolvedUrl, safeEmbedPath]);
 
     useEffect(() => {
+        const prevSrc = prevIframeSrcRef.current;
+        if (prevSrc === iframeSrc) return;
+        prevIframeSrcRef.current = iframeSrc;
         if (skipRemountRef.current) {
             skipRemountRef.current = false;
             setZoom(tab?.id ? readStoredZoom(tab.id) : ZOOM_DEFAULT);
@@ -129,7 +133,7 @@ export const CustomExternalTabPage: React.FC<Props> = ({ tabId, embedPath = '', 
         setZoom(tab?.id ? readStoredZoom(tab.id) : ZOOM_DEFAULT);
         setPan(tab?.id ? readStoredPan(tab.id) : { x: 0, y: 0 });
         setEditMode(false);
-    }, [tab?.id, tab?.url, useEmbedProxy, safeEmbedPath]);
+    }, [iframeSrc, tab?.id]);
 
     useEffect(() => {
         if (editMode) return;
@@ -518,43 +522,45 @@ export const OpenAppletsHost: React.FC<HostProps> = ({
     onActivate,
     onClose,
     onCloseAll,
-}) => {
-    const panes = sessions.map((session) => {
-        const shown = visible && session.id === activeId;
-        return (
-            <div
-                key={session.id}
-                className={shown
-                    ? 'relative flex min-h-0 flex-1 flex-col'
-                    : 'pointer-events-none invisible fixed left-0 top-0 -z-10 h-[100dvh] w-screen'}
-                aria-hidden={!shown}
-                inert={!shown}
-            >
-                <CustomExternalTabPage
-                    tabId={session.id}
-                    embedPath={session.embedPath}
-                    customNavTabs={customNavTabs}
-                    isAdmin={isAdmin}
-                    onClose={() => onClose(session.id)}
-                />
-            </div>
-        );
-    });
-    if (visible) {
-        return (
-            <div className="relative flex min-h-0 flex-1 flex-col">
-                <OpenAppletsTabBar
-                    sessions={sessions}
-                    activeId={activeId}
-                    customNavTabs={customNavTabs}
-                    navOrder={navOrder}
-                    onActivate={onActivate}
-                    onClose={onClose}
-                    onCloseAll={onCloseAll}
-                />
-                {panes}
-            </div>
-        );
-    }
-    return <>{panes}</>;
-};
+}) => (
+    <div
+        className={visible
+            ? 'relative flex min-h-0 flex-1 flex-col'
+            : 'pointer-events-none fixed left-0 top-0 -z-50 h-[100dvh] w-screen overflow-hidden opacity-0'}
+        aria-hidden={!visible}
+    >
+        {visible ? (
+            <OpenAppletsTabBar
+                sessions={sessions}
+                activeId={activeId}
+                customNavTabs={customNavTabs}
+                navOrder={navOrder}
+                onActivate={onActivate}
+                onClose={onClose}
+                onCloseAll={onCloseAll}
+            />
+        ) : null}
+        <div className="relative min-h-0 flex-1">
+            {sessions.map((session) => {
+                const isActive = visible && session.id === activeId;
+                return (
+                    <div
+                        key={session.id}
+                        className={`absolute inset-0 flex min-h-0 flex-col ${
+                            isActive ? 'z-10' : 'z-0 opacity-0 pointer-events-none'
+                        }`}
+                        aria-hidden={!isActive}
+                    >
+                        <CustomExternalTabPage
+                            tabId={session.id}
+                            embedPath={session.embedPath}
+                            customNavTabs={customNavTabs}
+                            isAdmin={isAdmin}
+                            onClose={() => onClose(session.id)}
+                        />
+                    </div>
+                );
+            })}
+        </div>
+    </div>
+);

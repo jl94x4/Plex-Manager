@@ -769,8 +769,16 @@ export const MainApp: React.FC = () => {
     ), []);
 
     const handleActivateApplet = useCallback((session: OpenAppletSession) => {
-        setRoute('external', { path: buildOpenAppletPath(session) });
-    }, [buildOpenAppletPath, setRoute]);
+        const path = buildOpenAppletPath(session);
+        if (currentRoute === 'external' && externalTabId === session.id) return;
+        if (currentRoute === 'external') {
+            setExternalTabId(session.id);
+            setExternalEmbedPath(session.embedPath || '');
+            window.history.pushState({}, '', portalUrl(path));
+            return;
+        }
+        setRoute('external', { path });
+    }, [buildOpenAppletPath, currentRoute, externalTabId, setRoute]);
 
     const handleCloseApplet = useCallback((id: string) => {
         const closingActive = currentRoute === 'external' && externalTabId === id;
