@@ -791,12 +791,12 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                                                                                 key={attachment.id}
                                                                                 type="button"
                                                                                 onClick={() => setLightboxUrl(src)}
-                                                                                className="overflow-hidden rounded-xl border border-white/10 bg-black/20 text-left"
+                                                                                className="max-w-[50%] overflow-hidden rounded-xl border border-white/10 bg-black/20 text-left"
                                                                             >
                                                                                 <img
                                                                                     src={src}
                                                                                     alt={attachment.filename || t('support.attachments.imageAlt')}
-                                                                                    className="max-h-56 w-full object-cover"
+                                                                                    className="max-h-28 w-full object-cover"
                                                                                     loading="lazy"
                                                                                 />
                                                                             </button>
