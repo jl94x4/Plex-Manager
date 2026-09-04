@@ -163,6 +163,71 @@ export type UserDashboardWidgetDeps = {
     RebuildLibraryCacheButton: React.ComponentType;
 };
 
+const ReferralHomeWidget: React.FC<{
+    t: DiscoverTranslate;
+    referralUrl: string;
+    setToast: (toast: { id: number; message: string; type: 'success' | 'error' }) => void;
+}> = ({ t, referralUrl, setToast }) => {
+    const [stats, setStats] = useState<{
+        successfulReferrals: number;
+        totalBonusDays: number;
+        recent: Array<{ id: string; referredUsername: string; rewardDays: number; rewardApplied: boolean }>;
+    } | null>(null);
+
+    useEffect(() => {
+        let cancelled = false;
+        apiFetch('/api/me/referral-stats')
+            .then((data) => {
+                if (cancelled || !data?.enabled) return;
+                setStats({
+                    successfulReferrals: Number(data.successfulReferrals) || 0,
+                    totalBonusDays: Number(data.totalBonusDays) || 0,
+                    recent: Array.isArray(data.recent) ? data.recent.slice(0, 3) : [],
+                });
+            })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, []);
+
+    return (
+        <div className="glass-card p-4 md:p-5 shadow-lg">
+            <p className="text-plex font-bold text-base mb-1 flex items-center gap-2">
+                <Gift className="w-4 h-4 shrink-0" />
+                {t('homeDashboard.inviteFriends')}
+            </p>
+            <p className="text-muted text-sm leading-relaxed mb-4">{t('homeDashboard.inviteFriendsHint')}</p>
+            {stats && stats.successfulReferrals > 0 && (
+                <div className="mb-4 space-y-2">
+                    <p className="text-sm font-medium text-text">
+                        {t('homeDashboard.referralStats', {
+                            count: stats.successfulReferrals,
+                            days: stats.totalBonusDays,
+                        })}
+                    </p>
+                    {stats.recent.length > 0 && (
+                        <div>
+                            <p className="text-[11px] uppercase tracking-wide text-muted mb-1">{t('homeDashboard.referralRecent')}</p>
+                            <ul className="space-y-1">
+                                {stats.recent.map((item) => (
+                                    <li key={item.id} className="text-xs text-muted">
+                                        {item.rewardApplied && item.rewardDays > 0
+                                            ? t('homeDashboard.referralRecentItem', { name: item.referredUsername, days: item.rewardDays })
+                                            : t('homeDashboard.referralRecentItemNoDays', { name: item.referredUsername })}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+                </div>
+            )}
+            <div className="flex flex-col gap-2">
+                <input type="text" readOnly value={referralUrl} className="appearance-none text-[16px] leading-5 w-full p-3 rounded-lg border border-border bg-background text-text text-[16px] outline-none" />
+                <button onClick={() => { navigator.clipboard.writeText(referralUrl); setToast({ id: 99, message: t('homeDashboard.copiedToClipboard'), type: 'success' }); }} className="w-full py-2.5 bg-plex text-background rounded-lg font-bold hover:bg-plex-hover transition-colors shadow-md">{t('homeDashboard.copyLink')}</button>
+            </div>
+        </div>
+    );
+};
+
 const formatBytes = (bytes: number) => {
     if (!bytes) return '0 B';
     const k = 1024;
@@ -504,19 +569,7 @@ export const createMainGridWidgetRenderer = (deps: UserDashboardWidgetDeps) => {
                 {
                     const referralBase = String(publicConfig?.publicBaseUrl || '').trim().replace(/\/+$/, '') || getPublicOrigin();
                     const referralUrl = `${referralBase}/?ref=${user.id}`;
-                    return (
-                    <div className="glass-card p-4 md:p-5 shadow-lg">
-                        <p className="text-plex font-bold text-base mb-1 flex items-center gap-2">
-                            <Gift className="w-4 h-4 shrink-0" />
-                            {t('homeDashboard.inviteFriends')}
-                        </p>
-                        <p className="text-muted text-sm leading-relaxed mb-4">{t('homeDashboard.inviteFriendsHint')}</p>
-                        <div className="flex flex-col gap-2">
-                            <input type="text" readOnly value={referralUrl} className="appearance-none text-[16px] leading-5 w-full p-3 rounded-lg border border-border bg-background text-text text-[16px] outline-none" />
-                            <button onClick={() => { navigator.clipboard.writeText(referralUrl); setToast({ id: 99, message: t('homeDashboard.copiedToClipboard'), type: 'success' }); }} className="w-full py-2.5 bg-plex text-background rounded-lg font-bold hover:bg-plex-hover transition-colors shadow-md">{t('homeDashboard.copyLink')}</button>
-                        </div>
-                    </div>
-                    );
+                    return <ReferralHomeWidget t={t} referralUrl={referralUrl} setToast={setToast} />;
                 }
             case 'support': {
                 const showTempAccessMessage = isActiveShortTermTrial(user, daysLeft);

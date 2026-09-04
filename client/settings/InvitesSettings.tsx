@@ -70,6 +70,10 @@ export const InvitesSettings: React.FC<{
     const [profileNameDraft, setProfileNameDraft] = useState('');
     const [savingProfiles, setSavingProfiles] = useState(false);
     const appliedDefaultRef = useRef(false);
+    const [referralRewards, setReferralRewards] = useState<any[]>([]);
+    const [referralHistoryLoading, setReferralHistoryLoading] = useState(false);
+    const [referralHistoryStatus, setReferralHistoryStatus] = useState<'all' | 'granted' | 'blocked'>('all');
+    const [referralHistoryQuery, setReferralHistoryQuery] = useState('');
 
     const allLibraryIds = useMemo(() => libraries.map((l) => String(l.id)), [libraries]);
 
@@ -144,6 +148,25 @@ export const InvitesSettings: React.FC<{
     }, [addToast, t]);
 
     useEffect(() => { fetchInvites(); }, [fetchInvites]);
+
+    const fetchReferralHistory = useCallback(async () => {
+        setReferralHistoryLoading(true);
+        try {
+            const params = new URLSearchParams({ limit: '200' });
+            if (referralHistoryStatus !== 'all') params.set('status', referralHistoryStatus);
+            if (referralHistoryQuery.trim()) params.set('q', referralHistoryQuery.trim());
+            const data = await apiFetch(`/api/referral-rewards?${params.toString()}`);
+            setReferralRewards(Array.isArray(data?.rewards) ? data.rewards : []);
+        } catch (e: any) {
+            addToast(e.message || t('settings.invites.referralHistoryLoadFailed'), 'error');
+        } finally {
+            setReferralHistoryLoading(false);
+        }
+    }, [addToast, referralHistoryQuery, referralHistoryStatus, t]);
+
+    useEffect(() => {
+        fetchReferralHistory();
+    }, [fetchReferralHistory]);
 
     useEffect(() => {
         if (loading || appliedDefaultRef.current || libraries.length === 0) return;
@@ -365,6 +388,95 @@ export const InvitesSettings: React.FC<{
                             <input type="number" min="0" className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex transition-all" value={referralRewardDays} onChange={e => setReferralRewardDays(Number(e.target.value))} />
                         </div>
                     </div>
+                </div>
+            </section>
+
+            <section id={getSettingsSectionElementId('referral-history')} className="scroll-mt-24">
+                <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">{t('settings.invites.referralHistoryTitle')}</h3>
+                <p className="text-sm text-muted mb-6">{t('settings.invites.referralHistoryDescription')}</p>
+                <div className="flex flex-col md:flex-row gap-3 mb-4">
+                    <input
+                        type="search"
+                        value={referralHistoryQuery}
+                        onChange={(e) => setReferralHistoryQuery(e.target.value)}
+                        placeholder={t('settings.invites.referralHistorySearch')}
+                        className="flex-1 w-full p-2.5 rounded-lg bg-background border border-border text-text outline-none focus:border-plex"
+                    />
+                    <div className="w-full md:w-48">
+                        <CustomSelect
+                            value={referralHistoryStatus}
+                            onChange={(value) => setReferralHistoryStatus((value as 'all' | 'granted' | 'blocked') || 'all')}
+                            options={[
+                                { value: 'all', label: t('settings.invites.referralHistoryFilterAll') },
+                                { value: 'granted', label: t('settings.invites.referralHistoryFilterGranted') },
+                                { value: 'blocked', label: t('settings.invites.referralHistoryFilterBlocked') },
+                            ]}
+                        />
+                    </div>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse min-w-[720px]">
+                        <thead>
+                            <tr className="border-b border-border text-muted text-sm uppercase tracking-wider">
+                                <th className="p-3">{t('settings.invites.referralHistoryDate')}</th>
+                                <th className="p-3">{t('settings.invites.referralHistoryReferrer')}</th>
+                                <th className="p-3">{t('settings.invites.referralHistoryReferred')}</th>
+                                <th className="p-3">{t('settings.invites.referralHistoryReward')}</th>
+                                <th className="p-3">{t('settings.invites.referralHistoryExpiry')}</th>
+                                <th className="p-3">{t('settings.invites.referralHistoryStatus')}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {referralHistoryLoading ? (
+                                <tr><td colSpan={6} className="p-8 text-center text-muted">{t('settings.invites.loading')}</td></tr>
+                            ) : referralRewards.length === 0 ? (
+                                <tr><td colSpan={6} className="p-8 text-center text-muted">{t('settings.invites.referralHistoryEmpty')}</td></tr>
+                            ) : referralRewards.map((entry) => {
+                                const reasonKey = entry.blockReason === 'self_referral'
+                                    ? 'settings.invites.referralHistoryReasonSelf'
+                                    : entry.blockReason === 'duplicate'
+                                        ? 'settings.invites.referralHistoryReasonDuplicate'
+                                        : entry.blockReason === 'referrer_inactive'
+                                            ? 'settings.invites.referralHistoryReasonInactive'
+                                            : entry.blockReason === 'referrer_not_found'
+                                                ? 'settings.invites.referralHistoryReasonMissing'
+                                                : null;
+                                const statusLabel = entry.status === 'granted'
+                                    ? t('settings.invites.referralHistoryGranted')
+                                    : (reasonKey
+                                        ? t(reasonKey)
+                                        : t('settings.invites.referralHistoryReasonOther', { reason: entry.blockReason || 'unknown' }));
+                                const rewardLabel = entry.status === 'granted'
+                                    ? (entry.rewardApplied
+                                        ? t('settings.invites.referralHistoryDays', { count: entry.rewardDays })
+                                        : t('settings.invites.referralHistoryUnlimitedReferrer'))
+                                    : t('settings.invites.referralHistoryNoDays');
+                                const expiryLabel = entry.previousExpiryDate || entry.newExpiryDate
+                                    ? t('settings.invites.referralHistoryExpiryRange', {
+                                        from: entry.previousExpiryDate ? new Date(entry.previousExpiryDate).toLocaleDateString() : t('settings.invites.referralHistoryNone'),
+                                        to: entry.newExpiryDate ? new Date(entry.newExpiryDate).toLocaleDateString() : t('settings.invites.referralHistoryNone'),
+                                    })
+                                    : t('settings.invites.referralHistoryNone');
+                                return (
+                                    <tr key={entry.id} className="border-b border-border/50 hover:bg-white/5 transition-colors">
+                                        <td className="p-3 text-sm text-muted">{new Date(entry.createdAt).toLocaleString()}</td>
+                                        <td className="p-3 font-medium">{entry.referrer?.username || entry.referrer?.id || t('settings.invites.referralHistoryNone')}</td>
+                                        <td className="p-3 font-medium">{entry.referred?.username || entry.referred?.id || t('settings.invites.referralHistoryNone')}</td>
+                                        <td className="p-3 text-sm">{rewardLabel}</td>
+                                        <td className="p-3 text-sm text-muted">{expiryLabel}</td>
+                                        <td className="p-3">
+                                            <span className={`text-xs font-bold px-2 py-1 rounded border ${entry.status === 'granted' ? 'text-plex bg-plex/10 border-plex/20' : 'text-red-400 bg-red-500/10 border-red-500/20'}`}>
+                                                {entry.status === 'granted' ? t('settings.invites.referralHistoryGranted') : t('settings.invites.referralHistoryBlocked')}
+                                            </span>
+                                            {entry.status === 'blocked' && (
+                                                <div className="text-[11px] text-muted mt-1">{statusLabel}</div>
+                                            )}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
                 </div>
             </section>
 

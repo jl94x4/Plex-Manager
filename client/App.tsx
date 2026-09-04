@@ -527,6 +527,7 @@ export const MainApp: React.FC = () => {
         try {
             const data = await apiFetch('/api/users/me');
             setSessionInfo(data);
+            try { sessionStorage.removeItem('smp.referral.ref'); } catch { /* ignore */ }
             if (data.serverName) document.title = `${data.serverName} Portal`;
 
             const expiredMember = !!data.accessExpired && !data.session?.isAdmin;

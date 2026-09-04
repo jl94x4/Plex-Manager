@@ -107,6 +107,15 @@ import {
     normalizeInviteProfilesDocument,
 } from './lib/invite-profiles.js';
 import {
+    createReferralRewardEntry,
+    emptyReferralRewardsDocument,
+    findGrantedRewardForReferred,
+    normalizeReferralRewardsDocument,
+    prependReferralReward,
+    sameAccount,
+    summarizeReferrerRewards,
+} from './lib/referrals.js';
+import {
     migrateLegacyBrandingAssets,
     parseBrandingPublicPath,
     readBrandingAssetByPublicPath,
@@ -1427,6 +1436,7 @@ import {
     CONFIG_PATH,
     INVITES_PATH,
     INVITE_PROFILES_PATH,
+    REFERRAL_REWARDS_PATH,
     USERS_PATH,
     DELETED_USERS_PATH,
     AUDIT_LOG_PATH,
@@ -4257,12 +4267,93 @@ const handlePlexPinLogin = async (req, res, pinId, ref, { redirectOnSuccess = fa
     if (!isAdmin && config.referralEnabled && ref) {
         const users = await loadFile(USERS_PATH, []);
         const isNewUser = !users.find(u => u.id === sessionUser.id || u.plexId === sessionUser.plexId);
+        const referralCode = String(ref || '').trim();
 
-        if (isNewUser) {
-            const referrer = users.find(u => u.id === ref || u.plexId === ref);
-            if (referrer && referrer.plexAccessStatus === 'active') {
-                const trialDays = config.referralTrialDays || 3;
-                const rewardDays = config.referralRewardDays || 7;
+        if (isNewUser && referralCode) {
+            const rewardsDoc = normalizeReferralRewardsDocument(
+                await loadFile(REFERRAL_REWARDS_PATH, emptyReferralRewardsDocument())
+            );
+            const referrer = users.find(u => u.id === referralCode || u.plexId === referralCode) || null;
+            const trialDays = config.referralTrialDays || 3;
+            const rewardDays = config.referralRewardDays || 7;
+
+            const recordReward = async (entry) => {
+                const next = prependReferralReward(rewardsDoc, entry);
+                await saveFile(REFERRAL_REWARDS_PATH, next);
+                return next;
+            };
+
+            if (sameAccount(sessionUser, { id: referralCode, plexId: referralCode })
+                || (referrer && sameAccount(sessionUser, referrer))) {
+                await recordReward(createReferralRewardEntry({
+                    status: 'blocked',
+                    blockReason: 'self_referral',
+                    referrer: referrer || { id: referralCode },
+                    referred: sessionUser,
+                    referralCode,
+                    trialDays,
+                    rewardDays,
+                    rewardApplied: false,
+                }));
+                await appendAuditLog('referral_blocked', sessionUser, referrer || { id: referralCode }, {
+                    reason: 'self_referral',
+                    trialDays,
+                    rewardDays,
+                });
+            } else if (!referrer) {
+                await recordReward(createReferralRewardEntry({
+                    status: 'blocked',
+                    blockReason: 'referrer_not_found',
+                    referrer: { id: referralCode },
+                    referred: sessionUser,
+                    referralCode,
+                    trialDays,
+                    rewardDays,
+                    rewardApplied: false,
+                }));
+                await appendAuditLog('referral_blocked', sessionUser, { id: referralCode }, {
+                    reason: 'referrer_not_found',
+                    trialDays,
+                    rewardDays,
+                });
+            } else if (referrer.plexAccessStatus !== 'active') {
+                await recordReward(createReferralRewardEntry({
+                    status: 'blocked',
+                    blockReason: 'referrer_inactive',
+                    referrer,
+                    referred: sessionUser,
+                    referralCode,
+                    trialDays,
+                    rewardDays,
+                    rewardApplied: false,
+                }));
+                await appendAuditLog('referral_blocked', sessionUser, referrer, {
+                    reason: 'referrer_inactive',
+                    trialDays,
+                    rewardDays,
+                });
+            } else if (findGrantedRewardForReferred(rewardsDoc, sessionUser)) {
+                await recordReward(createReferralRewardEntry({
+                    status: 'blocked',
+                    blockReason: 'duplicate',
+                    referrer,
+                    referred: sessionUser,
+                    referralCode,
+                    trialDays,
+                    rewardDays,
+                    rewardApplied: false,
+                }));
+                await appendAuditLog('referral_blocked', sessionUser, referrer, {
+                    reason: 'duplicate',
+                    trialDays,
+                    rewardDays,
+                });
+            } else {
+                const previousExpiryDate = referrer.expiryDate || null;
+                const canApplyReward = !!previousExpiryDate;
+                const newExpiryDate = canApplyReward
+                    ? addDays(new Date(previousExpiryDate), rewardDays).toISOString()
+                    : null;
                 const newUserObj = {
                     id: sessionUser.id,
                     plexId: sessionUser.plexId,
@@ -4272,17 +4363,76 @@ const handlePlexPinLogin = async (req, res, pinId, ref, { redirectOnSuccess = fa
                     expiryDate: addDays(new Date(), trialDays).toISOString(),
                     plexAccessStatus: 'pending',
                     isTrial: true,
+                    referredBy: referrer.id || referrer.plexId || referralCode,
+                    referredAt: new Date().toISOString(),
                 };
                 users.push(newUserObj);
-                if (referrer.expiryDate) {
-                    referrer.expiryDate = addDays(new Date(referrer.expiryDate), rewardDays).toISOString();
+                if (canApplyReward) {
+                    referrer.expiryDate = newExpiryDate;
                 }
                 await saveFile(USERS_PATH, users);
-                await appendAuditLog('referral_claimed', sessionUser, referrer, { trialDays, rewardDays });
+                await recordReward(createReferralRewardEntry({
+                    status: 'granted',
+                    referrer,
+                    referred: newUserObj,
+                    referralCode,
+                    trialDays,
+                    rewardDays,
+                    rewardApplied: canApplyReward,
+                    previousExpiryDate,
+                    newExpiryDate,
+                }));
+                await appendAuditLog('referral_claimed', sessionUser, referrer, {
+                    trialDays,
+                    rewardDays,
+                    rewardApplied: canApplyReward,
+                    previousExpiryDate,
+                    newExpiryDate,
+                });
+                try {
+                    const expiryLabel = newExpiryDate
+                        ? new Date(newExpiryDate).toLocaleDateString()
+                        : 'unlimited';
+                    await createInAppNotification({
+                        userId: referrer.id,
+                        type: 'referral_success',
+                        title: 'Your referral was successful!',
+                        body: canApplyReward
+                            ? `${sessionUser.username} joined and ${rewardDays} day${rewardDays === 1 ? '' : 's'} were added to your access. New expiration: ${expiryLabel}.`
+                            : `${sessionUser.username} joined via your referral link. Your account is unlimited, so no bonus days were applied.`,
+                        href: '/',
+                        meta: {
+                            referredUserId: newUserObj.id,
+                            referredUsername: sessionUser.username,
+                            rewardDays: canApplyReward ? rewardDays : 0,
+                            forceUnique: true,
+                        },
+                    });
+                } catch (notifyErr) {
+                    log(`Failed to notify referrer ${referrer.username}: ${notifyErr.message}`);
+                }
                 if (config.serverIdentifier && config.plexToken) {
                     inviteUserToPlex(newUserObj, config).catch(e => log('Failed to invite referral: ' + e.message));
                 }
             }
+        }
+    }
+
+    if (!isAdmin) {
+        const usersAfterReferral = await loadFile(USERS_PATH, []);
+        const knownAfterReferral = findLocalUserForSession(usersAfterReferral, sessionUser);
+        if (!knownAfterReferral && !config.allowTemporaryAccess) {
+            await appendAuditLog('login_blocked_non_member', sessionUser, sessionUser, {
+                reason: ref ? 'referral_not_granted' : 'not_a_member',
+            });
+            clearSessionCookie(req, res);
+            const message = ref
+                ? 'This referral link could not be used. Please contact the admin for access.'
+                : 'Your account is not registered for this portal.';
+            if (redirectOnSuccess) {
+                return res.redirect(withBasePath('/?loginError=' + encodeURIComponent(message)));
+            }
+            return res.status(403).json({ error: message });
         }
     }
 
@@ -9608,6 +9758,68 @@ app.put('/api/invite-profiles', requireAdmin, async (req, res) => {
     }
 });
 
+app.get('/api/referral-rewards', requireAdmin, async (req, res) => {
+    try {
+        const raw = await loadFile(REFERRAL_REWARDS_PATH, emptyReferralRewardsDocument());
+        const doc = normalizeReferralRewardsDocument(raw);
+        const status = String(req.query.status || '').trim();
+        const q = String(req.query.q || '').trim().toLowerCase();
+        let rewards = doc.rewards;
+        if (status === 'granted' || status === 'blocked') {
+            rewards = rewards.filter((entry) => entry.status === status);
+        }
+        if (q) {
+            rewards = rewards.filter((entry) => {
+                const hay = [
+                    entry.referrer?.username,
+                    entry.referrer?.email,
+                    entry.referrer?.id,
+                    entry.referred?.username,
+                    entry.referred?.email,
+                    entry.referred?.id,
+                    entry.referralCode,
+                    entry.blockReason,
+                ].filter(Boolean).join(' ').toLowerCase();
+                return hay.includes(q);
+            });
+        }
+        const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 200, 1), 1000);
+        res.json({
+            rewards: rewards.slice(0, limit),
+            total: rewards.length,
+        });
+    } catch (e) {
+        res.status(500).json({ error: 'Failed to load referral rewards' });
+    }
+});
+
+app.get('/api/me/referral-stats', requireAuth, async (req, res) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        if (!config.referralEnabled) {
+            return res.json({ enabled: false, successfulReferrals: 0, totalBonusDays: 0, recent: [] });
+        }
+        const users = await loadFile(USERS_PATH, []);
+        const me = findLocalUserForSession(users, req.user) || req.user;
+        const raw = await loadFile(REFERRAL_REWARDS_PATH, emptyReferralRewardsDocument());
+        const summary = summarizeReferrerRewards(raw, me);
+        res.json({
+            enabled: true,
+            successfulReferrals: summary.successfulReferrals,
+            totalBonusDays: summary.totalBonusDays,
+            recent: summary.recent.map((entry) => ({
+                id: entry.id,
+                createdAt: entry.createdAt,
+                referredUsername: entry.referred?.username || 'Unknown',
+                rewardDays: entry.rewardApplied ? entry.rewardDays : 0,
+                rewardApplied: !!entry.rewardApplied,
+            })),
+        });
+    } catch (e) {
+        res.status(500).json({ error: 'Failed to load referral stats' });
+    }
+});
+
 const REQUEST_LIST_FILTERS = new Set(['pending', 'approved', 'declined', 'processing', 'available', 'failed']);
 
 const emptyRequestCounts = () => ({
@@ -13986,6 +14198,7 @@ const BACKUP_TARGETS = [
     { key: 'users', path: USERS_PATH },
     { key: 'invites', path: INVITES_PATH },
     { key: 'inviteProfiles', path: INVITE_PROFILES_PATH },
+    { key: 'referralRewards', path: REFERRAL_REWARDS_PATH },
     { key: 'deletedUsers', path: DELETED_USERS_PATH },
     { key: 'auditLog', path: AUDIT_LOG_PATH },
     { key: 'emailLog', path: EMAIL_LOG_PATH },

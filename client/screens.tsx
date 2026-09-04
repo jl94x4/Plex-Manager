@@ -133,6 +133,40 @@ const STATUS_SERVICE_ICONS: Record<string, string> = {
 };
 
 const NOW_PLAYING_COMPANION_PREF_KEY = 'portal.home.nowPlayingCompanion.v1';
+const REFERRAL_REF_STORAGE_KEY = 'smp.referral.ref';
+const REFERRAL_REF_MAX_AGE_MS = 2 * 60 * 60 * 1000;
+
+const readStoredReferralRef = (): string => {
+    try {
+        const raw = String(sessionStorage.getItem(REFERRAL_REF_STORAGE_KEY) || '').trim();
+        if (!raw) return '';
+        if (raw.startsWith('{')) {
+            const parsed = JSON.parse(raw);
+            const ref = String(parsed?.ref || '').trim();
+            const savedAt = Number(parsed?.savedAt) || 0;
+            if (!ref || !savedAt || (Date.now() - savedAt) > REFERRAL_REF_MAX_AGE_MS) {
+                sessionStorage.removeItem(REFERRAL_REF_STORAGE_KEY);
+                return '';
+            }
+            return ref;
+        }
+        return raw;
+    } catch {
+        return '';
+    }
+};
+
+const writeStoredReferralRef = (ref: string) => {
+    const value = String(ref || '').trim();
+    if (!value) return;
+    try {
+        sessionStorage.setItem(REFERRAL_REF_STORAGE_KEY, JSON.stringify({ ref: value, savedAt: Date.now() }));
+    } catch { /* ignore */ }
+};
+
+const clearStoredReferralRef = () => {
+    try { sessionStorage.removeItem(REFERRAL_REF_STORAGE_KEY); } catch { /* ignore */ }
+};
 const readNowPlayingCompanionEnabled = (subjectId: string): boolean => {
     try {
         const raw = localStorage.getItem(NOW_PLAYING_COMPANION_PREF_KEY);
@@ -6656,6 +6690,10 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, p
 
         const path = stripBasePath(window.location.pathname);
         const params = new URLSearchParams(window.location.search);
+        const referralRef = String(params.get('ref') || '').trim();
+        if (referralRef) {
+            writeStoredReferralRef(referralRef);
+        }
         const loginError = params.get('loginError');
         if (loginError) {
             setError(loginError);
@@ -6672,10 +6710,14 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, p
             const pinId = path.split('/')[2];
             setIsLoading(true);
             window.history.replaceState({}, '', portalUrl('/'));
+            const storedRef = readStoredReferralRef();
             apiFetch('/api/auth/plex/callback', {
                 method: 'POST',
-                body: JSON.stringify({ pinId }),
-            }).then(() => onLoginSuccess()).catch(e => {
+                body: JSON.stringify({ pinId, ...(storedRef ? { ref: storedRef } : {}) }),
+            }).then(() => {
+                clearStoredReferralRef();
+                onLoginSuccess();
+            }).catch(e => {
                 setError(e.message || 'Login failed');
             }).finally(() => {
                 setIsLoading(false);
@@ -6689,7 +6731,10 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, p
         try {
             const data = await apiFetch('/api/auth/plex/login', { method: 'POST' });
             const clientId = data.clientIdentifier || data.clientId || '';
-            const forwardUrl = window.location.origin + portalUrl('/api/auth/plex/callback?pinId=' + data.id);
+            const storedRef = readStoredReferralRef();
+            const callbackParams = new URLSearchParams({ pinId: String(data.id) });
+            if (storedRef) callbackParams.set('ref', storedRef);
+            const forwardUrl = window.location.origin + portalUrl(`/api/auth/plex/callback?${callbackParams.toString()}`);
             const authUrl = `https://app.plex.tv/auth#?clientID=${encodeURIComponent(clientId)}&code=${data.code}&context[device][product]=Server%20Manager%20Portal&forwardUrl=${encodeURIComponent(forwardUrl)}`;
             window.location.href = authUrl;
         } catch (e) {
