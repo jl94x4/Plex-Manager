@@ -226,6 +226,29 @@ export const ALWAYS_VISIBLE_NAV_KEYS = new Set(['home', 'settings', 'logout']);
 /** Members never see Settings; Home + Logout stay always visible in their layout. */
 export const ALWAYS_VISIBLE_MEMBER_NAV_KEYS = new Set(['home', 'logout']);
 
+/** Routes / nav keys expired members may still open (#187). */
+export const EXPIRED_PORTAL_ALLOWED_NAV_KEYS = new Set([
+    'home',
+    'support',
+    'chat',
+    'preferences',
+    'about',
+]);
+
+export const EXPIRED_PORTAL_ALLOWED_ROUTES = new Set([
+    'expired',
+    'user', // home → ExpiredAccessPage
+    'support',
+    'chat',
+    'profile',
+    'preferences',
+    'about',
+]);
+
+export const isExpiredPortalAllowedRoute = (route: string) => (
+    EXPIRED_PORTAL_ALLOWED_ROUTES.has(String(route || ''))
+);
+
 /** Normalize a saved hidden-keys list; strips always-visible keys. */
 export const normalizeNavHiddenKeys = (keys?: string[] | null, customTabs?: Array<{ id: string; enabled?: boolean }>): string[] => {
     if (!Array.isArray(keys)) return [];
@@ -373,6 +396,7 @@ export const filterNavOrder = (
         features?: NavFeatureFlags;
         hiddenKeys?: string[];
         customTabs?: Array<{ id: string; enabled?: boolean; adminOnly?: boolean }>;
+        accessExpired?: boolean;
     },
 ) => {
     const features = options.features || {};
@@ -401,8 +425,17 @@ export const filterNavOrder = (
             : normalizeMemberNavHiddenKeys(options.hiddenKeys, options.customTabs),
     );
     const alwaysVisible = options.isAdmin ? ALWAYS_VISIBLE_NAV_KEYS : ALWAYS_VISIBLE_MEMBER_NAV_KEYS;
+    const accessExpired = !!options.accessExpired && !options.isAdmin;
 
     return (Array.isArray(order) ? order : []).filter((key) => {
+        if (accessExpired) {
+            if (key === 'logout') return false;
+            if (key.startsWith('custom:')) return false;
+            if (key === 'home') return true;
+            return EXPIRED_PORTAL_ALLOWED_NAV_KEYS.has(key)
+                && !(key === 'support' && !supportEnabled)
+                && !(key === 'chat' && !chatEnabled);
+        }
         if (key.startsWith('custom:')) {
             const id = key.slice('custom:'.length);
             const tab = customTabMap.get(id);

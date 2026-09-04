@@ -11,7 +11,8 @@ import { WhatsNewModal } from './shared/WhatsNewModal';
 import { SummaryDigestCard, openSummaryDigestFromUrl } from './shared/SummaryDigestCard';
 import { DiscoverI18nProvider } from './discovery/i18n';
 import { PortalJobsBanner } from './shared/PortalJobsBanner';
-import { DEFAULT_NAV_ORDER, ensureCompleteNavOrder, filterNavOrder, resolveMemberNavOrder } from './shared/nav';
+import { DEFAULT_NAV_ORDER, ensureCompleteNavOrder, filterNavOrder, isExpiredPortalAllowedRoute, resolveMemberNavOrder } from './shared/nav';
+import { ExpiredAccessPage } from './expired/ExpiredAccessPage';
 import {
     getLastSeenVersion,
     parseAppSemver,
@@ -167,6 +168,8 @@ export const MainApp: React.FC = () => {
     const [openApplets, setOpenApplets] = useState<OpenAppletSession[]>([]);
     const openAppletsHydratedRef = useRef(false);
     const [sessionInfo, setSessionInfo] = useState<any>(null);
+    const sessionInfoRef = useRef<any>(null);
+    sessionInfoRef.current = sessionInfo;
     // Default temporary access off so login never flashes the trial panel before public config arrives.
     const [publicConfig, setPublicConfig] = useState<any>({ allowTemporaryAccess: false });
     const [publicConfigWarning, setPublicConfigWarning] = useState<string | null>(null);
@@ -364,6 +367,13 @@ export const MainApp: React.FC = () => {
     }, [publicConfig?.appVersion]);
 
     const setRoute = useCallback((route: 'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'achievements' | 'support' | 'chat' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'spotify-sync' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'editions' | 'requests' | 'discovery' | 'about' | 'preferences' | 'profile' | 'invite' | 'external' | 'loading', options?: { hash?: string; reviewId?: number; path?: string }) => {
+        const session = sessionInfoRef.current;
+        if (session?.accessExpired && !session?.session?.isAdmin && route !== 'login' && route !== 'loading' && route !== 'invite') {
+            if (!isExpiredPortalAllowedRoute(route)) {
+                route = 'user';
+                options = undefined;
+            }
+        }
         if (route === 'logs') {
             setCurrentRoute('settings');
             window.history.pushState({}, '', portalUrl('/settings#logs'));
@@ -484,10 +494,15 @@ export const MainApp: React.FC = () => {
 
     useEffect(() => {
         if (!sessionInfo) return;
-        if (currentRoute !== 'downloads') return;
-        if (sessionInfo.session?.isAdmin) return;
-        if (sessionInfo.navFeatures?.downloads !== false) return;
-        setRoute('user');
+        if (currentRoute === 'downloads') {
+            if (sessionInfo.session?.isAdmin) return;
+            if (sessionInfo.navFeatures?.downloads !== false) return;
+            setRoute('user');
+            return;
+        }
+        if (sessionInfo.accessExpired && !sessionInfo.session?.isAdmin && !isExpiredPortalAllowedRoute(currentRoute)) {
+            setRoute('user');
+        }
     }, [currentRoute, sessionInfo, setRoute]);
 
     const checkSession = useCallback(async () => {
@@ -513,14 +528,26 @@ export const MainApp: React.FC = () => {
             const data = await apiFetch('/api/users/me');
             setSessionInfo(data);
             if (data.serverName) document.title = `${data.serverName} Portal`;
-            if (path.startsWith('/status')) setCurrentRoute('status');
+
+            const expiredMember = !!data.accessExpired && !data.session?.isAdmin;
+            const allowExpiredPath = (routeId: string) => !expiredMember || isExpiredPortalAllowedRoute(routeId);
+            const bounceExpiredHome = () => {
+                window.history.replaceState({}, '', portalUrl('/portal'));
+                setCurrentRoute('user');
+            };
+
+            if (path.startsWith('/status') && expiredMember) { bounceExpiredHome(); }
+            else if (path.startsWith('/status')) setCurrentRoute('status');
+            else if (path.startsWith('/dashboard') && expiredMember) bounceExpiredHome();
             else if (path.startsWith('/dashboard')) setCurrentRoute('dashboard');
             else if (path.startsWith('/settings') && data.session.isAdmin) setCurrentRoute('settings');
             else if (path === '/logs' && data.session.isAdmin) {
                 window.history.replaceState({}, '', portalUrl('/settings#logs'));
                 setCurrentRoute('settings');
             }
+            else if (path.startsWith('/mediastack') && expiredMember) bounceExpiredHome();
             else if (path.startsWith('/mediastack')) setCurrentRoute('mediastack');
+            else if (path.startsWith('/downloads') && expiredMember) bounceExpiredHome();
             else if (path.startsWith('/downloads')) setCurrentRoute('downloads');
             else if (path.startsWith('/maintenance') && data.session.isAdmin) setCurrentRoute('maintenance');
             else if (path.startsWith('/upgrader') && data.session.isAdmin) setCurrentRoute('upgrader');
@@ -578,29 +605,35 @@ export const MainApp: React.FC = () => {
                     : '/discovery/queue';
                 window.history.replaceState({}, '', portalUrl(nextPath));
             }
+            else if (path.startsWith('/discovery') && expiredMember) bounceExpiredHome();
             else if (path.startsWith('/discovery')) setCurrentRoute('discovery');
-            else if (path.startsWith('/about')) setCurrentRoute('about');
-            else if (path.startsWith('/preferences')) setCurrentRoute('preferences');
-            else if (path.startsWith('/profile')) {
+            else if (path.startsWith('/about') && allowExpiredPath('about')) setCurrentRoute('about');
+            else if (path.startsWith('/about')) bounceExpiredHome();
+            else if (path.startsWith('/preferences') && allowExpiredPath('preferences')) setCurrentRoute('preferences');
+            else if (path.startsWith('/preferences')) bounceExpiredHome();
+            else if (path.startsWith('/profile') && allowExpiredPath('profile')) {
                 setCurrentRoute('profile');
                 setProfilePath(stripBasePath(window.location.pathname));
             }
+            else if (path.startsWith('/profile')) bounceExpiredHome();
+            else if (path.startsWith('/analytics') && expiredMember) bounceExpiredHome();
             else if (path.startsWith('/analytics')) setCurrentRoute('analytics');
-            else if (path.startsWith('/achievements') && data.navFeatures?.achievements) setCurrentRoute('achievements');
+            else if (path.startsWith('/achievements') && data.navFeatures?.achievements && !expiredMember) setCurrentRoute('achievements');
             else if (path.startsWith('/achievements')) {
                 window.history.replaceState({}, '', portalUrl('/portal'));
                 setCurrentRoute('user');
             }
-            else if (path.startsWith('/support') && data.navFeatures?.support !== false) setCurrentRoute('support');
+            else if (path.startsWith('/support') && data.navFeatures?.support !== false && allowExpiredPath('support')) setCurrentRoute('support');
             else if (path.startsWith('/support')) {
                 window.history.replaceState({}, '', portalUrl('/portal'));
                 setCurrentRoute('user');
             }
-            else if (path.startsWith('/chat') && data.navFeatures?.chat) setCurrentRoute('chat');
+            else if (path.startsWith('/chat') && data.navFeatures?.chat && allowExpiredPath('chat')) setCurrentRoute('chat');
             else if (path.startsWith('/chat')) {
                 window.history.replaceState({}, '', portalUrl('/portal'));
                 setCurrentRoute('user');
             }
+            else if (path.startsWith('/external/') && expiredMember) bounceExpiredHome();
             else if (path.startsWith('/external/')) {
                 const match = path.match(/^\/external\/([^/?#]+)/i);
                 const nextId = match?.[1] ? decodeURIComponent(match[1]) : null;
@@ -761,6 +794,7 @@ export const MainApp: React.FC = () => {
             features: sessionInfo.navFeatures,
             hiddenKeys,
             customTabs: customNavTabs,
+            accessExpired: !!sessionInfo.accessExpired,
         });
     }, [sessionInfo, isAdminSession]);
 
@@ -997,6 +1031,16 @@ export const MainApp: React.FC = () => {
             );
         }
         if (currentRoute === 'admin' || currentRoute === 'users') return <AdminDashboard onLogout={handleLogout} onViewUserPortal={() => setRoute('user')} onViewStatus={() => setRoute('status')} onViewDashboard={() => setRoute('dashboard')} onViewAsUser={handleViewAsUser} onViewProfile={(userId) => setRoute('profile', { path: `/profile/${encodeURIComponent(userId)}` })} />;
+        if (sessionInfo?.accessExpired && !sessionInfo?.session?.isAdmin) {
+            return (
+                <ExpiredAccessPage
+                    sessionInfo={sessionInfo}
+                    publicConfig={publicConfig}
+                    onNavigate={(route) => setRoute(route as any)}
+                    onLogout={handleLogout}
+                />
+            );
+        }
         return <UserDashboard sessionInfo={sessionInfo} publicConfig={publicConfig} onLogout={handleLogout} refreshSession={checkSession} onViewAdmin={() => setRoute('users')} onViewStatus={() => setRoute('status')} onViewDashboard={() => setRoute('dashboard')} onViewSettings={() => setRoute('settings')} onViewLogs={() => setRoute('logs')} onViewCollexions={() => setRoute('collexions')} onViewScanner={() => setRoute('scanner')} onViewSpotifySync={() => setRoute('spotify-sync')} onViewMediaAutomation={() => setRoute('media-automation')} onViewRequests={(reviewId) => setRoute('requests', reviewId ? { reviewId } : undefined)} onPendingRequestsChange={refreshPendingRequestCount} onNavigate={setRoute as any} />;
     };
 

@@ -845,6 +845,8 @@ export const SettingsDashboard: React.FC = () => {
     const [referralTrialDays, setReferralTrialDays] = useState(3);
     const [referralRewardDays, setReferralRewardDays] = useState(7);
     const [announcement, setAnnouncement] = useState('');
+    const [expiredPortalTitle, setExpiredPortalTitle] = useState('');
+    const [expiredPortalMessage, setExpiredPortalMessage] = useState('');
     const [isPushingAnnouncement, setIsPushingAnnouncement] = useState(false);
     const [use24HourClock, setUse24HourClock] = useState(initialSettings?.use24HourClock || false);
     const [showPosterQualityBadges, setShowPosterQualityBadges] = useState(initialSettings?.showPosterQualityBadges !== false);
@@ -1600,6 +1602,8 @@ export const SettingsDashboard: React.FC = () => {
             setReferralTrialDays(initialSettings.referralTrialDays || 3);
             setReferralRewardDays(initialSettings.referralRewardDays || 7);
             setAnnouncement(initialSettings.announcement || '');
+            setExpiredPortalTitle(initialSettings.expiredPortalTitle || '');
+            setExpiredPortalMessage(initialSettings.expiredPortalMessage || '');
             if (initialSettings.navOrder) setNavOrder(ensureCompleteNavOrder(initialSettings.navOrder));
             setNavHiddenKeys(normalizeNavHiddenKeys(initialSettings.navHiddenKeys, initialSettings.customNavTabs));
             setMemberNavOrder(resolveMemberNavOrder(initialSettings.memberNavOrder, initialSettings.navOrder, initialSettings.customNavTabs));
@@ -2264,6 +2268,8 @@ export const SettingsDashboard: React.FC = () => {
             referralTrialDays,
             referralRewardDays,
             announcement,
+            expiredPortalTitle,
+            expiredPortalMessage,
             navOrder: ensureCompleteNavOrder(navOrder),
             navHiddenKeys: normalizeNavHiddenKeys(navHiddenKeys, customNavTabs),
             memberNavOrder: ensureCompleteMemberNavOrder(memberNavOrder, customNavTabs),
@@ -4759,6 +4765,40 @@ export const SettingsDashboard: React.FC = () => {
                                                     >
                                                         {isPushingAnnouncement ? 'Pushing...' : 'Save & Send Email Blast'}
                                                     </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </section>
+
+                                    <section id={getSettingsSectionElementId('expired-portal')} className="scroll-mt-24 rounded-xl border border-border/70 p-4">
+                                        <div className="flex flex-col lg:flex-row lg:items-start gap-4">
+                                            <div className="lg:w-52 shrink-0">
+                                                <h4 className="font-bold text-text">Expired access</h4>
+                                                <p className="text-xs text-muted mt-1">Message shown when a member logs in after their subscription expired (#187).</p>
+                                            </div>
+                                            <div className="flex-1 min-w-0 space-y-4">
+                                                <div>
+                                                    <SettingFieldLabel hint={<SettingHint>Optional heading on the restricted expired-user page. Leave blank for “Access expired”.</SettingHint>}>
+                                                        Expired portal title
+                                                    </SettingFieldLabel>
+                                                    <input
+                                                        className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex transition-all mt-1"
+                                                        value={expiredPortalTitle}
+                                                        onChange={(e) => setExpiredPortalTitle(e.target.value)}
+                                                        placeholder="Access expired"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <SettingFieldLabel hint={<SettingHint>Optional custom instructions (renewal, Discord, contact). Contact email / WhatsApp from Settings are also shown as buttons.</SettingHint>}>
+                                                        Expired portal message
+                                                    </SettingFieldLabel>
+                                                    <textarea
+                                                        className="w-full p-3 rounded-lg border border-border bg-background text-text outline-none focus:border-plex transition-all mt-1"
+                                                        value={expiredPortalMessage}
+                                                        onChange={(e) => setExpiredPortalMessage(e.target.value)}
+                                                        placeholder="Your access has expired. Open Support to request a renewal…"
+                                                        rows={4}
+                                                    />
                                                 </div>
                                             </div>
                                         </div>

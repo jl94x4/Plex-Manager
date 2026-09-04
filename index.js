@@ -1911,6 +1911,29 @@ const getDaysUntilExpiry = (expiryDate) => {
     return Math.round(diffTime / (1000 * 60 * 60 * 24));
 };
 
+/** True when the member's calendar expiry date is in the past (unlimited = not expired). */
+const isAccessExpired = (user) => {
+    const days = getDaysUntilExpiry(user?.expiryDate);
+    return days !== null && days < 0;
+};
+
+/**
+ * APIs expired members may still call (support / chat / profile / prefs / logout).
+ * Everything else under requireMember returns 403 ACCESS_EXPIRED.
+ */
+const isExpiredPortalAllowedApiPath = (rawPath = '') => {
+    const path = String(rawPath || '').split('?')[0].toLowerCase();
+    const prefixes = [
+        '/api/support',
+        '/api/chat',
+        '/api/profile',
+        '/api/users/preferences',
+        '/api/notifications',
+        '/api/auth/logout',
+    ];
+    return prefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
+};
+
 /** Clear stale isTrial when access is unlimited or extended beyond short-term trial. */
 const reconcileTrialAccessFlag = (user) => {
     if (!user?.isTrial) return false;
@@ -2910,6 +2933,19 @@ const requireMember = async (req, res, next) => {
             return res.status(403).json({ error: 'Your account does not have active portal access.' });
         }
         req.localUser = localUser;
+
+        // #187 — expired members keep a restricted portal (support/chat/profile), not full media APIs.
+        let requestPath = String(req.originalUrl || req.url || req.path || '').split('?')[0] || '/';
+        if (BASE_PATH && (requestPath === BASE_PATH || requestPath.startsWith(`${BASE_PATH}/`))) {
+            requestPath = requestPath.slice(BASE_PATH.length) || '/';
+        }
+        if (isAccessExpired(localUser) && !isExpiredPortalAllowedApiPath(requestPath)) {
+            return res.status(403).json({
+                error: 'Your access has expired. Renew through Support or contact the server administrator.',
+                code: 'ACCESS_EXPIRED',
+            });
+        }
+
         next();
     } catch (e) {
         res.status(500).json({ error: 'Membership verification failed' });
@@ -5108,9 +5144,30 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
         downloads: config.downloadsVisibleToMembers !== false,
     };
 
+    // Non-admin expired members: restrict to support / chat / profile / preferences (#187).
+    const accessExpired = !isAdmin && !!localUser && isAccessExpired(localUser);
+    if (accessExpired) {
+        Object.keys(navFeatures).forEach((key) => {
+            if (key === 'support' || key === 'chat') return;
+            navFeatures[key] = false;
+        });
+        navFeatures.support = config.supportTicketsEnabled !== false;
+        navFeatures.chat = !!config.chatEnabled;
+    }
+
+    const expiredPortalTitle = String(config.expiredPortalTitle || '').trim();
+    const expiredPortalMessage = String(config.expiredPortalMessage || '').trim();
+
     res.json({
         session: { ...sessionPublic, thumb: sessionThumb, isAdmin },
         account: localUser ? sanitizeUserForApi(localUser) : null,
+        accessExpired,
+        expiredPortal: accessExpired ? {
+            title: expiredPortalTitle || null,
+            message: expiredPortalMessage || null,
+            expiryDate: localUser?.expiryDate || null,
+            plexAccessStatus: localUser?.plexAccessStatus || null,
+        } : null,
         serverName,
         adminThumb,
         mediaServerType: config.mediaServerType || 'plex',
@@ -5123,10 +5180,10 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
         memberNavHiddenKeys: Array.isArray(config.memberNavHiddenKeys)
             ? config.memberNavHiddenKeys.filter((key) => typeof key === 'string' && key && key !== 'home' && key !== 'logout')
             : [],
-        customNavTabs: sanitizeCustomNavTabsForSession(config.customNavTabs),
+        customNavTabs: accessExpired ? [] : sanitizeCustomNavTabsForSession(config.customNavTabs),
         customNavDisplay: normalizeCustomNavDisplay(config.customNavDisplay),
         arrOpenInPortalEmbed: !!config.arrOpenInPortalEmbed,
-        homeCustomModules: sanitizeHomeCustomModulesForSession(config.homeCustomModules, isAdmin),
+        homeCustomModules: accessExpired ? [] : sanitizeHomeCustomModulesForSession(config.homeCustomModules, isAdmin),
         navFeatures,
         impersonation: impersonating ? {
             active: true,
@@ -5521,6 +5578,8 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 referralTrialDays: config.referralTrialDays || 3,
                 referralRewardDays: config.referralRewardDays || 7,
                 announcement: config.announcement || '',
+                expiredPortalTitle: config.expiredPortalTitle || '',
+                expiredPortalMessage: config.expiredPortalMessage || '',
                 hideStreamUsers: config.hideStreamUsers === true ? 'anonymous' : (config.hideStreamUsers || 'false'),
                 navOrder: config.navOrder || ['home', 'discover', 'request', 'analytics', 'users', 'downloads', 'upgrader', 'collexions', 'mediastack', 'requests', 'status', 'maintenance', 'about', 'settings', 'logout'],
                 navHiddenKeys: Array.isArray(config.navHiddenKeys) ? config.navHiddenKeys : [],
@@ -5865,7 +5924,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         autoApproveMovies4k, autoApproveTv4k, portalAutoRequestMovies, portalAutoRequestTv,
         seriesMetadataProvider, animeMetadataProvider, tvdbApiKey,
         inactiveCleanupEnabled, inactiveCleanupDays,
-        primaryColor, customLogoUrl, customLoginLogoUrl, loginLogoCircleFrame, customFaviconUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, customNavTabs, customNavDisplay, arrOpenInPortalEmbed, homeCustomModules, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
+        primaryColor, customLogoUrl, customLoginLogoUrl, loginLogoCircleFrame, customFaviconUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, expiredPortalTitle, expiredPortalMessage, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, customNavTabs, customNavDisplay, arrOpenInPortalEmbed, homeCustomModules, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
         autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, spotifyToPlexEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, supportTicketsEnabled, chatEnabled, chatMentionNotifyInApp, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, scannerNotifyDeleted, scannerNotifyUpgrade, scannerNotifyImport, scannerNotifyGrab, scannerNotifyUpdate, scannerNotifyInteraction, notificationTemplates, emailTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, spotifyToPlexInternalUrl, spotifyToPlexClientId, spotifyToPlexClientSecret, spotifyToPlexEncryptionKey, spotifyToPlexHomeWidgetEnabled, spotifyToPlexScheduleMode, spotifyToPlexScheduledSyncEnabled, spotifyToPlexScheduledSyncIntervalHours, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
@@ -6264,6 +6323,8 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         referralTrialDays: parseInt(referralTrialDays, 10) || 3,
         referralRewardDays: parseInt(referralRewardDays, 10) || 7,
         announcement: announcement || '',
+        expiredPortalTitle: String(expiredPortalTitle ?? existingConfig.expiredPortalTitle ?? '').trim(),
+        expiredPortalMessage: String(expiredPortalMessage ?? existingConfig.expiredPortalMessage ?? '').trim(),
         hideStreamUsers: hideStreamUsers === true ? 'anonymous' : (hideStreamUsers === false ? 'false' : (hideStreamUsers || 'false')),
         customNavTabs: normalizedCustomNavTabs,
         customNavDisplay: normalizeCustomNavDisplay(
@@ -6856,6 +6917,8 @@ app.get('/api/config/public', async (req, res) => {
             trendingSlideshowInterval: parseInt(config.trendingSlideshowInterval, 10) || 30,
             trendingBackgrounds: (!!config.useTrendingSlideshow || config.useTrendingSlideshowOnLogin !== false) ? await fetchTmdbTrendingBackgrounds(config.tmdbApiKey) : [],
             announcement: config.announcement || '',
+            expiredPortalTitle: String(config.expiredPortalTitle || '').trim(),
+            expiredPortalMessage: String(config.expiredPortalMessage || '').trim(),
             contactWhatsApp: String(config.contactWhatsApp || '').trim(),
             contactEmail: String(config.contactEmail || '').trim(),
             referralEnabled: !!config.referralEnabled,
@@ -6898,6 +6961,8 @@ app.get('/api/config/public', async (req, res) => {
             trendingSlideshowInterval: 30,
             trendingBackgrounds: [],
             announcement: '',
+            expiredPortalTitle: '',
+            expiredPortalMessage: '',
             contactWhatsApp: '',
             contactEmail: '',
             referralEnabled: false,
