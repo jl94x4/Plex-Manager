@@ -7,6 +7,7 @@ import { CustomSelect, SettingsToggleRow } from '../shared/ui';
 import { getSettingsSectionElementId } from './settingsIndex';
 import { SettingHint } from './SettingHint';
 import { useDiscoverI18n } from '../discovery/i18n';
+import { OnboardingSettingsSection } from './OnboardingSettingsSection';
 
 type InviteProfile = {
     id: string;
@@ -479,6 +480,8 @@ export const InvitesSettings: React.FC<{
                     </table>
                 </div>
             </section>
+
+            <OnboardingSettingsSection addToast={addToast} />
 
             <section id={getSettingsSectionElementId('invite-profiles')} className="scroll-mt-24">
                 <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">{t('settings.invites.profilesTitle')}</h3>

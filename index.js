@@ -116,6 +116,15 @@ import {
     summarizeReferrerRewards,
 } from './lib/referrals.js';
 import {
+    emptyOnboardingDocument,
+    getEnabledOnboardingSteps,
+    isOnboardingPending,
+    markUserOnboardingComplete,
+    markUserOnboardingPending,
+    normalizeOnboardingDocument,
+    validateOnboardingCompletion,
+} from './lib/onboarding.js';
+import {
     migrateLegacyBrandingAssets,
     parseBrandingPublicPath,
     readBrandingAssetByPublicPath,
@@ -1437,6 +1446,7 @@ import {
     INVITES_PATH,
     INVITE_PROFILES_PATH,
     REFERRAL_REWARDS_PATH,
+    ONBOARDING_PATH,
     USERS_PATH,
     DELETED_USERS_PATH,
     AUDIT_LOG_PATH,
@@ -4366,6 +4376,10 @@ const handlePlexPinLogin = async (req, res, pinId, ref, { redirectOnSuccess = fa
                     referredBy: referrer.id || referrer.plexId || referralCode,
                     referredAt: new Date().toISOString(),
                 };
+                const onboardingDoc = normalizeOnboardingDocument(
+                    await loadFile(ONBOARDING_PATH, emptyOnboardingDocument())
+                );
+                Object.assign(newUserObj, markUserOnboardingPending(newUserObj, onboardingDoc));
                 users.push(newUserObj);
                 if (canApplyReward) {
                     referrer.expiryDate = newExpiryDate;
@@ -5312,11 +5326,17 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
 
     const expiredPortalTitle = String(config.expiredPortalTitle || '').trim();
     const expiredPortalMessage = String(config.expiredPortalMessage || '').trim();
+    const onboardingDoc = normalizeOnboardingDocument(
+        await loadFile(ONBOARDING_PATH, emptyOnboardingDocument())
+    );
+    const needsOnboarding = isOnboardingPending(localUser, onboardingDoc, { isAdmin });
 
     res.json({
         session: { ...sessionPublic, thumb: sessionThumb, isAdmin },
         account: localUser ? sanitizeUserForApi(localUser) : null,
         accessExpired,
+        needsOnboarding,
+        onboardingVersion: onboardingDoc.version,
         expiredPortal: accessExpired ? {
             title: expiredPortalTitle || null,
             message: expiredPortalMessage || null,
@@ -9820,6 +9840,103 @@ app.get('/api/me/referral-stats', requireAuth, async (req, res) => {
     }
 });
 
+app.get('/api/onboarding', requireAdmin, async (req, res) => {
+    try {
+        const raw = await loadFile(ONBOARDING_PATH, emptyOnboardingDocument());
+        res.json(normalizeOnboardingDocument(raw));
+    } catch (e) {
+        res.status(500).json({ error: 'Failed to load onboarding settings' });
+    }
+});
+
+app.put('/api/onboarding', requireAdmin, async (req, res) => {
+    try {
+        const existing = await loadFile(ONBOARDING_PATH, emptyOnboardingDocument());
+        const normalized = normalizeOnboardingDocument(req.body, existing);
+        await saveFile(ONBOARDING_PATH, normalized);
+        res.json(normalized);
+    } catch (e) {
+        res.status(500).json({ error: e.message || 'Failed to save onboarding settings' });
+    }
+});
+
+app.get('/api/me/onboarding', requireAuth, async (req, res) => {
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        const users = await loadFile(USERS_PATH, []);
+        const localUser = findLocalUserForSession(users, req.user);
+        const actor = getSessionActor(req.user);
+        const isAdmin = await resolveCurrentAdmin(actor, config);
+        const doc = normalizeOnboardingDocument(await loadFile(ONBOARDING_PATH, emptyOnboardingDocument()));
+        const mediaServerType = String(config?.mediaServerType || 'plex').toLowerCase();
+        const preview = String(req.query.preview || '') === '1' && isAdmin;
+        const pending = preview ? true : isOnboardingPending(localUser, doc, { isAdmin });
+        const portalRequestNav = !!config.portalRequestEnabled;
+        const seerrRequestNav = !!String(config.requestAppUrl || config.requestUrl || '').trim();
+        res.json({
+            enabled: doc.enabled,
+            version: doc.version,
+            needsOnboarding: pending,
+            mediaServerType,
+            steps: pending || preview ? getEnabledOnboardingSteps(doc) : [],
+            ackedStepIds: Array.isArray(localUser?.onboardingAckedStepIds) ? localUser.onboardingAckedStepIds : [],
+            navFeatures: {
+                request: portalRequestNav || seerrRequestNav,
+                support: config.supportTicketsEnabled !== false,
+                chat: !!config.chatEnabled,
+                achievements: !!config.achievementsEnabled,
+                discover: true,
+            },
+        });
+    } catch (e) {
+        res.status(500).json({ error: 'Failed to load onboarding' });
+    }
+});
+
+app.post('/api/me/onboarding/complete', requireAuth, async (req, res) => {
+    try {
+        if (req.user?.isAdmin && !req.body?.preview) {
+            // Admins are never gated; allow no-op complete for safety.
+        }
+        const users = await loadFile(USERS_PATH, []);
+        const idx = users.findIndex((u) => findLocalUserForSession([u], req.user));
+        if (idx < 0) return res.status(404).json({ error: 'User not found' });
+        const doc = normalizeOnboardingDocument(await loadFile(ONBOARDING_PATH, emptyOnboardingDocument()));
+        const ackedStepIds = Array.isArray(req.body?.ackedStepIds) ? req.body.ackedStepIds : [];
+        const validation = validateOnboardingCompletion(doc, ackedStepIds);
+        if (!validation.ok) {
+            return res.status(400).json({ error: 'Required onboarding steps are not acknowledged', missing: validation.missing });
+        }
+        users[idx] = markUserOnboardingComplete(users[idx], doc, ackedStepIds);
+        await saveFile(USERS_PATH, users);
+        await appendAuditLog('onboarding_completed', req.user, users[idx], {
+            version: doc.version,
+            ackedStepIds,
+        });
+        res.json({ success: true, account: sanitizeUserForApi(users[idx]) });
+    } catch (e) {
+        res.status(500).json({ error: e.message || 'Failed to complete onboarding' });
+    }
+});
+
+app.post('/api/users/:id/reset-onboarding', requireAdmin, async (req, res) => {
+    try {
+        const users = await loadFile(USERS_PATH, []);
+        const idx = users.findIndex((u) => String(u.id) === String(req.params.id));
+        if (idx < 0) return res.status(404).json({ error: 'User not found' });
+        const doc = normalizeOnboardingDocument(await loadFile(ONBOARDING_PATH, emptyOnboardingDocument()));
+        if (!doc.enabled) {
+            return res.status(400).json({ error: 'Enable user onboarding in Settings → Invites before resetting a user.' });
+        }
+        users[idx] = markUserOnboardingPending(users[idx], doc);
+        await saveFile(USERS_PATH, users);
+        await appendAuditLog('onboarding_reset', req.user, users[idx], { version: doc.version });
+        res.json({ success: true, account: sanitizeUserForApi(users[idx]) });
+    } catch (e) {
+        res.status(500).json({ error: e.message || 'Failed to reset onboarding' });
+    }
+});
+
 const REQUEST_LIST_FILTERS = new Set(['pending', 'approved', 'declined', 'processing', 'available', 'failed']);
 
 const emptyRequestCounts = () => ({
@@ -13675,6 +13792,10 @@ app.post('/api/invites/:code/claim', authRateLimit, async (req, res) => {
             isTrial: false,
             libraryIds: inviteLibraryIds,
         };
+        const onboardingDoc = normalizeOnboardingDocument(
+            await loadFile(ONBOARDING_PATH, emptyOnboardingDocument())
+        );
+        Object.assign(newUser, markUserOnboardingPending(newUser, onboardingDoc));
 
         users.push(newUser);
         await saveFile(USERS_PATH, users);
@@ -14199,6 +14320,7 @@ const BACKUP_TARGETS = [
     { key: 'invites', path: INVITES_PATH },
     { key: 'inviteProfiles', path: INVITE_PROFILES_PATH },
     { key: 'referralRewards', path: REFERRAL_REWARDS_PATH },
+    { key: 'onboarding', path: ONBOARDING_PATH },
     { key: 'deletedUsers', path: DELETED_USERS_PATH },
     { key: 'auditLog', path: AUDIT_LOG_PATH },
     { key: 'emailLog', path: EMAIL_LOG_PATH },

@@ -13,6 +13,7 @@ import { DiscoverI18nProvider } from './discovery/i18n';
 import { PortalJobsBanner } from './shared/PortalJobsBanner';
 import { DEFAULT_NAV_ORDER, ensureCompleteNavOrder, filterNavOrder, isExpiredPortalAllowedRoute, resolveMemberNavOrder } from './shared/nav';
 import { ExpiredAccessPage } from './expired/ExpiredAccessPage';
+import { OnboardingWizard } from './onboarding/OnboardingWizard';
 import {
     getLastSeenVersion,
     parseAppSemver,
@@ -159,7 +160,7 @@ export const MainApp: React.FC = () => {
         closeConfirm();
     };
 
-    const [currentRoute, setCurrentRoute] = useState<'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'achievements' | 'support' | 'chat' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'spotify-sync' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'editions' | 'requests' | 'discovery' | 'about' | 'preferences' | 'profile' | 'invite' | 'external' | 'loading'>('loading');
+    const [currentRoute, setCurrentRoute] = useState<'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'achievements' | 'support' | 'chat' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'spotify-sync' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'editions' | 'requests' | 'discovery' | 'about' | 'preferences' | 'profile' | 'invite' | 'onboarding' | 'external' | 'loading'>('loading');
     const [profilePath, setProfilePath] = useState(() => (
         typeof window !== 'undefined' ? stripBasePath(window.location.pathname) : '/profile'
     ));
@@ -366,9 +367,13 @@ export const MainApp: React.FC = () => {
         setShowWhatsNew(false);
     }, [publicConfig?.appVersion]);
 
-    const setRoute = useCallback((route: 'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'achievements' | 'support' | 'chat' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'spotify-sync' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'editions' | 'requests' | 'discovery' | 'about' | 'preferences' | 'profile' | 'invite' | 'external' | 'loading', options?: { hash?: string; reviewId?: number; path?: string }) => {
+    const setRoute = useCallback((route: 'login' | 'admin' | 'user' | 'users' | 'status' | 'dashboard' | 'settings' | 'logs' | 'analytics' | 'achievements' | 'support' | 'chat' | 'downloads' | 'mediastack' | 'maintenance' | 'upgrader' | 'collexions' | 'spotify-sync' | 'scanner' | 'media-automation' | 'poster-sets' | 'overlays' | 'editions' | 'requests' | 'discovery' | 'about' | 'preferences' | 'profile' | 'invite' | 'onboarding' | 'external' | 'loading', options?: { hash?: string; reviewId?: number; path?: string }) => {
         const session = sessionInfoRef.current;
-        if (session?.accessExpired && !session?.session?.isAdmin && route !== 'login' && route !== 'loading' && route !== 'invite') {
+        if (session?.needsOnboarding && !session?.session?.isAdmin && route !== 'login' && route !== 'loading' && route !== 'invite' && route !== 'onboarding') {
+            route = 'onboarding';
+            options = undefined;
+        }
+        if (session?.accessExpired && !session?.session?.isAdmin && route !== 'login' && route !== 'loading' && route !== 'invite' && route !== 'onboarding') {
             if (!isExpiredPortalAllowedRoute(route)) {
                 route = 'user';
                 options = undefined;
@@ -385,6 +390,7 @@ export const MainApp: React.FC = () => {
             if (route === 'admin') path = '/admin';
             if (route === 'users') path = '/users';
             if (route === 'user') path = '/portal';
+            if (route === 'onboarding') path = '/onboarding';
             if (route === 'status') path = '/status';
             if (route === 'dashboard') path = '/dashboard';
             if (route === 'settings') path = '/settings#branding';
@@ -503,6 +509,9 @@ export const MainApp: React.FC = () => {
         if (sessionInfo.accessExpired && !sessionInfo.session?.isAdmin && !isExpiredPortalAllowedRoute(currentRoute)) {
             setRoute('user');
         }
+        if (sessionInfo.needsOnboarding && !sessionInfo.session?.isAdmin && currentRoute !== 'onboarding' && currentRoute !== 'login' && currentRoute !== 'loading' && currentRoute !== 'invite') {
+            setRoute('onboarding');
+        }
     }, [currentRoute, sessionInfo, setRoute]);
 
     const checkSession = useCallback(async () => {
@@ -531,13 +540,18 @@ export const MainApp: React.FC = () => {
             if (data.serverName) document.title = `${data.serverName} Portal`;
 
             const expiredMember = !!data.accessExpired && !data.session?.isAdmin;
+            const needsOnboarding = !!data.needsOnboarding && !data.session?.isAdmin;
             const allowExpiredPath = (routeId: string) => !expiredMember || isExpiredPortalAllowedRoute(routeId);
             const bounceExpiredHome = () => {
                 window.history.replaceState({}, '', portalUrl('/portal'));
                 setCurrentRoute('user');
             };
 
-            if (path.startsWith('/status') && expiredMember) { bounceExpiredHome(); }
+            if (needsOnboarding) {
+                window.history.replaceState({}, '', portalUrl('/onboarding'));
+                setCurrentRoute('onboarding');
+            }
+            else if (path.startsWith('/status') && expiredMember) { bounceExpiredHome(); }
             else if (path.startsWith('/status')) setCurrentRoute('status');
             else if (path.startsWith('/dashboard') && expiredMember) bounceExpiredHome();
             else if (path.startsWith('/dashboard')) setCurrentRoute('dashboard');
@@ -895,12 +909,23 @@ export const MainApp: React.FC = () => {
 
     const isPublicStatus = currentRoute === 'status' && !sessionInfo;
     const isPublicInvite = currentRoute === 'invite';
-    const isPublicView = isPublicStatus || isPublicInvite;
+    const isOnboardingView = currentRoute === 'onboarding';
+    const isPublicView = isPublicStatus || isPublicInvite || isOnboardingView;
 
     const renderView = () => {
         if (currentRoute === 'invite') {
             const code = stripBasePath(window.location.pathname).split('/')[2];
             return <PublicInviteClaim code={code} />;
+        }
+        if (currentRoute === 'onboarding') {
+            return (
+                <OnboardingWizard
+                    onComplete={async () => {
+                        await checkSession();
+                        setRoute('user');
+                    }}
+                />
+            );
         }
         if (currentRoute === 'status') return <StatusDashboard onBack={() => isPublicStatus ? setRoute('login') : setRoute('user')} isAdmin={isAdmin} isPublic={isPublicStatus} />;
         if (currentRoute === 'dashboard') return <LibraryDashboard onBack={() => setRoute('user')} isAdmin={isAdmin} publicConfig={publicConfig} mediaServerType={sessionInfo?.mediaServerType} onViewAnalytics={(hash) => setRoute('analytics', { hash })} onNavigate={setRoute as any} />;

@@ -534,6 +534,7 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
     const [allowAdvancedRequests, setAllowAdvancedRequests] = useState<'default' | 'on' | 'off'>('default');
     const initialLibraryPayloadRef = useRef<string[] | null>(null);
     const [librariesTouched, setLibrariesTouched] = useState(false);
+    const [resetOnboardingMessage, setResetOnboardingMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
     const libraryIdsPayloadFromSelection = useCallback((
         selected: string[],
@@ -568,6 +569,7 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
             setLibraryShareSource(null);
             initialLibraryPayloadRef.current = null;
             setLibrariesTouched(false);
+            setResetOnboardingMessage(null);
             const ov = user.requestOverrides || {};
             setOverrideMovieQuota(ov.movieQuotaLimit != null);
             setMovieQuotaLimit(Number(ov.movieQuotaLimit) || 0);
@@ -761,6 +763,35 @@ const UserModal: React.FC<{ isOpen: boolean; onClose: () => void; onSave: (user:
                         </button>
                     </div>
                 </div>
+                {user?.id && (
+                    <div className="mb-4 flex items-center justify-between bg-black/10 p-4 rounded-lg border border-border gap-3">
+                        <div className="min-w-0">
+                            <label className="font-bold block mb-1">{t('usersAdmin.modal.resetOnboarding')}</label>
+                            <span className="text-xs text-muted block">{t('usersAdmin.modal.resetOnboardingHint')}</span>
+                            {resetOnboardingMessage && (
+                                <span className={`text-xs block mt-1 ${resetOnboardingMessage.type === 'success' ? 'text-emerald-400' : 'text-red-400'}`}>
+                                    {resetOnboardingMessage.text}
+                                </span>
+                            )}
+                        </div>
+                        <button
+                            type="button"
+                            className="shrink-0 px-3 py-2 rounded-lg border border-border text-sm font-medium hover:border-plex transition-colors"
+                            onClick={() => {
+                                appConfirm(t('usersAdmin.modal.resetOnboardingConfirm', { name: user.username }), async () => {
+                                    try {
+                                        await apiFetch(`/api/users/${encodeURIComponent(user.id)}/reset-onboarding`, { method: 'POST' });
+                                        setResetOnboardingMessage({ type: 'success', text: t('usersAdmin.modal.resetOnboardingSuccess') });
+                                    } catch (e: any) {
+                                        setResetOnboardingMessage({ type: 'error', text: e.message || t('usersAdmin.modal.resetOnboardingFailed') });
+                                    }
+                                });
+                            }}
+                        >
+                            {t('usersAdmin.modal.resetOnboarding')}
+                        </button>
+                    </div>
+                )}
 
                 <div className="mb-4 pt-4 border-t border-border">
                     <h3 className="text-lg font-bold text-text mb-1">{t('usersAdmin.modal.libraryAccess')}</h3>

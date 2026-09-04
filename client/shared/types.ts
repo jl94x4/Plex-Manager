@@ -27,6 +27,11 @@ export interface User {
     privacyShowLibraries?: boolean;
     /** Short public bio. Empty hides it. */
     profileBio?: string;
+    /** False only for invite/referral users who still need the welcome wizard. */
+    onboardingCompleted?: boolean;
+    onboardingCompletedAt?: string | null;
+    onboardingVersion?: number | null;
+    onboardingAckedStepIds?: string[];
     /** Email when a portal request becomes available (default on). */
     notifyRequestAvailableEmail?: boolean;
     /** In-app bell when a portal request becomes available (default on). */
