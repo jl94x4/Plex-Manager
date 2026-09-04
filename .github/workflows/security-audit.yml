@@ -31,10 +31,30 @@ jobs:
         run: npm ci --no-fund --no-audit
 
       - name: Production audit (root)
-        run: npm audit --omit=dev --audit-level=high
+        run: |
+          set -e
+          for attempt in 1 2 3; do
+            if npm audit --omit=dev --audit-level=high; then
+              exit 0
+            fi
+            echo "npm production audit failed (attempt ${attempt}); retrying..."
+            sleep $((attempt * 5))
+          done
+          echo "npm production audit failed after retries"
+          exit 1
 
       - name: Full audit (root, high+)
-        run: npm audit --audit-level=high
+        run: |
+          set -e
+          for attempt in 1 2 3; do
+            if npm audit --audit-level=high; then
+              exit 0
+            fi
+            echo "npm full audit failed (attempt ${attempt}); retrying..."
+            sleep $((attempt * 5))
+          done
+          echo "npm full audit failed after retries"
+          exit 1
 
       - name: Install Collexions dependencies
         working-directory: collexions
@@ -42,7 +62,17 @@ jobs:
 
       - name: Full audit (collexions, high+)
         working-directory: collexions
-        run: npm audit --audit-level=high
+        run: |
+          set -e
+          for attempt in 1 2 3; do
+            if npm audit --audit-level=high; then
+              exit 0
+            fi
+            echo "collexions npm audit failed (attempt ${attempt}); retrying..."
+            sleep $((attempt * 5))
+          done
+          echo "collexions npm audit failed after retries"
+          exit 1
 
   pip-audit:
     name: pip audit
