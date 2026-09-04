@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-    Check, ChevronLeft, Film, LifeBuoy, Loader2, MessageSquare, Pencil, Plus, RotateCcw, Search, Send, SmilePlus, Trash2, X,
+    Check, ChevronLeft, Film, ImagePlus, LifeBuoy, Loader2, MessageSquare, Pencil, Plus, RotateCcw, Search, Send, SmilePlus, Trash2, X,
 } from 'lucide-react';
-import { apiFetch } from '../shared/api';
+import { apiFetch, PORTAL_CSRF_HEADER, PORTAL_CSRF_VALUE } from '../shared/api';
 import { portalUrl } from '../shared/basePath';
 import { DashboardHero, DashboardPageShell } from '../shared/dashboard/DashboardChrome';
 import { formatDateTime } from '../shared/format';
@@ -18,12 +18,21 @@ type TicketFilter = 'open' | 'resolved' | 'closed' | 'all';
 
 type TicketReaction = { emoji: string; count: number; userIds: string[] };
 
+type TicketAttachment = {
+    id: string;
+    filename?: string;
+    mime?: string;
+    size?: number;
+    url: string;
+};
+
 type TicketComment = {
     id: number;
     message: string;
     createdAt: string | null;
     editedAt?: string | null;
     reactions?: TicketReaction[];
+    attachments?: TicketAttachment[];
     user: { id?: string | null; displayName: string; avatar?: string; isAdmin?: boolean };
 };
 
@@ -73,6 +82,44 @@ const CATEGORY_LABEL_KEYS: Record<string, string> = {
 };
 
 const REACTION_EMOJIS = ['👍', '👎', '❤️', '😂', '😮', '🎉', '👀'];
+const MAX_SUPPORT_IMAGES = 5;
+const SUPPORT_IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif,.jpg,.jpeg,.png,.webp,.gif';
+
+type PendingImage = {
+    id: string;
+    file: File;
+    previewUrl: string;
+};
+
+const createPendingImages = (files: FileList | File[]): PendingImage[] => (
+    Array.from(files).slice(0, MAX_SUPPORT_IMAGES).map((file) => ({
+        id: `${file.name}-${file.size}-${file.lastModified}-${Math.random().toString(36).slice(2, 8)}`,
+        file,
+        previewUrl: URL.createObjectURL(file),
+    }))
+);
+
+const revokePendingImages = (items: PendingImage[]) => {
+    for (const item of items) {
+        try { URL.revokeObjectURL(item.previewUrl); } catch { /* ignore */ }
+    }
+};
+
+const uploadSupportImage = async (ticketId: number | string, file: File): Promise<TicketAttachment> => {
+    const response = await fetch(portalUrl(`/api/support/tickets/${encodeURIComponent(String(ticketId))}/attachments`), {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {
+            'Content-Type': file.type || 'application/octet-stream',
+            'X-Filename': file.name || 'image',
+            [PORTAL_CSRF_HEADER]: PORTAL_CSRF_VALUE,
+        },
+        body: file,
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data?.error || 'Failed to upload image');
+    return data.attachment as TicketAttachment;
+};
 
 const resolveTicketAvatar = (thumb?: string | null, size = 80): string => {
     if (!thumb) return '';
@@ -148,11 +195,16 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
     const [activeId, setActiveId] = useState<number | null>(null);
     const [active, setActive] = useState<Ticket | null>(null);
     const [reply, setReply] = useState('');
+    const [replyImages, setReplyImages] = useState<PendingImage[]>([]);
+    const [composeImages, setComposeImages] = useState<PendingImage[]>([]);
     const [busy, setBusy] = useState(false);
     const [editingId, setEditingId] = useState<number | null>(null);
     const [editDraft, setEditDraft] = useState('');
     const [reactingId, setReactingId] = useState<number | null>(null);
+    const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
     const threadRef = useRef<HTMLDivElement>(null);
+    const replyFileRef = useRef<HTMLInputElement>(null);
+    const composeFileRef = useRef<HTMLInputElement>(null);
 
     const addToast = useCallback((text: string, type: 'success' | 'error' = 'success') => {
         setToasts((prev) => pushToast(prev, text, type));
@@ -274,17 +326,42 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
 
     const submitTicket = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!subject.trim()) return;
+        if (!message.trim() && composeImages.length === 0) {
+            addToast(t('support.errors.messageOrImageRequired'), 'error');
+            return;
+        }
         setSaving(true);
         try {
             const data = await apiFetch('/api/support/tickets', {
                 method: 'POST',
-                body: JSON.stringify({ subject, category, message }),
+                body: JSON.stringify({
+                    subject,
+                    category,
+                    message,
+                    allowEmptyMessage: composeImages.length > 0,
+                }),
             });
+            const ticket = data?.ticket;
+            if (ticket?.id && composeImages.length > 0) {
+                const uploaded = [];
+                for (const item of composeImages) {
+                    uploaded.push(await uploadSupportImage(ticket.id, item.file));
+                }
+                const linked = await apiFetch(`/api/support/tickets/${ticket.id}/comments/1/attachments`, {
+                    method: 'POST',
+                    body: JSON.stringify({ attachments: uploaded }),
+                });
+                setActiveId(linked?.ticket?.id || ticket.id);
+            } else {
+                setActiveId(ticket?.id || null);
+            }
             setSubject('');
             setMessage('');
+            revokePendingImages(composeImages);
+            setComposeImages([]);
             setComposeOpen(false);
             addToast(t('support.toasts.sent'));
-            setActiveId(data?.ticket?.id || null);
             await loadList();
             onCountsChange?.();
         } catch (err: any) {
@@ -295,14 +372,23 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
     };
 
     const sendReply = async () => {
-        if (!active || !reply.trim()) return;
+        if (!active || (!reply.trim() && replyImages.length === 0)) return;
         setBusy(true);
         try {
+            const uploaded = [];
+            for (const item of replyImages) {
+                uploaded.push(await uploadSupportImage(active.id, item.file));
+            }
             const data = await apiFetch(`/api/support/tickets/${active.id}/comment`, {
                 method: 'POST',
-                body: JSON.stringify({ message: reply }),
+                body: JSON.stringify({
+                    message: reply,
+                    attachments: uploaded,
+                }),
             });
             setReply('');
+            revokePendingImages(replyImages);
+            setReplyImages([]);
             setActive(data?.ticket || active);
             await loadList();
             onCountsChange?.();
@@ -691,7 +777,33 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                                                             }`}
                                                             title={comment.createdAt ? formatDateTime(comment.createdAt) : undefined}
                                                         >
-                                                            <p className="text-sm text-text whitespace-pre-wrap">{comment.message}</p>
+                                                            {comment.message ? (
+                                                                <p className="text-sm text-text whitespace-pre-wrap">{comment.message}</p>
+                                                            ) : null}
+                                                            {Array.isArray(comment.attachments) && comment.attachments.length > 0 && (
+                                                                <div className={`grid gap-2 ${comment.message ? 'mt-2' : ''} ${comment.attachments.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                                                                    {comment.attachments.map((attachment) => {
+                                                                        const src = attachment.url?.startsWith('/api/')
+                                                                            ? portalUrl(attachment.url)
+                                                                            : attachment.url;
+                                                                        return (
+                                                                            <button
+                                                                                key={attachment.id}
+                                                                                type="button"
+                                                                                onClick={() => setLightboxUrl(src)}
+                                                                                className="overflow-hidden rounded-xl border border-white/10 bg-black/20 text-left"
+                                                                            >
+                                                                                <img
+                                                                                    src={src}
+                                                                                    alt={attachment.filename || t('support.attachments.imageAlt')}
+                                                                                    className="max-h-56 w-full object-cover"
+                                                                                    loading="lazy"
+                                                                                />
+                                                                            </button>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     )}
                                                     <div className={`mt-0.5 flex flex-wrap items-center gap-1 ${mine ? '' : 'flex-row-reverse'}`}>
@@ -759,28 +871,76 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                                     {active.statusLabel === 'closed' ? (
                                         <p className="text-xs text-muted px-1 py-2">{t('support.reply.closedHint')}</p>
                                     ) : (
-                                        <div className="flex items-end gap-2">
-                                            <textarea
-                                                value={reply}
-                                                onChange={(e) => setReply(e.target.value)}
-                                                onKeyDown={(e) => {
-                                                    if (e.key === 'Enter' && !e.shiftKey) {
-                                                        e.preventDefault();
-                                                        void sendReply();
-                                                    }
-                                                }}
-                                                rows={2}
-                                                placeholder={t('support.reply.placeholder')}
-                                                className="flex-1 bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-sm text-text outline-none focus:border-plex/50"
-                                            />
-                                            <button
-                                                type="button"
-                                                disabled={busy || !reply.trim()}
-                                                onClick={() => { void sendReply(); }}
-                                                className="self-end px-3 py-2 rounded-xl bg-plex text-background font-bold disabled:opacity-40"
-                                            >
-                                                <Send className="w-4 h-4" />
-                                            </button>
+                                        <div className="space-y-2">
+                                            {replyImages.length > 0 && (
+                                                <div className="flex flex-wrap gap-2">
+                                                    {replyImages.map((item) => (
+                                                        <div key={item.id} className="relative h-16 w-16 overflow-hidden rounded-lg border border-white/10">
+                                                            <img src={item.previewUrl} alt="" className="h-full w-full object-cover" />
+                                                            <button
+                                                                type="button"
+                                                                className="absolute right-0.5 top-0.5 rounded-full bg-black/70 p-0.5 text-white"
+                                                                onClick={() => {
+                                                                    URL.revokeObjectURL(item.previewUrl);
+                                                                    setReplyImages((prev) => prev.filter((img) => img.id !== item.id));
+                                                                }}
+                                                                aria-label={t('support.attachments.remove')}
+                                                            >
+                                                                <X className="h-3 w-3" />
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            <div className="flex items-end gap-2">
+                                                <input
+                                                    ref={replyFileRef}
+                                                    type="file"
+                                                    accept={SUPPORT_IMAGE_ACCEPT}
+                                                    multiple
+                                                    className="hidden"
+                                                    onChange={(e) => {
+                                                        const files = e.target.files;
+                                                        if (!files?.length) return;
+                                                        setReplyImages((prev) => {
+                                                            const next = [...prev, ...createPendingImages(files)].slice(0, MAX_SUPPORT_IMAGES);
+                                                            return next;
+                                                        });
+                                                        e.target.value = '';
+                                                    }}
+                                                />
+                                                <button
+                                                    type="button"
+                                                    disabled={busy || replyImages.length >= MAX_SUPPORT_IMAGES}
+                                                    onClick={() => replyFileRef.current?.click()}
+                                                    className="self-end px-3 py-2 rounded-xl border border-white/10 text-muted hover:text-plex hover:border-plex/40 disabled:opacity-40"
+                                                    title={t('support.attachments.add')}
+                                                    aria-label={t('support.attachments.add')}
+                                                >
+                                                    <ImagePlus className="w-4 h-4" />
+                                                </button>
+                                                <textarea
+                                                    value={reply}
+                                                    onChange={(e) => setReply(e.target.value)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter' && !e.shiftKey) {
+                                                            e.preventDefault();
+                                                            void sendReply();
+                                                        }
+                                                    }}
+                                                    rows={2}
+                                                    placeholder={t('support.reply.placeholder')}
+                                                    className="flex-1 bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-sm text-text outline-none focus:border-plex/50"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    disabled={busy || (!reply.trim() && replyImages.length === 0)}
+                                                    onClick={() => { void sendReply(); }}
+                                                    className="self-end px-3 py-2 rounded-xl bg-plex text-background font-bold disabled:opacity-40"
+                                                >
+                                                    <Send className="w-4 h-4" />
+                                                </button>
+                                            </div>
                                         </div>
                                     )}
                                 </div>
@@ -827,18 +987,95 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                                 rows={5}
                                 className="mt-1 w-full bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-sm text-text"
                                 placeholder={t('support.compose.messagePlaceholder')}
-                                required
                             />
                         </label>
+                        <div>
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                                <p className="text-xs font-bold text-muted uppercase tracking-wide">{t('support.attachments.label')}</p>
+                                <button
+                                    type="button"
+                                    disabled={composeImages.length >= MAX_SUPPORT_IMAGES}
+                                    onClick={() => composeFileRef.current?.click()}
+                                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-plex disabled:opacity-40"
+                                >
+                                    <ImagePlus className="w-3.5 h-3.5" />
+                                    {t('support.attachments.add')}
+                                </button>
+                            </div>
+                            <input
+                                ref={composeFileRef}
+                                type="file"
+                                accept={SUPPORT_IMAGE_ACCEPT}
+                                multiple
+                                className="hidden"
+                                onChange={(e) => {
+                                    const files = e.target.files;
+                                    if (!files?.length) return;
+                                    setComposeImages((prev) => [...prev, ...createPendingImages(files)].slice(0, MAX_SUPPORT_IMAGES));
+                                    e.target.value = '';
+                                }}
+                            />
+                            {composeImages.length > 0 && (
+                                <div className="flex flex-wrap gap-2">
+                                    {composeImages.map((item) => (
+                                        <div key={item.id} className="relative h-16 w-16 overflow-hidden rounded-lg border border-white/10">
+                                            <img src={item.previewUrl} alt="" className="h-full w-full object-cover" />
+                                            <button
+                                                type="button"
+                                                className="absolute right-0.5 top-0.5 rounded-full bg-black/70 p-0.5 text-white"
+                                                onClick={() => {
+                                                    URL.revokeObjectURL(item.previewUrl);
+                                                    setComposeImages((prev) => prev.filter((img) => img.id !== item.id));
+                                                }}
+                                                aria-label={t('support.attachments.remove')}
+                                            >
+                                                <X className="h-3 w-3" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                            <p className="mt-1 text-[11px] text-muted">{t('support.attachments.hint')}</p>
+                        </div>
                         <div className="flex justify-end gap-2 pt-1">
-                            <button type="button" onClick={() => setComposeOpen(false)} className="px-3 py-2 rounded-xl border border-border text-sm font-semibold">{t('common.cancel')}</button>
-                            <button type="submit" disabled={saving} className="px-4 py-2 rounded-xl bg-plex text-background text-sm font-bold disabled:opacity-50">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    revokePendingImages(composeImages);
+                                    setComposeImages([]);
+                                    setComposeOpen(false);
+                                }}
+                                className="px-3 py-2 rounded-xl border border-border text-sm font-semibold"
+                            >
+                                {t('common.cancel')}
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={saving || (!message.trim() && composeImages.length === 0)}
+                                className="px-4 py-2 rounded-xl bg-plex text-background text-sm font-bold disabled:opacity-50"
+                            >
                                 {saving ? t('support.compose.sending') : t('support.actions.send')}
                             </button>
                         </div>
                     </form>
                 </div>
             </ModalPortal>
+
+            {lightboxUrl && (
+                <ModalPortal open>
+                    <div className="fixed inset-0 z-[360] flex items-center justify-center p-4 bg-black/85" onClick={() => setLightboxUrl(null)}>
+                        <button type="button" className="absolute top-4 right-4 rounded-full border border-white/20 bg-black/50 p-2 text-white" onClick={() => setLightboxUrl(null)} aria-label={t('common.close')}>
+                            <X className="w-5 h-5" />
+                        </button>
+                        <img
+                            src={lightboxUrl}
+                            alt={t('support.attachments.imageAlt')}
+                            className="max-h-[90vh] max-w-[95vw] rounded-xl object-contain"
+                            onClick={(e) => e.stopPropagation()}
+                        />
+                    </div>
+                </ModalPortal>
+            )}
         </DashboardPageShell>
     );
 };

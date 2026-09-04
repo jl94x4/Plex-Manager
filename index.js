@@ -19698,6 +19698,7 @@ registerSupportTicketRoutes(app, {
     sendGotifyAlert,
     alertRuleEnabled,
     resolvePublicBaseUrl: resolvePublicBaseUrlFromConfig,
+    expressRaw: express.raw.bind(express),
     resolveLocalUser: async (sessionUser) => {
         const users = await loadFile(USERS_PATH, []);
         return findLocalUserForSession(users, sessionUser);
