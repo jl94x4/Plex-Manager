@@ -1,15 +1,35 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Copy, ChevronUp, ChevronDown } from 'lucide-react';
+import { Copy } from 'lucide-react';
 import { apiFetch } from '../shared/api';
 import { getPublicOrigin } from '../shared/basePath';
 import { appConfirm } from '../shared/confirm';
 import { CustomSelect, SettingsToggleRow } from '../shared/ui';
-import { Loader, ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { getSettingsSectionElementId } from './settingsIndex';
 import { SettingHint } from './SettingHint';
 import { useDiscoverI18n } from '../discovery/i18n';
-import type { User, AuditEntry, DeletedUser } from '../shared/types';
-import { formatDateTime, formatEventName, hexToRgb, getDaysUntilExpiry, addMonths, addYears, formatDate } from '../shared/format';
+
+type InviteProfile = {
+    id: string;
+    name: string;
+    durationDays: number;
+    maxUses: number | 'unlimited';
+    libraryIds: string[] | null;
+    emailNote?: string;
+};
+
+type InviteProfilesDocument = {
+    profiles: InviteProfile[];
+    defaultProfileId: string | null;
+};
+
+const CUSTOM_PROFILE_VALUE = '';
+
+const newLocalProfileId = () => (
+    typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+        ? crypto.randomUUID()
+        : `invite-profile-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+);
+
 export const InvitesSettings: React.FC<{
     addToast: (msg: string, type: 'success' | 'error') => void;
     publicDomain?: string;
@@ -44,15 +64,78 @@ export const InvitesSettings: React.FC<{
     const [emailing, setEmailing] = useState(false);
     const [libraries, setLibraries] = useState<any[]>([]);
     const [selectedLibraries, setSelectedLibraries] = useState<string[]>([]);
+    const [profilesDoc, setProfilesDoc] = useState<InviteProfilesDocument>({ profiles: [], defaultProfileId: null });
+    const [selectedProfileId, setSelectedProfileId] = useState(CUSTOM_PROFILE_VALUE);
+    const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
+    const [profileNameDraft, setProfileNameDraft] = useState('');
+    const [savingProfiles, setSavingProfiles] = useState(false);
+    const appliedDefaultRef = useRef(false);
+
+    const allLibraryIds = useMemo(() => libraries.map((l) => String(l.id)), [libraries]);
+
+    const resolveLibrarySelection = useCallback((libraryIds: string[] | null | undefined) => {
+        if (!libraryIds || libraryIds.length === 0) return allLibraryIds;
+        const selected = libraryIds.map(String).filter((id) => allLibraryIds.includes(id));
+        return selected.length > 0 ? selected : allLibraryIds;
+    }, [allLibraryIds]);
+
+    const applyProfile = useCallback((profile: InviteProfile, { toast = false }: { toast?: boolean } = {}) => {
+        setSelectedProfileId(profile.id);
+        setDurationDays(profile.durationDays);
+        setMaxUses(profile.maxUses);
+        setSelectedLibraries(resolveLibrarySelection(profile.libraryIds));
+        setEmailNote(profile.emailNote || '');
+        if (toast) addToast(t('settings.invites.profileApplied', { name: profile.name }), 'success');
+    }, [addToast, resolveLibrarySelection, t]);
+
+    const markCustom = useCallback(() => {
+        setSelectedProfileId(CUSTOM_PROFILE_VALUE);
+    }, []);
+
+    const persistProfiles = useCallback(async (next: InviteProfilesDocument, successKey: string) => {
+        setSavingProfiles(true);
+        try {
+            const saved = await apiFetch('/api/invite-profiles', {
+                method: 'PUT',
+                body: JSON.stringify(next),
+            }) as InviteProfilesDocument;
+            setProfilesDoc(saved);
+            addToast(t(successKey), 'success');
+            return saved;
+        } catch (e: any) {
+            addToast(e.message || t('settings.invites.profileSaveFailed'), 'error');
+            return null;
+        } finally {
+            setSavingProfiles(false);
+        }
+    }, [addToast, t]);
 
     const fetchInvites = useCallback(async () => {
         try {
-            const data = await apiFetch('/api/invites');
+            const [data, libData, profilesRaw] = await Promise.all([
+                apiFetch('/api/invites'),
+                apiFetch('/api/plex/libraries').catch(() => []),
+                apiFetch('/api/invite-profiles').catch(() => null),
+            ]);
             setInvites(data);
-            const libData = await apiFetch('/api/plex/libraries').catch(() => []);
             const libs = libData || [];
             setLibraries(libs);
-            setSelectedLibraries(libs.map((l: any) => String(l.id)));
+            setSelectedLibraries((prev) => {
+                if (prev.length > 0) {
+                    const libIds = new Set(libs.map((l: any) => String(l.id)));
+                    const kept = prev.filter((id) => libIds.has(id));
+                    return kept.length > 0 ? kept : libs.map((l: any) => String(l.id));
+                }
+                return libs.map((l: any) => String(l.id));
+            });
+
+            if (profilesRaw && typeof profilesRaw === 'object') {
+                const doc = profilesRaw as InviteProfilesDocument;
+                setProfilesDoc({
+                    profiles: Array.isArray(doc.profiles) ? doc.profiles : [],
+                    defaultProfileId: doc.defaultProfileId || null,
+                });
+            }
         } catch (e) {
             addToast(t('settings.invites.loadFailed'), 'error');
         } finally {
@@ -61,6 +144,48 @@ export const InvitesSettings: React.FC<{
     }, [addToast, t]);
 
     useEffect(() => { fetchInvites(); }, [fetchInvites]);
+
+    useEffect(() => {
+        if (loading || appliedDefaultRef.current || libraries.length === 0) return;
+        const defaultId = profilesDoc.defaultProfileId;
+        if (!defaultId) {
+            appliedDefaultRef.current = true;
+            return;
+        }
+        const profile = profilesDoc.profiles.find((p) => p.id === defaultId);
+        if (profile) applyProfile(profile);
+        appliedDefaultRef.current = true;
+    }, [loading, libraries.length, profilesDoc, applyProfile]);
+
+    const profileSelectOptions = useMemo(() => ([
+        { value: CUSTOM_PROFILE_VALUE, label: t('settings.invites.profileCustom') },
+        ...profilesDoc.profiles.map((p) => ({
+            value: p.id,
+            label: p.id === profilesDoc.defaultProfileId
+                ? `${p.name} (${t('settings.invites.profileDefaultBadge')})`
+                : p.name,
+        })),
+    ]), [profilesDoc, t]);
+
+    const formatProfileUses = useCallback((uses: number | 'unlimited') => (
+        uses === 'unlimited'
+            ? t('settings.invites.profileUsesUnlimited')
+            : t('settings.invites.profileUsesCount', { count: Number(uses) || 1 })
+    ), [t]);
+
+    const formatProfileLibraries = useCallback((libraryIds: string[] | null) => {
+        if (!libraryIds || libraryIds.length === 0) return t('settings.invites.profileLibrariesAll');
+        return t('settings.invites.profileLibrariesCount', { count: libraryIds.length });
+    }, [t]);
+
+    const handleProfileSelect = (value: string) => {
+        if (!value) {
+            markCustom();
+            return;
+        }
+        const profile = profilesDoc.profiles.find((p) => p.id === value);
+        if (profile) applyProfile(profile);
+    };
 
     const handleCreate = async () => {
         try {
@@ -117,6 +242,99 @@ export const InvitesSettings: React.FC<{
         addToast(t('settings.invites.copySuccess'), 'success');
     };
 
+    const buildProfileFromForm = (id: string, name: string): InviteProfile => {
+        const allSelected = allLibraryIds.length > 0 && allLibraryIds.every((lid) => selectedLibraries.includes(lid));
+        return {
+            id,
+            name,
+            durationDays: Number(durationDays) || 30,
+            maxUses: String(maxUses).trim().toLowerCase() === 'unlimited'
+                ? 'unlimited'
+                : (parseInt(String(maxUses), 10) || 1),
+            libraryIds: allSelected || selectedLibraries.length === 0 ? null : selectedLibraries.map(String),
+            emailNote: emailNote.trim() || undefined,
+        };
+    };
+
+    const handleSaveProfile = async () => {
+        const name = profileNameDraft.trim();
+        if (!name) return addToast(t('settings.invites.profileNameRequired'), 'error');
+
+        if (editingProfileId) {
+            const id = editingProfileId;
+            const nextProfiles = profilesDoc.profiles.map((p) => (
+                p.id === id ? buildProfileFromForm(p.id, name) : p
+            ));
+            const saved = await persistProfiles(
+                { profiles: nextProfiles, defaultProfileId: profilesDoc.defaultProfileId },
+                'settings.invites.profileUpdated',
+            );
+            if (saved) {
+                setEditingProfileId(null);
+                setProfileNameDraft('');
+                setSelectedProfileId(id);
+            }
+            return;
+        }
+
+        const id = newLocalProfileId();
+        const profile = buildProfileFromForm(id, name);
+        const saved = await persistProfiles(
+            { profiles: [...profilesDoc.profiles, profile], defaultProfileId: profilesDoc.defaultProfileId },
+            'settings.invites.profileSaved',
+        );
+        if (saved) {
+            setProfileNameDraft('');
+            setSelectedProfileId(id);
+        }
+    };
+
+    const startEditProfile = (profile: InviteProfile) => {
+        applyProfile(profile);
+        setEditingProfileId(profile.id);
+        setProfileNameDraft(profile.name);
+    };
+
+    const cancelEditProfile = () => {
+        setEditingProfileId(null);
+        setProfileNameDraft('');
+    };
+
+    const handleDuplicateProfile = async (profile: InviteProfile) => {
+        const copy: InviteProfile = {
+            ...profile,
+            id: newLocalProfileId(),
+            name: `${profile.name} (copy)`,
+            libraryIds: profile.libraryIds ? [...profile.libraryIds] : null,
+        };
+        const saved = await persistProfiles(
+            { profiles: [...profilesDoc.profiles, copy], defaultProfileId: profilesDoc.defaultProfileId },
+            'settings.invites.profileSaved',
+        );
+        if (saved) setSelectedProfileId(copy.id);
+    };
+
+    const handleDeleteProfile = (profile: InviteProfile) => {
+        appConfirm(t('settings.invites.profileDeleteConfirm', { name: profile.name }), async () => {
+            const nextProfiles = profilesDoc.profiles.filter((p) => p.id !== profile.id);
+            const nextDefault = profilesDoc.defaultProfileId === profile.id ? null : profilesDoc.defaultProfileId;
+            const saved = await persistProfiles(
+                { profiles: nextProfiles, defaultProfileId: nextDefault },
+                'settings.invites.profileDeleted',
+            );
+            if (!saved) return;
+            if (selectedProfileId === profile.id) markCustom();
+            if (editingProfileId === profile.id) cancelEditProfile();
+        });
+    };
+
+    const handleSetDefault = async (profileId: string | null) => {
+        await persistProfiles(
+            { profiles: profilesDoc.profiles, defaultProfileId: profileId },
+            'settings.invites.profileDefaultSet',
+        );
+    };
+
     if (loading) return <div className="text-muted">{t('settings.invites.loading')}</div>;
 
     return (
@@ -150,6 +368,100 @@ export const InvitesSettings: React.FC<{
                 </div>
             </section>
 
+            <section id={getSettingsSectionElementId('invite-profiles')} className="scroll-mt-24">
+                <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">{t('settings.invites.profilesTitle')}</h3>
+                <p className="text-sm text-muted mb-6">{t('settings.invites.profilesDescription')}</p>
+
+                <div className="flex flex-col md:flex-row gap-3 items-end mb-6">
+                    <div className="flex-1 w-full">
+                        <label className="block text-sm mb-1 font-medium">{t('settings.invites.profileName')}</label>
+                        <input
+                            type="text"
+                            maxLength={80}
+                            placeholder={t('settings.invites.profileNamePlaceholder')}
+                            className="w-full p-2.5 rounded-lg bg-background border border-border text-text outline-none focus:border-plex"
+                            value={profileNameDraft}
+                            onChange={(e) => setProfileNameDraft(e.target.value)}
+                        />
+                    </div>
+                    <button
+                        type="button"
+                        disabled={savingProfiles}
+                        className="w-full md:w-auto px-6 py-2.5 bg-plex text-background font-bold rounded-lg hover:bg-plex-hover transition-colors shadow-lg disabled:opacity-50"
+                        onClick={handleSaveProfile}
+                    >
+                        {editingProfileId ? t('settings.invites.profileUpdate') : t('settings.invites.profileSaveAs')}
+                    </button>
+                    {editingProfileId && (
+                        <button
+                            type="button"
+                            className="w-full md:w-auto px-4 py-2.5 border border-border rounded-lg text-sm font-medium hover:border-plex transition-colors"
+                            onClick={cancelEditProfile}
+                        >
+                            {t('settings.invites.profileCancelEdit')}
+                        </button>
+                    )}
+                </div>
+
+                {profilesDoc.profiles.length === 0 ? (
+                    <p className="text-sm text-muted">{t('settings.invites.profileEmpty')}</p>
+                ) : (
+                    <div className="space-y-3">
+                        {profilesDoc.profiles.map((profile) => {
+                            const isDefault = profilesDoc.defaultProfileId === profile.id;
+                            return (
+                                <div
+                                    key={profile.id}
+                                    className={`flex flex-col sm:flex-row sm:items-center gap-3 justify-between border border-border rounded-lg p-3 ${selectedProfileId === profile.id ? 'border-plex/60 bg-plex/5' : ''}`}
+                                >
+                                    <div className="min-w-0">
+                                        <div className="flex items-center gap-2 flex-wrap">
+                                            <button
+                                                type="button"
+                                                className="font-semibold text-left hover:text-plex transition-colors"
+                                                onClick={() => applyProfile(profile, { toast: true })}
+                                            >
+                                                {profile.name}
+                                            </button>
+                                            {isDefault && (
+                                                <span className="text-[10px] uppercase tracking-wide text-plex bg-plex/10 border border-plex/20 px-1.5 py-0.5 rounded">
+                                                    {t('settings.invites.profileDefaultBadge')}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <p className="text-xs text-muted mt-1">
+                                            {t('settings.invites.profileSummary', {
+                                                days: profile.durationDays,
+                                                uses: formatProfileUses(profile.maxUses),
+                                                libraries: formatProfileLibraries(profile.libraryIds),
+                                            })}
+                                        </p>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        <button type="button" className="text-xs font-medium border border-border px-2.5 py-1 rounded hover:border-plex transition-colors" onClick={() => startEditProfile(profile)}>
+                                            {t('settings.invites.profileEdit')}
+                                        </button>
+                                        <button type="button" className="text-xs font-medium border border-border px-2.5 py-1 rounded hover:border-plex transition-colors" onClick={() => handleDuplicateProfile(profile)}>
+                                            {t('settings.invites.profileDuplicate')}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="text-xs font-medium border border-border px-2.5 py-1 rounded hover:border-plex transition-colors"
+                                            onClick={() => handleSetDefault(isDefault ? null : profile.id)}
+                                        >
+                                            {isDefault ? t('settings.invites.profileClearDefault') : t('settings.invites.profileSetDefault')}
+                                        </button>
+                                        <button type="button" className="text-xs font-medium text-red-500 border border-red-500/30 px-2.5 py-1 rounded hover:bg-red-500/10 transition-colors" onClick={() => handleDeleteProfile(profile)}>
+                                            {t('settings.invites.profileDelete')}
+                                        </button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </section>
+
             <section id={getSettingsSectionElementId('invite-links')} className="scroll-mt-24">
             <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">{t('settings.invites.inviteLinksTitle')}</h3>
             <p className="text-sm text-muted mb-2">{t('settings.invites.inviteLinksDescription')}</p>
@@ -161,14 +473,24 @@ export const InvitesSettings: React.FC<{
 
             <div className="space-y-6 mb-8">
                 <h4 className="font-bold">{t('settings.invites.createNewInviteLink')}</h4>
+                {profilesDoc.profiles.length > 0 && (
+                    <div className="mb-2 max-w-md">
+                        <label className="block text-sm mb-1 font-medium">{t('settings.invites.profileSelector')}</label>
+                        <CustomSelect
+                            value={selectedProfileId}
+                            onChange={handleProfileSelect}
+                            options={profileSelectOptions}
+                        />
+                    </div>
+                )}
                 <div className="flex flex-col md:flex-row gap-4 items-end mb-6">
                     <div className="flex-1 w-full">
                         <label className="block text-sm mb-1 font-medium">{t('settings.invites.durationDays')}</label>
-                        <input type="number" min="1" className="w-full p-2.5 rounded-lg bg-background border border-border text-text outline-none focus:border-plex" value={durationDays} onChange={e => setDurationDays(Number(e.target.value))} />
+                        <input type="number" min="1" className="w-full p-2.5 rounded-lg bg-background border border-border text-text outline-none focus:border-plex" value={durationDays} onChange={e => { markCustom(); setDurationDays(Number(e.target.value)); }} />
                     </div>
                     <div className="flex-1 w-full">
                         <label className="block text-sm mb-1 font-medium">{t('settings.invites.maxUses')}</label>
-                        <input type="text" className="w-full p-2.5 rounded-lg bg-background border border-border text-text outline-none focus:border-plex" value={maxUses} onChange={e => setMaxUses(e.target.value)} />
+                        <input type="text" className="w-full p-2.5 rounded-lg bg-background border border-border text-text outline-none focus:border-plex" value={maxUses} onChange={e => { markCustom(); setMaxUses(e.target.value); }} />
                     </div>
                     <button className="w-full md:w-auto px-6 py-2.5 bg-plex text-background font-bold rounded-lg hover:bg-plex-hover transition-colors shadow-lg" onClick={handleCreate}>{t('settings.invites.generateLink')}</button>
                 </div>
@@ -181,10 +503,12 @@ export const InvitesSettings: React.FC<{
                                 <label key={lib.id} className="flex items-center gap-2 bg-background border border-border px-3 py-2 rounded-lg cursor-pointer hover:border-plex transition-colors">
                                     <input
                                         type="checkbox"
-                                        checked={selectedLibraries.includes(lib.id)}
+                                        checked={selectedLibraries.includes(String(lib.id))}
                                         onChange={(e) => {
-                                            if (e.target.checked) setSelectedLibraries([...selectedLibraries, lib.id]);
-                                            else setSelectedLibraries(selectedLibraries.filter(id => id !== lib.id));
+                                            markCustom();
+                                            const id = String(lib.id);
+                                            if (e.target.checked) setSelectedLibraries([...selectedLibraries, id]);
+                                            else setSelectedLibraries(selectedLibraries.filter(sid => sid !== id));
                                         }}
                                         className="accent-plex"
                                     />
@@ -212,7 +536,7 @@ export const InvitesSettings: React.FC<{
                         <p className="text-xs text-muted mb-2">{t('settings.invites.personalNoteHint')}</p>
                         <textarea
                             value={emailNote}
-                            onChange={(e) => setEmailNote(e.target.value)}
+                            onChange={(e) => { markCustom(); setEmailNote(e.target.value); }}
                             maxLength={2000}
                             rows={4}
                             placeholder={t('settings.invites.personalNotePlaceholder')}
@@ -262,7 +586,7 @@ export const InvitesSettings: React.FC<{
                                 </td>
                                 <td className="p-3 text-sm">
                                     {inv.libraryIds && inv.libraryIds.length > 0
-                                        ? libraries.filter(l => inv.libraryIds.includes(l.id)).map(l => l.title).join(', ') || t('settings.invites.selectedCount', { count: inv.libraryIds.length })
+                                        ? libraries.filter(l => inv.libraryIds.includes(l.id) || inv.libraryIds.includes(String(l.id))).map(l => l.title).join(', ') || t('settings.invites.selectedCount', { count: inv.libraryIds.length })
                                         : <span className="text-plex opacity-80">{t('settings.invites.allLibraries')}</span>}
                                 </td>
                                 <td className="p-3 text-muted text-sm">

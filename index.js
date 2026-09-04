@@ -103,6 +103,10 @@ import {
     sanitizeHomeCustomModulesForSession,
 } from './lib/home-custom-modules.js';
 import {
+    emptyInviteProfilesDocument,
+    normalizeInviteProfilesDocument,
+} from './lib/invite-profiles.js';
+import {
     migrateLegacyBrandingAssets,
     parseBrandingPublicPath,
     readBrandingAssetByPublicPath,
@@ -1422,6 +1426,7 @@ import {
     CONFIG_DIR,
     CONFIG_PATH,
     INVITES_PATH,
+    INVITE_PROFILES_PATH,
     USERS_PATH,
     DELETED_USERS_PATH,
     AUDIT_LOG_PATH,
@@ -9582,6 +9587,27 @@ app.delete('/api/invites/:code', requireAdmin, async (req, res) => {
     res.json({ success: true });
 });
 
+// --- Invite Profiles (reusable invitation presets) ---
+app.get('/api/invite-profiles', requireAdmin, async (req, res) => {
+    try {
+        const raw = await loadFile(INVITE_PROFILES_PATH, emptyInviteProfilesDocument());
+        res.json(normalizeInviteProfilesDocument(raw));
+    } catch (e) {
+        res.status(500).json({ error: 'Failed to load invite profiles' });
+    }
+});
+
+app.put('/api/invite-profiles', requireAdmin, async (req, res) => {
+    try {
+        const existing = await loadFile(INVITE_PROFILES_PATH, emptyInviteProfilesDocument());
+        const normalized = normalizeInviteProfilesDocument(req.body, existing);
+        await saveFile(INVITE_PROFILES_PATH, normalized);
+        res.json(normalized);
+    } catch (e) {
+        res.status(500).json({ error: e.message || 'Failed to save invite profiles' });
+    }
+});
+
 const REQUEST_LIST_FILTERS = new Set(['pending', 'approved', 'declined', 'processing', 'available', 'failed']);
 
 const emptyRequestCounts = () => ({
@@ -13959,6 +13985,7 @@ const BACKUP_TARGETS = [
     { key: 'config', path: CONFIG_PATH },
     { key: 'users', path: USERS_PATH },
     { key: 'invites', path: INVITES_PATH },
+    { key: 'inviteProfiles', path: INVITE_PROFILES_PATH },
     { key: 'deletedUsers', path: DELETED_USERS_PATH },
     { key: 'auditLog', path: AUDIT_LOG_PATH },
     { key: 'emailLog', path: EMAIL_LOG_PATH },

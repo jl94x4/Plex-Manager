@@ -87,6 +87,7 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
     { id: 'broadcast', tabId: 'broadcast', label: 'Email Templates', group: 'Comms', keywords: ['announcement', 'bulk', 'users', 'broadcast', 'custom email', 'select users', 'recipients', 'email templates', 'expiry email', 'invite email'] },
     { id: 'invites', tabId: 'invites', label: 'Invites', group: 'Comms', keywords: ['invite', 'link', 'code'] },
     { id: 'invites/referral', tabId: 'invites', sectionId: 'referral', label: 'Referral System', group: 'Comms', keywords: ['referral', 'reward', 'trial', 'invite friends'] },
+    { id: 'invites/profiles', tabId: 'invites', sectionId: 'invite-profiles', label: 'Invitation Profiles', group: 'Comms', keywords: ['invite profile', 'preset', 'template', 'duration', 'libraries'] },
     { id: 'invites/links', tabId: 'invites', sectionId: 'invite-links', label: 'Automated Invite Links', group: 'Comms', keywords: ['invite link', 'generate', 'email invite'] },
 
     { id: 'cleanup', tabId: 'cleanup', label: 'Cleanup', group: 'Automation', keywords: ['inactive', 'revoke', 'expiry', 'cleanup', 'preview', 'last watched'] },
