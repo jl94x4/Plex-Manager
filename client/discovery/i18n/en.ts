@@ -3157,3 +3157,45 @@ Object.assign(en, { homeDashboard: { ...en.homeDashboard,
     emptyRecentShows: 'No shows added recently.',
     emptyRecentMusic: 'No music added recently.',
 } });
+
+Object.assign(en, {
+    expiredAccess: {
+        restrictedPortal: 'Restricted portal',
+        defaultTitle: 'Access expired',
+        unknownDate: 'an unknown date',
+        defaultMessage: 'Your access expired on {date}. Your {server} library access is currently disabled. Please contact the server administrator if you would like to renew.',
+        expiredOn: 'Expired on',
+        mediaAccess: 'Media access',
+        openSupport: 'Open Support',
+        emailAdmin: 'Email admin',
+    },
+});
+
+Object.assign(en, { settings: { ...en.settings,
+    search: {
+        label: 'Find Setting',
+        placeholder: 'Search settings...',
+        recent: 'Recent',
+        results: 'Results',
+        empty: 'No settings found.',
+        entries: {
+            publicBaseUrl: 'Public Base URL', customLogo: 'Custom Logo', portalTheme: 'Portal Theme', portalAnnouncement: 'Portal Announcement', posterQualityBadges: 'Poster Quality Badges',
+            dashboardWatchingBadge: 'Dashboard Watching Badge', tmdbTrendingSlideshow: 'TMDB Trending Slideshow', communityChat: 'Community chat', chatMentionNotifications: 'Chat @mention notifications',
+            whatsAppNumber: 'WhatsApp Number', contactEmail: 'Contact Email', watchHistorySource: 'Watch History Source', showUsernamesInAnalytics: 'Show Usernames in Analytics', analyticsCache: 'Analytics Cache',
+            mediaServerConnection: 'Media Server Connection', streamUserPrivacy: 'Stream User Privacy', defaultLibraries: 'Default Libraries', sonarrRadarrInstances: 'Sonarr & Radarr Instances',
+            downloadClients: 'Download Clients', tautulliIntegration: 'Tautulli Integration', jellyfinAnalytics: 'Jellyfin Analytics', requestApp: 'Request App (Seerr/Ombi)', tmdbApiKey: 'TMDB API Key',
+            discoverMetadataSource: 'Discover Metadata Source', requestEngine: 'Request Engine', metadataProviders: 'Metadata Providers', requestPermissions: 'Request Permissions', autoApprove: 'Auto-Approve',
+            watchlistAutoRequest: 'Watchlist Auto-Request', requestQuotas: 'Request Quotas', discoverRegion: 'Discover Region', discoverLanguage: 'Discover Language', hideAvailableMedia: 'Hide Available Media',
+            smtpAlerts: 'SMTP Alerts', notificationHealth: 'Notification Health', requestAvailableAlerts: 'Request Available Alerts', notReleasedYet: 'Not Released Yet', scannerNotifications: 'Scanner Notifications',
+            notificationTemplates: 'Notification Templates', genericWebhook: 'Generic Webhook', sendTestNotification: 'Send Test Notification', recentNotifications: 'Recent Notifications', smartSummaryNotifications: 'Smart Summary Notifications', gotifyAlerts: 'Gotify Alerts',
+            supportTickets: 'Support tickets', healthDashboard: 'Health Dashboard', cleanerExperimentalMode: 'Cleaner Experimental Mode', backupRestore: 'Backup & Restore', memory: 'Memory', diagnostics: 'Diagnostics',
+        },
+    },
+    navigation: { ...en.settings.navigation,
+        customTabs: { ...en.settings.navigation.customTabs,
+            moveTabUp: 'Move up',
+            moveTabDown: 'Move down',
+            deleteTab: 'Delete tab',
+        },
+    },
+} });
