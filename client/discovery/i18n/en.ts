@@ -3157,3 +3157,16 @@ Object.assign(en, { homeDashboard: { ...en.homeDashboard,
     emptyRecentShows: 'No shows added recently.',
     emptyRecentMusic: 'No music added recently.',
 } });
+
+Object.assign(en, {
+    expiredAccess: {
+        restrictedPortal: 'Restricted portal',
+        defaultTitle: 'Access expired',
+        unknownDate: 'an unknown date',
+        defaultMessage: 'Your access expired on {date}. Your {server} library access is currently disabled. Please contact the server administrator if you would like to renew.',
+        expiredOn: 'Expired on',
+        mediaAccess: 'Media access',
+        openSupport: 'Open Support',
+        emailAdmin: 'Email admin',
+    },
+});

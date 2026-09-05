@@ -2545,6 +2545,19 @@ Object.assign(fr, {
 });
 
 Object.assign(fr, {
+    expiredAccess: {
+        restrictedPortal: 'Portail restreint',
+        defaultTitle: 'Accès expiré',
+        unknownDate: 'une date inconnue',
+        defaultMessage: 'Votre accès a expiré le {date}. Votre accès à la bibliothèque {server} est actuellement désactivé. Contactez l’administrateur du serveur si vous souhaitez le renouveler.',
+        expiredOn: 'Expiré le',
+        mediaAccess: 'Accès aux médias',
+        openSupport: 'Ouvrir l’assistance',
+        emailAdmin: 'Contacter l’administrateur par e-mail',
+    },
+});
+
+Object.assign(fr, {
     navigation: { ...fr.navigation,
         closeAllApplets: 'Fermer toutes les Applets',
         collapseNav: 'Afficher uniquement les icônes',
