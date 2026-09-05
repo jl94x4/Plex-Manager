@@ -10,6 +10,7 @@ export type SettingsIndexEntry = {
     tabId: SettingsTabId;
     sectionId?: string;
     label: string;
+    labelKey?: string;
     group: string;
     keywords: string[];
 };
@@ -88,7 +89,7 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
     { id: 'invites', tabId: 'invites', label: 'Invites', group: 'Comms', keywords: ['invite', 'link', 'code'] },
     { id: 'invites/referral', tabId: 'invites', sectionId: 'referral', label: 'Referral System', group: 'Comms', keywords: ['referral', 'reward', 'trial', 'invite friends'] },
     { id: 'invites/referral-history', tabId: 'invites', sectionId: 'referral-history', label: 'Referral History', group: 'Comms', keywords: ['referral history', 'reward history', 'who invited', 'bonus days'] },
-    { id: 'invites/onboarding', tabId: 'invites', sectionId: 'onboarding', label: 'User Onboarding', group: 'Comms', keywords: ['onboarding', 'welcome', 'rules', 'wizard', 'new user'] },
+    { id: 'invites/onboarding', tabId: 'invites', sectionId: 'onboarding', label: 'User Onboarding', labelKey: 'settings.invites.onboardingTitle', group: 'Comms', keywords: ['onboarding', 'welcome', 'rules', 'wizard', 'new user'] },
     { id: 'invites/profiles', tabId: 'invites', sectionId: 'invite-profiles', label: 'Invitation Profiles', group: 'Comms', keywords: ['invite profile', 'preset', 'template', 'duration', 'libraries'] },
     { id: 'invites/links', tabId: 'invites', sectionId: 'invite-links', label: 'Automated Invite Links', group: 'Comms', keywords: ['invite link', 'generate', 'email invite'] },
 

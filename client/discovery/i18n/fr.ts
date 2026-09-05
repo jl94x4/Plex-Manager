@@ -2557,6 +2557,23 @@ Object.assign(fr, {
     },
 });
 
+Object.assign(fr, { settings: { ...fr.settings,
+    search: {
+        label: 'Rechercher un paramètre',
+        placeholder: 'Rechercher dans les paramètres…',
+        recent: 'Récents',
+        results: 'Résultats',
+        empty: 'Aucun paramètre trouvé.',
+    },
+    navigation: { ...fr.settings?.navigation,
+        customTabs: { ...fr.settings?.navigation?.customTabs,
+            moveTabUp: 'Déplacer vers le haut',
+            moveTabDown: 'Déplacer vers le bas',
+            deleteTab: 'Supprimer l’onglet',
+        },
+    },
+} });
+
 Object.assign(fr, {
     navigation: { ...fr.navigation,
         closeAllApplets: 'Fermer toutes les Applets',

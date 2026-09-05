@@ -255,13 +255,13 @@ export const CustomNavTabsSettings: React.FC<Props> = ({
                                         <ChevronDown className={`ml-auto h-4 w-4 shrink-0 text-muted transition-transform ${expanded ? 'rotate-180' : ''}`} />
                                     </button>
                                     <div className="flex items-center gap-1">
-                                        <button type="button" className="rounded-lg p-2 text-muted hover:bg-white/5 hover:text-text disabled:opacity-40" disabled={index === 0} onClick={() => moveTab(index, -1)} aria-label="Move up">
+                                        <button type="button" className="rounded-lg p-2 text-muted hover:bg-white/5 hover:text-text disabled:opacity-40" disabled={index === 0} onClick={() => moveTab(index, -1)} aria-label={t('settings.navigation.customTabs.moveTabUp')}>
                                             <ChevronUp className="h-4 w-4" />
                                         </button>
-                                        <button type="button" className="rounded-lg p-2 text-muted hover:bg-white/5 hover:text-text disabled:opacity-40" disabled={index === customNavTabs.length - 1} onClick={() => moveTab(index, 1)} aria-label="Move down">
+                                        <button type="button" className="rounded-lg p-2 text-muted hover:bg-white/5 hover:text-text disabled:opacity-40" disabled={index === customNavTabs.length - 1} onClick={() => moveTab(index, 1)} aria-label={t('settings.navigation.customTabs.moveTabDown')}>
                                             <ChevronDown className="h-4 w-4" />
                                         </button>
-                                        <button type="button" className="rounded-lg p-2 text-red-300 hover:bg-red-500/10" onClick={() => removeTab(tab.id)} aria-label="Delete tab">
+                                        <button type="button" className="rounded-lg p-2 text-red-300 hover:bg-red-500/10" onClick={() => removeTab(tab.id)} aria-label={t('settings.navigation.customTabs.deleteTab')}>
                                             <Trash2 className="h-4 w-4" />
                                         </button>
                                     </div>

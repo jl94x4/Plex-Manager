@@ -3170,3 +3170,20 @@ Object.assign(en, {
         emailAdmin: 'Email admin',
     },
 });
+
+Object.assign(en, { settings: { ...en.settings,
+    search: {
+        label: 'Find Setting',
+        placeholder: 'Search settings...',
+        recent: 'Recent',
+        results: 'Results',
+        empty: 'No settings found.',
+    },
+    navigation: { ...en.settings.navigation,
+        customTabs: { ...en.settings.navigation.customTabs,
+            moveTabUp: 'Move up',
+            moveTabDown: 'Move down',
+            deleteTab: 'Delete tab',
+        },
+    },
+} });
