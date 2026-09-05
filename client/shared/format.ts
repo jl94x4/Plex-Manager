@@ -30,17 +30,13 @@ export const daysSinceDate = (dateString: string | null | undefined): number | n
 };
 
 export const getDaysUntilExpiry = (expiryDate: string | null): number | null => {
-    if (!expiryDate) return null;
+    if (expiryDate == null || expiryDate === '') return null;
+    const expiry = parseLocalDate(expiryDate);
+    if (!expiry) return null;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-
-    const datePart = expiryDate.split('T')[0];
-    const [year, month, day] = datePart.split('-').map(Number);
-    const expiry = new Date(year, month - 1, day);
     expiry.setHours(0, 0, 0, 0);
-
-    const diffTime = expiry.getTime() - today.getTime();
-    return Math.round(diffTime / (1000 * 60 * 60 * 24));
+    return Math.round((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 };
 
 export const addMonths = (date: Date, months: number): Date => {
@@ -62,9 +58,10 @@ export const getAccessProgressPct = (
     const daysLeft = getDaysUntilExpiry(expiryDate);
     if (daysLeft === null) return 100;
     if (expiryDate && joiningDate) {
-        const join = new Date(joiningDate);
+        const join = parseLocalDate(joiningDate);
+        const expiry = parseLocalDate(expiryDate);
+        if (!join || !expiry) return Math.min(100, Math.max(0, (daysLeft / 365) * 100));
         join.setHours(0, 0, 0, 0);
-        const expiry = new Date(expiryDate.split('T')[0]);
         expiry.setHours(0, 0, 0, 0);
         const totalDays = Math.max(1, Math.round((expiry.getTime() - join.getTime()) / (1000 * 60 * 60 * 24)));
         return Math.min(100, Math.max(0, (daysLeft / totalDays) * 100));

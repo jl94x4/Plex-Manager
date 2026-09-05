@@ -1923,13 +1923,17 @@ const isStatusServiceVisibleToUsers = (service) => service?.visibleToUsers !== f
 const log = (message) => console.log(`[${new Date().toISOString()}] ${message}`);
 
 const getDaysUntilExpiry = (expiryDate) => {
-    if (!expiryDate) return null;
+    if (expiryDate == null || expiryDate === '') return null;
+    const datePart = String(expiryDate).split('T')[0];
+    const [year, month, day] = datePart.split('-').map(Number);
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day) || !year || !month || !day) {
+        return null;
+    }
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const datePart = expiryDate.split('T')[0];
-    const [year, month, day] = datePart.split('-').map(Number);
     const expiry = new Date(year, month - 1, day);
+    if (Number.isNaN(expiry.getTime())) return null;
     expiry.setHours(0, 0, 0, 0);
 
     const diffTime = expiry.getTime() - today.getTime();
@@ -1955,6 +1959,8 @@ const isExpiredPortalAllowedApiPath = (rawPath = '') => {
         '/api/users/preferences',
         '/api/notifications',
         '/api/auth/logout',
+        '/api/me/onboarding',
+        '/api/me/referral-stats',
     ];
     return prefixes.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
 };
@@ -2406,8 +2412,16 @@ const lockFile = async (path) => {
     };
 };
 
-const loadFile = async (path, defaultContent) => {
+const withFileLock = async (path, fn) => {
     const unlock = await lockFile(path);
+    try {
+        return await fn();
+    } finally {
+        unlock();
+    }
+};
+
+const readFileUnlocked = async (path, defaultContent) => {
     try {
         const content = await fs.readFile(path, 'utf-8');
         const data = JSON.parse(content);
@@ -2420,10 +2434,38 @@ const loadFile = async (path, defaultContent) => {
             return defaultContent;
         }
         throw error;
-    } finally {
-        unlock();
     }
 };
+
+const writeFileUnlocked = async (path, data) => {
+    const tempPath = `${path}.tmp`;
+    await fs.writeFile(tempPath, JSON.stringify(data, null, 2));
+    await fs.rename(tempPath, path);
+};
+
+const loadFile = async (path, defaultContent) => (
+    withFileLock(path, () => readFileUnlocked(path, defaultContent))
+);
+
+const saveFile = async (path, data) => (
+    withFileLock(path, () => writeFileUnlocked(path, data))
+);
+
+/** Hold the file lock across read → mutate → write to avoid lost updates. */
+const updateFile = async (path, defaultContent, mutator) => (
+    withFileLock(path, async () => {
+        const current = await readFileUnlocked(path, defaultContent);
+        const outcome = await mutator(current);
+        if (outcome && typeof outcome === 'object' && Object.prototype.hasOwnProperty.call(outcome, 'data')) {
+            await writeFileUnlocked(path, outcome.data);
+            return outcome.result !== undefined ? outcome.result : outcome.data;
+        }
+        await writeFileUnlocked(path, outcome);
+        return outcome;
+    })
+);
+
+const updateUsers = (mutator) => updateFile(USERS_PATH, [], mutator);
 
 const notifyOps = async (event, { title, body, href, dedupeKey, cooldownMs, meta, filename, service, serviceKind } = {}) => {
     try {
@@ -2486,17 +2528,6 @@ const mediaJobNotifyMeta = async (entry, config = {}) => {
         return poster && typeof poster === 'object' ? poster : {};
     } catch {
         return {};
-    }
-};
-
-const saveFile = async (path, data) => {
-    const unlock = await lockFile(path);
-    try {
-        const tempPath = `${path}.tmp`;
-        await fs.writeFile(tempPath, JSON.stringify(data, null, 2));
-        await fs.rename(tempPath, path);
-    } finally {
-        unlock();
     }
 };
 
@@ -3734,24 +3765,39 @@ const checkAndRevoke = async (config) => {
 };
 
 // --- Security: Sanitise admin-authored HTML before broadcast email delivery ---
-// Strips dangerous scripting/injection vectors while preserving safe formatting tags.
+// Allowlist-based strip of scripting/injection vectors while preserving safe formatting tags.
 const sanitizeBroadcastHtml = (html) => {
     if (!html || typeof html !== 'string') return '';
-    return html
+    const ALLOWED = new Set([
+        'a', 'b', 'strong', 'i', 'em', 'u', 'p', 'br', 'ul', 'ol', 'li',
+        'h1', 'h2', 'h3', 'h4', 'span', 'div', 'hr', 'blockquote', 'table',
+        'thead', 'tbody', 'tr', 'th', 'td',
+    ]);
+    const withSafeAnchors = String(html)
         .replace(/<script\b[\s\S]*?<\/script\s*>/gi, '')
-        .replace(/<iframe\b[\s\S]*?<\/iframe\s*>/gi, '')
-        .replace(/<object\b[\s\S]*?<\/object\s*>/gi, '')
-        .replace(/<embed\b[^>]*>/gi, '')
-        .replace(/<form\b[\s\S]*?<\/form\s*>/gi, '')
+        .replace(/<style\b[\s\S]*?<\/style\s*>/gi, '')
+        .replace(/<(iframe|object|embed|form|link|meta|base|svg|math|img|video|audio|source)\b[^>]*>/gi, '')
+        .replace(/<\/(iframe|object|embed|form|svg|math|img|video|audio|source)\s*>/gi, '')
         .replace(/<(input|textarea|button|select)\b[^>]*>/gi, '')
-        .replace(/<link\b[^>]*>/gi, '')
-        .replace(/<meta\b[^>]*>/gi, '')
-        .replace(/<base\b[^>]*>/gi, '')
-        .replace(/<(svg|math)\b[\s\S]*?<\/\1\s*>/gi, '')
-        .replace(/<(svg|math)\b[^>]*\/?>/gi, '')
-        // Event handlers including compact forms like <svg/onload=...>
-        .replace(/\bon\w+\s*=/gi, ' data-removed=')
-        .replace(/(href|src|xlink:href|action|formaction)\s*=\s*(["']?)\s*(javascript|vbscript|data)\s*:/gi, ' $1=$2#');
+        .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+        .replace(/\s(style|formaction|xlink:href|srcset)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+
+    return withSafeAnchors.replace(/<\/?([a-zA-Z][\w:-]*)\b([^>]*)>/g, (full, rawTag, attrs = '') => {
+        const tag = String(rawTag || '').toLowerCase();
+        const isClose = full.startsWith('</');
+        if (!ALLOWED.has(tag)) return '';
+        if (isClose) return `</${tag}>`;
+        if (tag === 'br' || tag === 'hr') return `<${tag}>`;
+        if (tag === 'a') {
+            const hrefMatch = String(attrs).match(/\bhref\s*=\s*(["'])(.*?)\1/i)
+                || String(attrs).match(/\bhref\s*=\s*([^\s>]+)/i);
+            let href = hrefMatch ? String(hrefMatch[2] || hrefMatch[1] || '').trim() : '';
+            if (!href || /^(javascript|vbscript|data)\s*:/i.test(href)) href = '#';
+            const safeHref = href.replace(/"/g, '&quot;');
+            return `<a href="${safeHref}" rel="noopener noreferrer">`;
+        }
+        return `<${tag}>`;
+    });
 };
 
 const personalizeBroadcastField = (text, user, { html } = {}) => {
@@ -4056,8 +4102,13 @@ const completeJellyfinPortalLogin = async (req, res, config, authData, source = 
         return res.status(403).json({ error: 'Your account is not registered for this portal.' });
     }
 
-    if (!isAdmin && touchUserLastLogin(users, sessionUser)) {
-        await saveFile(USERS_PATH, users);
+    if (!isAdmin) {
+        await updateUsers((currentUsers) => {
+            if (!touchUserLastLogin(currentUsers, sessionUser)) {
+                return { data: currentUsers, result: currentUsers };
+            }
+            return currentUsers;
+        });
     }
 
     const token = jwt.sign(sessionUser, JWT_SECRET, { expiresIn: '7d' });
@@ -4275,127 +4326,139 @@ const handlePlexPinLogin = async (req, res, pinId, ref, { redirectOnSuccess = fa
     }
 
     if (!isAdmin && config.referralEnabled && ref) {
-        const users = await loadFile(USERS_PATH, []);
-        const isNewUser = !users.find(u => u.id === sessionUser.id || u.plexId === sessionUser.plexId);
         const referralCode = String(ref || '').trim();
+        const trialDays = config.referralTrialDays || 3;
+        const rewardDays = config.referralRewardDays || 7;
 
-        if (isNewUser && referralCode) {
-            const rewardsDoc = normalizeReferralRewardsDocument(
-                await loadFile(REFERRAL_REWARDS_PATH, emptyReferralRewardsDocument())
+        if (referralCode) {
+            const onboardingDoc = normalizeOnboardingDocument(
+                await loadFile(ONBOARDING_PATH, emptyOnboardingDocument())
             );
-            const referrer = users.find(u => u.id === referralCode || u.plexId === referralCode) || null;
-            const trialDays = config.referralTrialDays || 3;
-            const rewardDays = config.referralRewardDays || 7;
 
-            const recordReward = async (entry) => {
-                const next = prependReferralReward(rewardsDoc, entry);
-                await saveFile(REFERRAL_REWARDS_PATH, next);
-                return next;
-            };
+            const claimOutcome = await withFileLock(USERS_PATH, async () => {
+                const users = await readFileUnlocked(USERS_PATH, []);
+                const isNewUser = !users.find(u => u.id === sessionUser.id || u.plexId === sessionUser.plexId);
+                if (!isNewUser) return { kind: 'skip' };
 
-            if (sameAccount(sessionUser, { id: referralCode, plexId: referralCode })
-                || (referrer && sameAccount(sessionUser, referrer))) {
-                await recordReward(createReferralRewardEntry({
-                    status: 'blocked',
-                    blockReason: 'self_referral',
-                    referrer: referrer || { id: referralCode },
-                    referred: sessionUser,
-                    referralCode,
-                    trialDays,
-                    rewardDays,
-                    rewardApplied: false,
-                }));
-                await appendAuditLog('referral_blocked', sessionUser, referrer || { id: referralCode }, {
-                    reason: 'self_referral',
+                return withFileLock(REFERRAL_REWARDS_PATH, async () => {
+                    let rewardsDoc = normalizeReferralRewardsDocument(
+                        await readFileUnlocked(REFERRAL_REWARDS_PATH, emptyReferralRewardsDocument())
+                    );
+                    const referrer = users.find(u => u.id === referralCode || u.plexId === referralCode) || null;
+
+                    const recordRewardUnlocked = async (entry) => {
+                        rewardsDoc = prependReferralReward(rewardsDoc, entry);
+                        await writeFileUnlocked(REFERRAL_REWARDS_PATH, rewardsDoc);
+                        return rewardsDoc;
+                    };
+
+                    if (sameAccount(sessionUser, { id: referralCode, plexId: referralCode })
+                        || (referrer && sameAccount(sessionUser, referrer))) {
+                        await recordRewardUnlocked(createReferralRewardEntry({
+                            status: 'blocked',
+                            blockReason: 'self_referral',
+                            referrer: referrer || { id: referralCode },
+                            referred: sessionUser,
+                            referralCode,
+                            trialDays,
+                            rewardDays,
+                            rewardApplied: false,
+                        }));
+                        return { kind: 'blocked', reason: 'self_referral', referrer: referrer || { id: referralCode } };
+                    }
+                    if (!referrer) {
+                        await recordRewardUnlocked(createReferralRewardEntry({
+                            status: 'blocked',
+                            blockReason: 'referrer_not_found',
+                            referrer: { id: referralCode },
+                            referred: sessionUser,
+                            referralCode,
+                            trialDays,
+                            rewardDays,
+                            rewardApplied: false,
+                        }));
+                        return { kind: 'blocked', reason: 'referrer_not_found', referrer: { id: referralCode } };
+                    }
+                    if (referrer.plexAccessStatus !== 'active') {
+                        await recordRewardUnlocked(createReferralRewardEntry({
+                            status: 'blocked',
+                            blockReason: 'referrer_inactive',
+                            referrer,
+                            referred: sessionUser,
+                            referralCode,
+                            trialDays,
+                            rewardDays,
+                            rewardApplied: false,
+                        }));
+                        return { kind: 'blocked', reason: 'referrer_inactive', referrer };
+                    }
+                    if (findGrantedRewardForReferred(rewardsDoc, sessionUser)) {
+                        await recordRewardUnlocked(createReferralRewardEntry({
+                            status: 'blocked',
+                            blockReason: 'duplicate',
+                            referrer,
+                            referred: sessionUser,
+                            referralCode,
+                            trialDays,
+                            rewardDays,
+                            rewardApplied: false,
+                        }));
+                        return { kind: 'blocked', reason: 'duplicate', referrer };
+                    }
+
+                    const previousExpiryDate = referrer.expiryDate || null;
+                    const canApplyReward = !!previousExpiryDate;
+                    const newExpiryDate = canApplyReward
+                        ? addDays(new Date(previousExpiryDate), rewardDays).toISOString()
+                        : null;
+                    const newUserObj = {
+                        id: sessionUser.id,
+                        plexId: sessionUser.plexId,
+                        username: sessionUser.username,
+                        email: sessionUser.email,
+                        joiningDate: new Date().toISOString(),
+                        expiryDate: addDays(new Date(), trialDays).toISOString(),
+                        plexAccessStatus: 'pending',
+                        isTrial: true,
+                        referredBy: referrer.id || referrer.plexId || referralCode,
+                        referredAt: new Date().toISOString(),
+                    };
+                    Object.assign(newUserObj, markUserOnboardingPending(newUserObj, onboardingDoc));
+                    users.push(newUserObj);
+                    if (canApplyReward) {
+                        referrer.expiryDate = newExpiryDate;
+                    }
+                    await writeFileUnlocked(USERS_PATH, users);
+                    await recordRewardUnlocked(createReferralRewardEntry({
+                        status: 'granted',
+                        referrer,
+                        referred: newUserObj,
+                        referralCode,
+                        trialDays,
+                        rewardDays,
+                        rewardApplied: canApplyReward,
+                        previousExpiryDate,
+                        newExpiryDate,
+                    }));
+                    return {
+                        kind: 'granted',
+                        referrer,
+                        newUserObj,
+                        canApplyReward,
+                        previousExpiryDate,
+                        newExpiryDate,
+                    };
+                });
+            });
+
+            if (claimOutcome?.kind === 'blocked') {
+                await appendAuditLog('referral_blocked', sessionUser, claimOutcome.referrer, {
+                    reason: claimOutcome.reason,
                     trialDays,
                     rewardDays,
                 });
-            } else if (!referrer) {
-                await recordReward(createReferralRewardEntry({
-                    status: 'blocked',
-                    blockReason: 'referrer_not_found',
-                    referrer: { id: referralCode },
-                    referred: sessionUser,
-                    referralCode,
-                    trialDays,
-                    rewardDays,
-                    rewardApplied: false,
-                }));
-                await appendAuditLog('referral_blocked', sessionUser, { id: referralCode }, {
-                    reason: 'referrer_not_found',
-                    trialDays,
-                    rewardDays,
-                });
-            } else if (referrer.plexAccessStatus !== 'active') {
-                await recordReward(createReferralRewardEntry({
-                    status: 'blocked',
-                    blockReason: 'referrer_inactive',
-                    referrer,
-                    referred: sessionUser,
-                    referralCode,
-                    trialDays,
-                    rewardDays,
-                    rewardApplied: false,
-                }));
-                await appendAuditLog('referral_blocked', sessionUser, referrer, {
-                    reason: 'referrer_inactive',
-                    trialDays,
-                    rewardDays,
-                });
-            } else if (findGrantedRewardForReferred(rewardsDoc, sessionUser)) {
-                await recordReward(createReferralRewardEntry({
-                    status: 'blocked',
-                    blockReason: 'duplicate',
-                    referrer,
-                    referred: sessionUser,
-                    referralCode,
-                    trialDays,
-                    rewardDays,
-                    rewardApplied: false,
-                }));
-                await appendAuditLog('referral_blocked', sessionUser, referrer, {
-                    reason: 'duplicate',
-                    trialDays,
-                    rewardDays,
-                });
-            } else {
-                const previousExpiryDate = referrer.expiryDate || null;
-                const canApplyReward = !!previousExpiryDate;
-                const newExpiryDate = canApplyReward
-                    ? addDays(new Date(previousExpiryDate), rewardDays).toISOString()
-                    : null;
-                const newUserObj = {
-                    id: sessionUser.id,
-                    plexId: sessionUser.plexId,
-                    username: sessionUser.username,
-                    email: sessionUser.email,
-                    joiningDate: new Date().toISOString(),
-                    expiryDate: addDays(new Date(), trialDays).toISOString(),
-                    plexAccessStatus: 'pending',
-                    isTrial: true,
-                    referredBy: referrer.id || referrer.plexId || referralCode,
-                    referredAt: new Date().toISOString(),
-                };
-                const onboardingDoc = normalizeOnboardingDocument(
-                    await loadFile(ONBOARDING_PATH, emptyOnboardingDocument())
-                );
-                Object.assign(newUserObj, markUserOnboardingPending(newUserObj, onboardingDoc));
-                users.push(newUserObj);
-                if (canApplyReward) {
-                    referrer.expiryDate = newExpiryDate;
-                }
-                await saveFile(USERS_PATH, users);
-                await recordReward(createReferralRewardEntry({
-                    status: 'granted',
-                    referrer,
-                    referred: newUserObj,
-                    referralCode,
-                    trialDays,
-                    rewardDays,
-                    rewardApplied: canApplyReward,
-                    previousExpiryDate,
-                    newExpiryDate,
-                }));
+            } else if (claimOutcome?.kind === 'granted') {
+                const { referrer, newUserObj, canApplyReward, previousExpiryDate, newExpiryDate } = claimOutcome;
                 await appendAuditLog('referral_claimed', sessionUser, referrer, {
                     trialDays,
                     rewardDays,
@@ -4456,12 +4519,14 @@ const handlePlexPinLogin = async (req, res, pinId, ref, { redirectOnSuccess = fa
     if (isAdmin) {
         await ensurePortalUserForNotifications(sessionUser, { config });
     }
-    const usersForToken = await loadFile(USERS_PATH, []);
-    if (touchUserLastLogin(usersForToken, sessionUser, new Date().toISOString(), {
-        plexAuthToken: pinData.authToken,
-    })) {
-        await saveFile(USERS_PATH, usersForToken);
-    }
+    await updateUsers((users) => {
+        if (!touchUserLastLogin(users, sessionUser, new Date().toISOString(), {
+            plexAuthToken: pinData.authToken,
+        })) {
+            return { data: users, result: users };
+        }
+        return users;
+    });
     await appendAuditLog('user_login', sessionUser, sessionUser);
 
     log(`Plex login success for ${sessionUser.username} (admin=${isAdmin}, secureCookie=${FORCE_SECURE_COOKIES})`);
@@ -4642,96 +4707,107 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             privacyShowLibraries,
             profileBio,
         } = req.body || {};
-        const users = await loadFile(USERS_PATH, []);
-        const localUser = findLocalUserForSession(users, req.user);
-        const userIndex = localUser ? users.findIndex(u => normalized(u.id) === normalized(localUser.id)) : -1;
+        let newsletterAuditEvent = null;
+        const updatedUser = await updateUsers(async (users) => {
+            const localUser = findLocalUserForSession(users, req.user);
+            const userIndex = localUser ? users.findIndex(u => normalized(u.id) === normalized(localUser.id)) : -1;
 
-        if (userIndex === -1) {
-            return res.status(404).json({ error: 'User not found' });
-        }
+            if (userIndex === -1) {
+                const err = new Error('User not found');
+                err.status = 404;
+                throw err;
+            }
 
-        if (optOutNewsletter !== undefined) {
-            const oldPref = !!users[userIndex].optOutNewsletter;
-            users[userIndex].optOutNewsletter = !!optOutNewsletter;
-            if (oldPref !== !!optOutNewsletter) {
-                await appendAuditLog(optOutNewsletter ? 'newsletter_opt_out' : 'newsletter_opt_in', req.user, req.user);
+            if (optOutNewsletter !== undefined) {
+                const oldPref = !!users[userIndex].optOutNewsletter;
+                users[userIndex].optOutNewsletter = !!optOutNewsletter;
+                if (oldPref !== !!optOutNewsletter) {
+                    newsletterAuditEvent = optOutNewsletter ? 'newsletter_opt_out' : 'newsletter_opt_in';
+                }
             }
-        }
-        if (uiLocale !== undefined) {
-            const normalizedLocale = String(uiLocale || '').trim().toLowerCase().replace(/_/g, '-');
-            const persistedLocale = normalizedLocale === 'pt-br' ? 'pt-BR' : normalizedLocale;
-            if (!['en', 'fr', 'de', 'es', 'pt-BR', 'it', 'ja', 'pl', 'nl', 'ru'].includes(persistedLocale)) {
-                return res.status(400).json({ error: 'Unsupported locale' });
+            if (uiLocale !== undefined) {
+                const normalizedLocale = String(uiLocale || '').trim().toLowerCase().replace(/_/g, '-');
+                const persistedLocale = normalizedLocale === 'pt-br' ? 'pt-BR' : normalizedLocale;
+                if (!['en', 'fr', 'de', 'es', 'pt-BR', 'it', 'ja', 'pl', 'nl', 'ru'].includes(persistedLocale)) {
+                    const err = new Error('Unsupported locale');
+                    err.status = 400;
+                    throw err;
+                }
+                users[userIndex].uiLocale = persistedLocale;
             }
-            users[userIndex].uiLocale = persistedLocale;
-        }
-        const boolPrefs = {
-            notifyRequestAvailableEmail,
-            notifyRequestAvailableInApp,
-            notifyRequestAvailableWebPush,
-            notifyRequestAvailableDiscord,
-            notifyRequestApprovedEmail,
-            notifyRequestApprovedInApp,
-            notifyRequestApprovedWebPush,
-            notifyRequestDeclinedEmail,
-            notifyRequestDeclinedInApp,
-            notifyRequestDeclinedWebPush,
-            notifySeasonAvailableEmail,
-            notifySeasonAvailableInApp,
-            notifySeasonAvailableWebPush,
-            notifyNewEpisodeEmail,
-            notifyNewEpisodeInApp,
-            notifyNewEpisodeWebPush,
-            notifyCollexionsFailed,
-            notifyScannerFailed,
-            notifyScannerDeleted,
-            notifyScannerUpgrade,
-            notifyScannerImport,
-            notifyScannerGrab,
-            notifyScannerUpdate,
-            notifyScannerInteraction,
-            notifySpotifySyncFailed,
-            notifyStatusDown,
-            notifyStatusUp,
-            notifyMediaJobFailed,
-            notifyMediaJobCompleted,
-            notifySupportTicket,
-            notifySupportReply,
-            notifySupportMediaIssue,
-            notifyChatMentionInApp,
-            notifyWebPush,
-            notifySummaryDigest,
-            showDiscoverNowPlaying,
-            privacyShowName,
-            privacyShowPlayer,
-            privacyShowAchievements,
-            privacyShowProfile,
-            privacyShowEmail,
-            privacyShowLibraries,
-        };
-        for (const [key, value] of Object.entries(boolPrefs)) {
-            if (value !== undefined) users[userIndex][key] = !!value;
-        }
-        if (profileBio !== undefined) {
-            users[userIndex].profileBio = sanitizeProfileBio(profileBio);
+            const boolPrefs = {
+                notifyRequestAvailableEmail,
+                notifyRequestAvailableInApp,
+                notifyRequestAvailableWebPush,
+                notifyRequestAvailableDiscord,
+                notifyRequestApprovedEmail,
+                notifyRequestApprovedInApp,
+                notifyRequestApprovedWebPush,
+                notifyRequestDeclinedEmail,
+                notifyRequestDeclinedInApp,
+                notifyRequestDeclinedWebPush,
+                notifySeasonAvailableEmail,
+                notifySeasonAvailableInApp,
+                notifySeasonAvailableWebPush,
+                notifyNewEpisodeEmail,
+                notifyNewEpisodeInApp,
+                notifyNewEpisodeWebPush,
+                notifyCollexionsFailed,
+                notifyScannerFailed,
+                notifyScannerDeleted,
+                notifyScannerUpgrade,
+                notifyScannerImport,
+                notifyScannerGrab,
+                notifyScannerUpdate,
+                notifyScannerInteraction,
+                notifySpotifySyncFailed,
+                notifyStatusDown,
+                notifyStatusUp,
+                notifyMediaJobFailed,
+                notifyMediaJobCompleted,
+                notifySupportTicket,
+                notifySupportReply,
+                notifySupportMediaIssue,
+                notifyChatMentionInApp,
+                notifyWebPush,
+                notifySummaryDigest,
+                showDiscoverNowPlaying,
+                privacyShowName,
+                privacyShowPlayer,
+                privacyShowAchievements,
+                privacyShowProfile,
+                privacyShowEmail,
+                privacyShowLibraries,
+            };
+            for (const [key, value] of Object.entries(boolPrefs)) {
+                if (value !== undefined) users[userIndex][key] = !!value;
+            }
+            if (profileBio !== undefined) {
+                users[userIndex].profileBio = sanitizeProfileBio(profileBio);
+            }
+            return { data: users, result: users[userIndex] };
+        });
+
+        if (newsletterAuditEvent) {
+            await appendAuditLog(newsletterAuditEvent, req.user, req.user);
         }
         if (privacyShowAchievements !== undefined) {
             try {
                 const config = await loadFile(CONFIG_PATH, {});
                 const state = await loadAchievementsState();
-                const subjectId = resolveAchievementsAccountId(users[userIndex], users[userIndex].plexAccountId, state, {
-                    username: users[userIndex].username,
+                const subjectId = resolveAchievementsAccountId(updatedUser, updatedUser.plexAccountId, state, {
+                    username: updatedUser.username,
                     adminPlexId: config.adminPlexId,
                 });
-                if (subjectId) await setLeaderboardOptOut(subjectId, !users[userIndex].privacyShowAchievements);
+                if (subjectId) await setLeaderboardOptOut(subjectId, !updatedUser.privacyShowAchievements);
             } catch (syncError) {
                 log(`[privacy] achievements opt-out sync failed: ${syncError?.message || syncError}`);
             }
         }
-        await saveFile(USERS_PATH, users);
 
-        res.json({ success: true, user: sanitizeUserForApi(users[userIndex]) });
+        res.json({ success: true, user: sanitizeUserForApi(updatedUser) });
     } catch (e) {
+        if (e?.status) return res.status(e.status).json({ error: e.message });
         log(`Error updating preferences: ${e.message}`);
         res.status(500).json({ error: 'Failed to update preferences' });
     }
@@ -6110,12 +6186,24 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         ? String(mediaServerType || '').toLowerCase()
         : (existingConfig.mediaServerType || 'plex');
     const normalizedToken = normalizePlexToken(token);
-    const normalizedServerIdentifier = String(serverIdentifier).trim();
+    const normalizeServerIdentifierInput = (value) => {
+        if (value === undefined || value === null) return '';
+        const trimmed = String(value).trim();
+        if (!trimmed || /^undefined$/i.test(trimmed) || /^null$/i.test(trimmed)) return '';
+        return trimmed;
+    };
+    const incomingServerIdentifier = normalizeServerIdentifierInput(serverIdentifier);
+    const effectiveServerIdentifier = incomingServerIdentifier
+        || normalizeServerIdentifierInput(existingConfig.serverIdentifier)
+        || '';
+    const hasPlexToken = normalizedToken === SECRET_MASK
+        ? !!existingConfig.plexToken
+        : !!normalizedToken;
     const isConfigured = isPortalConfigured(existingConfig);
     const wasMaintenanceEnabled = !!existingConfig.maintenanceExperimentalEnabled;
     const wasUpgraderEnabled = !!existingConfig.upgraderEnabled;
 
-    if (normalizedMediaServerType === 'plex' && (!normalizedToken || !normalizedServerIdentifier)) {
+    if (normalizedMediaServerType === 'plex' && (!hasPlexToken || !effectiveServerIdentifier)) {
         return res.status(400).json({ error: 'Plex token and serverIdentifier are required.' });
     }
     if (normalizedMediaServerType !== 'plex' && (!jellyfinUrl || !jellyfinApiKey)) {
@@ -6144,7 +6232,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         const candidatePlexServerUrl = (plexServerUrlFromBody !== undefined
             ? String(plexServerUrlFromBody || '').trim()
             : String(existingConfig.plexServerUrl || '').trim()) || resolveConfiguredPlexServerUrl(existingConfig);
-        const verifiedPlexOwner = await verifyInitialSetupPlexOwner(normalizedToken, normalizedServerIdentifier, candidatePlexServerUrl);
+        const verifiedPlexOwner = await verifyInitialSetupPlexOwner(normalizedToken, effectiveServerIdentifier, candidatePlexServerUrl);
         if (!verifiedPlexOwner) {
             if (!SETUP_TOKEN) {
                 return res.status(403).json({ error: 'Initial setup is restricted. Sign in with the Plex server owner account, configure SETUP_TOKEN, or run setup from localhost.' });
@@ -6371,7 +6459,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         ...existingConfig,
         mediaServerType: normalizedMediaServerType,
         plexToken: normalizedMediaServerType !== 'plex' ? resolveSecret(token, existingConfig.plexToken) : resolveSecret(normalizedToken, existingConfig.plexToken),
-        serverIdentifier: normalizedMediaServerType !== 'plex' ? (normalizedServerIdentifier || existingConfig.serverIdentifier || '') : normalizedServerIdentifier,
+        serverIdentifier: effectiveServerIdentifier,
         plexServerUrl: (plexServerUrlFromBody !== undefined ? String(plexServerUrlFromBody || '').trim() : existingConfig.plexServerUrl) || '',
         jellyfinUrl: safeJellyfinUrl,
         jellyfinApiKey: resolveSecret(jellyfinApiKey, existingConfig.jellyfinApiKey),
@@ -9813,7 +9901,7 @@ app.get('/api/referral-rewards', requireAdmin, async (req, res) => {
     }
 });
 
-app.get('/api/me/referral-stats', requireAuth, async (req, res) => {
+app.get('/api/me/referral-stats', requireAuth, requireMember, async (req, res) => {
     try {
         const config = await loadFile(CONFIG_PATH, {});
         if (!config.referralEnabled) {
@@ -9860,7 +9948,7 @@ app.put('/api/onboarding', requireAdmin, async (req, res) => {
     }
 });
 
-app.get('/api/me/onboarding', requireAuth, async (req, res) => {
+app.get('/api/me/onboarding', requireAuth, requireMember, async (req, res) => {
     try {
         const config = await loadFile(CONFIG_PATH, {});
         const users = await loadFile(USERS_PATH, []);
@@ -9893,28 +9981,34 @@ app.get('/api/me/onboarding', requireAuth, async (req, res) => {
     }
 });
 
-app.post('/api/me/onboarding/complete', requireAuth, async (req, res) => {
+app.post('/api/me/onboarding/complete', requireAuth, requireMember, async (req, res) => {
     try {
         if (req.user?.isAdmin && !req.body?.preview) {
             // Admins are never gated; allow no-op complete for safety.
         }
-        const users = await loadFile(USERS_PATH, []);
-        const idx = users.findIndex((u) => findLocalUserForSession([u], req.user));
-        if (idx < 0) return res.status(404).json({ error: 'User not found' });
         const doc = normalizeOnboardingDocument(await loadFile(ONBOARDING_PATH, emptyOnboardingDocument()));
         const ackedStepIds = Array.isArray(req.body?.ackedStepIds) ? req.body.ackedStepIds : [];
         const validation = validateOnboardingCompletion(doc, ackedStepIds);
         if (!validation.ok) {
             return res.status(400).json({ error: 'Required onboarding steps are not acknowledged', missing: validation.missing });
         }
-        users[idx] = markUserOnboardingComplete(users[idx], doc, ackedStepIds);
-        await saveFile(USERS_PATH, users);
-        await appendAuditLog('onboarding_completed', req.user, users[idx], {
+        const completed = await updateUsers((users) => {
+            const idx = users.findIndex((u) => findLocalUserForSession([u], req.user));
+            if (idx < 0) {
+                const err = new Error('User not found');
+                err.status = 404;
+                throw err;
+            }
+            users[idx] = markUserOnboardingComplete(users[idx], doc, ackedStepIds);
+            return { data: users, result: users[idx] };
+        });
+        await appendAuditLog('onboarding_completed', req.user, completed, {
             version: doc.version,
             ackedStepIds,
         });
-        res.json({ success: true, account: sanitizeUserForApi(users[idx]) });
+        res.json({ success: true, account: sanitizeUserForApi(completed) });
     } catch (e) {
+        if (e?.status) return res.status(e.status).json({ error: e.message });
         res.status(500).json({ error: e.message || 'Failed to complete onboarding' });
     }
 });
@@ -15046,7 +15140,18 @@ app.post('/api/users/request-invite', requireAuth, async (req, res) => {
         return res.status(403).json({ error: 'New registrations are currently disabled.' });
     }
 
-    let users = await loadFile(USERS_PATH, []);
+    const mediaServerType = String(config.mediaServerType || 'plex').toLowerCase();
+    if (mediaServerType !== 'plex') {
+        return res.status(400).json({
+            error: 'Temporary self-registration is only available for Plex servers.',
+        });
+    }
+    const plexId = req.user?.plexId != null ? String(req.user.plexId).trim() : '';
+    if (!plexId) {
+        return res.status(400).json({ error: 'A Plex account is required to request temporary access.' });
+    }
+
+    const users = await loadFile(USERS_PATH, []);
     const existingUser = users.find(u => u.email === req.user.email || u.username === req.user.username);
     const deletedUsers = await loadFile(DELETED_USERS_PATH, []);
 
@@ -15063,7 +15168,8 @@ app.post('/api/users/request-invite', requireAuth, async (req, res) => {
     const expiryDate = addDays(new Date(), 3);
 
     const newUser = {
-        id: req.user.plexId.toString(),
+        id: plexId,
+        plexId,
         username: req.user.username,
         email: req.user.email,
         joiningDate: new Date().toISOString(),
@@ -15082,8 +15188,16 @@ app.post('/api/users/request-invite', requireAuth, async (req, res) => {
         log(`Inviting new user ${newUser.username} to server...`);
         await inviteUserToPlex(newUser, config, config.defaultLibraryIds).catch(e => log('Failed to invite trial user: ' + e.message));
 
-        users.push(newUser);
-        await saveFile(USERS_PATH, users);
+        const saved = await updateUsers((users) => {
+            if (users.find(u => u.email === req.user.email || u.username === req.user.username || String(u.id) === plexId || String(u.plexId) === plexId)) {
+                return { data: users, result: null };
+            }
+            users.push(newUser);
+            return { data: users, result: newUser };
+        });
+        if (!saved) {
+            return res.status(400).json({ error: 'You are already registered.' });
+        }
         await appendAuditLog('trial_invite_sent', req.user, newUser, { expiryDate: newUser.expiryDate });
 
         await sendWelcomeEmailToUser(config, newUser).catch((e) => log(`Welcome email after trial invite failed: ${e.message}`));
