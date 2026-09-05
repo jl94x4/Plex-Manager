@@ -441,6 +441,11 @@ const jobFinalPath = (job: MediaAutomationJob | null | undefined) => {
 };
 
 const jobStateValue = (job: MediaAutomationJob) => String(job.state || job.status || '').toLowerCase();
+const jobStatusLabel = (value: unknown, t: (key: string) => string) => {
+    const state = String(value || '').toLowerCase();
+    const key = ({ queued: 'queued', pending: 'pending', waiting: 'waiting', running: 'running', active: 'active', processing: 'processing', paused: 'paused', retrying: 'retrying', completed: 'completed', failed: 'failed', skipped: 'skipped', cancelling: 'cancelling' } as Record<string, string>)[state];
+    return key ? t(`mediaAutomation.status.jobs.${key}`) : String(value || '');
+};
 const isTerminalJob = (job: MediaAutomationJob) => (
     ['completed', 'succeeded', 'failed', 'cancelled', 'canceled', 'success'].includes(jobStateValue(job))
 );
@@ -2870,7 +2875,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 />
                                                 <div className="min-w-0">
                                                     <div className="flex flex-wrap items-center gap-2">
-                                                        <StatusPill value={cancelPending ? 'cancelling' : jobState} />
+                                                        <StatusPill value={jobStatusLabel(cancelPending ? 'cancelling' : jobState, t)} />
                                                         <HardwareBadge job={job} />
                                                         <ProfileBadge job={job} pipelines={pipelines} />
                                                         {(Array.isArray(job.metadata?.tags) ? job.metadata.tags : []).map((tag: string) => (
@@ -2879,13 +2884,13 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                         <span className="text-xs text-muted">#{jobId}</span>
                                                         {job.priority != null && <span className="text-xs text-muted">P{job.priority}</span>}
                                                         {!terminal && percent != null && <span className="text-xs font-semibold text-plex">{Math.round(percent)}%</span>}
-                                                        {!terminal && progressMeta.etaLabel && <span className="text-xs text-amber-300">ETA {progressMeta.etaLabel}</span>}
+                                                        {!terminal && progressMeta.etaLabel && <span className="text-xs text-amber-300">{t('mediaAutomation.progress.eta', { value: progressMeta.etaLabel })}</span>}
                                                         {!terminal && progressMeta.speedLabel && <span className="text-xs text-muted">{progressMeta.speedLabel}</span>}
                                                         {!terminal && progressMeta.fpsLabel && <span className="text-xs text-muted">{progressMeta.fpsLabel}</span>}
                                                     </div>
                                                     {jobHardwareInfo(job)?.fallback && (
                                                         <p className="mt-1 text-xs text-amber-300">
-                                                            Hardware fell back to CPU{jobHardwareInfo(job)?.requested ? ` (wanted ${jobHardwareInfo(job)?.requested})` : ''}. Check /dev/dri and Capabilities after Test worker.
+                                                            {t('mediaAutomation.jobs.hardwareFallback', { requested: jobHardwareInfo(job)?.requested ? ` (wanted ${jobHardwareInfo(job)?.requested})` : '' })}
                                                         </p>
                                                     )}
                                                     <p
@@ -2898,7 +2903,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                             libraryId: job.libraryId,
                                                             libraries,
                                                             libraryRoots: libraries.map((library) => library.rootPath),
-                                                        }) || 'Path not reported'}
+                                                        }) || t('mediaAutomation.jobs.pathNotReported')}
                                                     </p>
                                                     <p className="mt-1 text-xs text-muted">{formatTime(job.finishedAt || job.completedAt || job.createdAt)}</p>
                                                     {(() => {
@@ -2907,7 +2912,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                         if (outcome.skipped) {
                                                             return (
                                                                 <p className="mt-1 text-xs font-semibold text-amber-300">
-                                                                    Skipped: {formatSkipReasonLabel(outcome.skipReason)}
+                                                                    {t('mediaAutomation.progress.skipped', { reason: formatSkipReasonLabel(outcome.skipReason) })}
                                                                 </p>
                                                             );
                                                         }
@@ -2918,7 +2923,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                                 {outcome.savedLine && (
                                                                     <span className="text-emerald-300">
                                                                         {parts.length ? ' · ' : ''}
-                                                                        saved {outcome.savedLine}
+                                                                        {t('mediaAutomation.progress.saved', { value: outcome.savedLine })}
                                                                         {outcome.savingsPercent != null && outcome.savingsPercent > 0
                                                                             ? ` (${outcome.savingsPercent}%)`
                                                                             : ''}
@@ -2928,10 +2933,10 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                         );
                                                     })()}
                                                     {!terminal && progressMeta.elapsedLabel && (
-                                                        <p className="mt-1 text-xs text-muted">Encoded {progressMeta.elapsedLabel}</p>
+                                                        <p className="mt-1 text-xs text-muted">{t('mediaAutomation.progress.encoded', { value: progressMeta.elapsedLabel })}</p>
                                                     )}
                                                     {isActive && percent == null && (
-                                                        <p className="mt-1 text-xs text-amber-300">Encoding started - waiting for first FFmpeg progress update…</p>
+                                                        <p className="mt-1 text-xs text-amber-300">{t('mediaAutomation.progress.waitingForProgress')}</p>
                                                     )}
                                                     {dryRunJob && ['completed', 'succeeded', 'success'].includes(state) && (
                                                         <p className="mt-1 text-xs text-amber-300">{jobDryRunReason(job)}</p>
