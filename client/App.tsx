@@ -44,6 +44,7 @@ const ChatRoom = lazy(() => import('./chat/ChatRoom').then(m => ({ default: m.Ch
 const OpenAppletsHost = lazy(() => import('./custom/CustomExternalTabPage').then(m => ({ default: m.OpenAppletsHost })));
 const PreferencesPage = lazy(() => import('./preferences/PreferencesPage').then(m => ({ default: m.PreferencesPage })));
 const ProfilePage = lazy(() => import('./profile/ProfilePage').then(m => ({ default: m.ProfilePage })));
+const DiscoveryDashboard = lazy(() => import('./discovery/DiscoveryDashboard').then(m => ({ default: m.DiscoveryDashboard })));
 import {
     updateFavicon,
     Login,
@@ -60,7 +61,6 @@ import {
     UserDashboard,
     Navigation,
 } from './screens';
-import { DiscoveryDashboard } from './discovery/DiscoveryDashboard';
 import { canAccessCustomNavTab } from './shared/customNavTabs';
 import { closeOpenApplet, clearStoredOpenApplets, nextAppletAfterClose, readStoredOpenApplets, upsertOpenApplet, writeStoredOpenApplets, type OpenAppletSession } from './shared/openApplets';
 import {
@@ -982,28 +982,32 @@ export const MainApp: React.FC = () => {
         if (currentRoute === 'requests' && isAdmin) {
             // Keep legacy route id working by rendering Discover on the queue tab.
             return (
-                <DiscoveryDashboard
-                    onItemClick={(item) => console.log('Item', item)}
-                    mediaServerType={sessionInfo?.mediaServerType || publicConfig?.mediaServerType || 'plex'}
-                    isAdmin={isAdmin}
-                    showReviewQueue={requestsQueueEnabled}
-                    queueBadgeCount={queueBadgeCount}
-                    openIssueCount={openIssueCount}
-                    onQueueCountsChange={refreshQueueCounts}
-                />
+                <Suspense fallback={<Loader isLoading={true} isCinematic={!!publicConfig?.useCinematicLoading} />}>
+                    <DiscoveryDashboard
+                        onItemClick={(item) => console.log('Item', item)}
+                        mediaServerType={sessionInfo?.mediaServerType || publicConfig?.mediaServerType || 'plex'}
+                        isAdmin={isAdmin}
+                        showReviewQueue={requestsQueueEnabled}
+                        queueBadgeCount={queueBadgeCount}
+                        openIssueCount={openIssueCount}
+                        onQueueCountsChange={refreshQueueCounts}
+                    />
+                </Suspense>
             );
         }
         if (currentRoute === 'discovery') {
             return (
-                <DiscoveryDashboard
-                    onItemClick={(item) => console.log('Item', item)}
-                    mediaServerType={sessionInfo?.mediaServerType || publicConfig?.mediaServerType || 'plex'}
-                    isAdmin={isAdmin}
-                    showReviewQueue={requestsQueueEnabled}
-                    queueBadgeCount={queueBadgeCount}
-                    openIssueCount={openIssueCount}
-                    onQueueCountsChange={refreshQueueCounts}
-                />
+                <Suspense fallback={<Loader isLoading={true} isCinematic={!!publicConfig?.useCinematicLoading} />}>
+                    <DiscoveryDashboard
+                        onItemClick={(item) => console.log('Item', item)}
+                        mediaServerType={sessionInfo?.mediaServerType || publicConfig?.mediaServerType || 'plex'}
+                        isAdmin={isAdmin}
+                        showReviewQueue={requestsQueueEnabled}
+                        queueBadgeCount={queueBadgeCount}
+                        openIssueCount={openIssueCount}
+                        onQueueCountsChange={refreshQueueCounts}
+                    />
+                </Suspense>
             );
         }
         if (currentRoute === 'logs' && isAdmin) return <LogsDashboard onLogout={handleLogout} />;

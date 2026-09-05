@@ -2396,6 +2396,24 @@ const checkAndSendNotifications = async (config) => {
 
 // --- File I/O ---
 const fileLocks = new Map();
+/** Short TTL for hot JSON reads; invalidated on every write in this process. */
+const HOT_FILE_CACHE_TTL_MS = 2000;
+const hotFileCache = createTtlLruCache({
+    maxEntries: 32,
+    defaultTtlMs: HOT_FILE_CACHE_TTL_MS,
+    name: 'hot-json-files',
+});
+const HOT_CACHED_PATHS = new Set([USERS_PATH, CONFIG_PATH].filter(Boolean));
+const jellyfinAdminPolicyCache = createTtlLruCache({
+    maxEntries: 256,
+    defaultTtlMs: 45_000,
+    name: 'jellyfin-admin-policy',
+});
+
+const invalidateHotFileCache = (filePath) => {
+    if (filePath) hotFileCache.delete(String(filePath));
+    if (String(filePath) === String(CONFIG_PATH)) jellyfinAdminPolicyCache.clear();
+};
 
 const lockFile = async (path) => {
     while (fileLocks.get(path)) {
@@ -2441,14 +2459,29 @@ const writeFileUnlocked = async (path, data) => {
     const tempPath = `${path}.tmp`;
     await fs.writeFile(tempPath, JSON.stringify(data, null, 2));
     await fs.rename(tempPath, path);
+    invalidateHotFileCache(path);
 };
 
-const loadFile = async (path, defaultContent) => (
-    withFileLock(path, () => readFileUnlocked(path, defaultContent))
-);
+const loadFile = async (path, defaultContent) => {
+    const cacheKey = String(path || '');
+    if (HOT_CACHED_PATHS.has(cacheKey)) {
+        const cached = hotFileCache.get(cacheKey);
+        if (cached !== undefined) return cached;
+    }
+    const data = await withFileLock(path, () => readFileUnlocked(path, defaultContent));
+    if (HOT_CACHED_PATHS.has(cacheKey) && data !== null && data !== undefined) {
+        hotFileCache.set(cacheKey, data, HOT_FILE_CACHE_TTL_MS);
+    }
+    return data;
+};
 
 const saveFile = async (path, data) => (
-    withFileLock(path, () => writeFileUnlocked(path, data))
+    withFileLock(path, async () => {
+        await writeFileUnlocked(path, data);
+        if (HOT_CACHED_PATHS.has(String(path))) {
+            hotFileCache.set(String(path), data, HOT_FILE_CACHE_TTL_MS);
+        }
+    })
 );
 
 /** Hold the file lock across read → mutate → write to avoid lost updates. */
@@ -2458,9 +2491,15 @@ const updateFile = async (path, defaultContent, mutator) => (
         const outcome = await mutator(current);
         if (outcome && typeof outcome === 'object' && Object.prototype.hasOwnProperty.call(outcome, 'data')) {
             await writeFileUnlocked(path, outcome.data);
+            if (HOT_CACHED_PATHS.has(String(path))) {
+                hotFileCache.set(String(path), outcome.data, HOT_FILE_CACHE_TTL_MS);
+            }
             return outcome.result !== undefined ? outcome.result : outcome.data;
         }
         await writeFileUnlocked(path, outcome);
+        if (HOT_CACHED_PATHS.has(String(path))) {
+            hotFileCache.set(String(path), outcome, HOT_FILE_CACHE_TTL_MS);
+        }
         return outcome;
     })
 );
@@ -2920,6 +2959,9 @@ const resolveCurrentAdmin = async (sessionUser, config = null) => {
     if (mediaServerType === 'jellyfin' || mediaServerType === 'emby') {
         if (sessionUser?.authProvider !== 'jellyfin' || !sessionUser?.jellyfinId) return false;
         if (loadedConfig?.jellyfinUrl && loadedConfig?.jellyfinApiKey) {
+            const cacheKey = `${mediaServerType}:${loadedConfig.jellyfinUrl}:${sessionUser.jellyfinId}`;
+            const cached = jellyfinAdminPolicyCache.get(cacheKey);
+            if (cached !== undefined) return !!cached;
             try {
                 const baseUrl = resolveIntegrationUrlForFetch(loadedConfig.jellyfinUrl);
                 const userRes = await fetch(`${baseUrl}/Users/${encodeURIComponent(sessionUser.jellyfinId)}`, {
@@ -2927,10 +2969,13 @@ const resolveCurrentAdmin = async (sessionUser, config = null) => {
                 });
                 if (userRes.ok) {
                     const jellyfinUser = await userRes.json();
-                    return jellyfinUser?.Policy?.IsAdministrator === true;
+                    const isAdmin = jellyfinUser?.Policy?.IsAdministrator === true;
+                    jellyfinAdminPolicyCache.set(cacheKey, isAdmin);
+                    return isAdmin;
                 }
                 // Fail closed when Jellyfin responds but user lookup fails — do not trust JWT claims.
                 log(`Jellyfin admin policy check HTTP ${userRes.status} for ${sessionUser.username || sessionUser.jellyfinId}`);
+                jellyfinAdminPolicyCache.set(cacheKey, false, 15_000);
                 return false;
             } catch (e) {
                 log(`${mediaServerType === 'emby' ? 'Emby' : 'Jellyfin'} admin policy check failed for ${sessionUser.username || sessionUser.jellyfinId}: ${e.message}`);
@@ -5332,7 +5377,7 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
     const isJellyfinPortal = ['jellyfin', 'emby'].includes(mediaServerType);
     let serverName = isJellyfinPortal ? `${mediaServerLabel} Server` : 'Plex Server';
     let adminThumb = null;
-    let sessionThumb = req.user.thumb || null;
+    let sessionThumb = req.user.thumb || localUser?.thumb || null;
     let requestUrl = config.requestUrl || 'https://yourdomain.com';
     if ((requestUrl === 'https://yourdomain.com' || !requestUrl) && config.requestAppUrl) {
         requestUrl = config.requestAppUrl;
@@ -5371,13 +5416,18 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
     }
     try {
         if (isJellyfinPortal && config?.jellyfinUrl && config?.jellyfinApiKey) {
-            const profile = await getAdminProfile(config);
-            serverName = profile.serverName || `${mediaServerLabel} Server`;
+            if (String(config.serverName || '').trim()) {
+                serverName = String(config.serverName).trim();
+            } else {
+                const profile = await getAdminProfile(config);
+                serverName = profile.serverName || `${mediaServerLabel} Server`;
+            }
         } else if (config && config.plexToken && config.serverIdentifier) {
             const profile = await getAdminProfile(config);
-            serverName = profile.serverName || 'Plex Server';
+            serverName = String(config.serverName || '').trim() || profile.serverName || 'Plex Server';
             adminThumb = profile.thumb;
 
+            // Skip Plex /accounts fan-out when session or portal user already has a thumb.
             if (!sessionThumb) {
                 const uri = await getPlexConnectionUri(config);
                 if (uri) {
@@ -10566,7 +10616,11 @@ const getPortalRequestService = (config) => createPortalRequestService({
     resolveUser: async (userId) => {
         const users = await loadFile(USERS_PATH, []);
         const key = String(userId || '');
-        return users.find((user) => String(user?.id) === key || String(user?.plexId) === key) || null;
+        return users.find((user) => (
+            String(user?.id) === key
+            || String(user?.plexId) === key
+            || String(user?.jellyfinId) === key
+        )) || null;
     },
     isBlocked: async (mediaType, tmdbId) => {
         const blocklist = getPortalBlocklistService(config);
