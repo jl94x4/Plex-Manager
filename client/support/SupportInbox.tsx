@@ -769,19 +769,21 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                                                             </div>
                                                         </div>
                                                     ) : (
-                                                        <div
-                                                            className={`mt-0.5 rounded-2xl px-3 py-1.5 ${
-                                                                mine
-                                                                    ? 'rounded-bl-md border border-white/10 bg-white/5'
-                                                                    : 'rounded-br-md border border-plex/25 bg-plex/10'
-                                                            }`}
-                                                            title={comment.createdAt ? formatDateTime(comment.createdAt) : undefined}
-                                                        >
+                                                        <>
                                                             {comment.message ? (
-                                                                <p className="text-sm text-text whitespace-pre-wrap">{comment.message}</p>
+                                                                <div
+                                                                    className={`mt-0.5 rounded-2xl px-3 py-1.5 ${
+                                                                        mine
+                                                                            ? 'rounded-bl-md border border-white/10 bg-white/5'
+                                                                            : 'rounded-br-md border border-plex/25 bg-plex/10'
+                                                                    }`}
+                                                                    title={comment.createdAt ? formatDateTime(comment.createdAt) : undefined}
+                                                                >
+                                                                    <p className="text-sm text-text whitespace-pre-wrap">{comment.message}</p>
+                                                                </div>
                                                             ) : null}
                                                             {Array.isArray(comment.attachments) && comment.attachments.length > 0 && (
-                                                                <div className={`grid gap-2 ${comment.message ? 'mt-2' : ''} ${comment.attachments.length > 1 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                                                                <div className={`flex flex-wrap gap-1.5 ${comment.message ? 'mt-1' : 'mt-0.5'} ${mine ? '' : 'justify-end'}`}>
                                                                     {comment.attachments.map((attachment) => {
                                                                         const src = attachment.url?.startsWith('/api/')
                                                                             ? portalUrl(attachment.url)
@@ -791,12 +793,13 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                                                                                 key={attachment.id}
                                                                                 type="button"
                                                                                 onClick={() => setLightboxUrl(src)}
-                                                                                className="max-w-[50%] overflow-hidden rounded-xl border border-white/10 bg-black/20 text-left"
+                                                                                className="overflow-hidden rounded-lg border border-white/10 p-0 leading-none"
+                                                                                title={comment.createdAt && !comment.message ? formatDateTime(comment.createdAt) : undefined}
                                                                             >
                                                                                 <img
                                                                                     src={src}
                                                                                     alt={attachment.filename || t('support.attachments.imageAlt')}
-                                                                                    className="max-h-28 w-full object-cover"
+                                                                                    className="block h-28 w-auto max-w-[12rem] object-cover"
                                                                                     loading="lazy"
                                                                                 />
                                                                             </button>
@@ -804,7 +807,7 @@ export const SupportInbox: React.FC<{ sessionInfo?: any; onCountsChange?: () => 
                                                                     })}
                                                                 </div>
                                                             )}
-                                                        </div>
+                                                        </>
                                                     )}
                                                     <div className={`mt-0.5 flex flex-wrap items-center gap-1 ${mine ? '' : 'flex-row-reverse'}`}>
                                                         {(comment.reactions || []).map((reaction) => (
