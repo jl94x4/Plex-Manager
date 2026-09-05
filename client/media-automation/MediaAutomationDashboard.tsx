@@ -38,6 +38,8 @@ import { ModalPortal } from '../shared/ModalPortal';
 import { askConfirm } from '../shared/confirm';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { portalUrl } from '../shared/basePath';
+import { useDiscoverI18n } from '../discovery/i18n';
+import type { DiscoverTranslate } from '../discovery/i18n/types';
 import {
     DashboardHero,
     DashboardPageShell,
@@ -324,13 +326,15 @@ const jobQueueOutcomeSummary = (job: MediaAutomationJob | null | undefined) => {
 };
 
 /** Source → output size for persisted history rows. */
-const historySizeSummary = (entry: { sourceBytes?: number; outputBytes?: number; bytesSaved?: number }) => {
+const historySizeSummary = (entry: { sourceBytes?: number; outputBytes?: number; bytesSaved?: number }, t: DiscoverTranslate) => {
     const sourceBytes = Number(entry.sourceBytes || 0);
     const outputBytes = Number(entry.outputBytes || 0);
     const savedBytes = Number(entry.bytesSaved) || (sourceBytes > 0 && outputBytes > 0 ? Math.max(0, sourceBytes - outputBytes) : 0);
     const sizeLine = sourceBytes > 0 && outputBytes > 0
         ? `${formatMediaBytes(sourceBytes)} → ${formatMediaBytes(outputBytes)}`
-        : (sourceBytes > 0 ? `${formatMediaBytes(sourceBytes)} in` : (outputBytes > 0 ? `${formatMediaBytes(outputBytes)} out` : null));
+        : (sourceBytes > 0
+            ? t('mediaAutomation.history.sizeIn', { value: formatMediaBytes(sourceBytes) })
+            : (outputBytes > 0 ? t('mediaAutomation.history.sizeOut', { value: formatMediaBytes(outputBytes) }) : null));
     if (!sizeLine) return null;
     const savedLine = savedBytes > 0 ? formatMediaBytes(savedBytes) : null;
     const savingsPercent = sourceBytes > 0 && outputBytes > 0 && savedBytes > 0
@@ -440,6 +444,11 @@ const jobFinalPath = (job: MediaAutomationJob | null | undefined) => {
 };
 
 const jobStateValue = (job: MediaAutomationJob) => String(job.state || job.status || '').toLowerCase();
+const jobStatusLabel = (value: unknown, t: (key: string) => string) => {
+    const state = String(value || '').toLowerCase();
+    const key = ({ queued: 'queued', pending: 'pending', waiting: 'waiting', running: 'running', active: 'active', processing: 'processing', paused: 'paused', retrying: 'retrying', completed: 'completed', failed: 'failed', skipped: 'skipped', cancelling: 'cancelling' } as Record<string, string>)[state];
+    return key ? t(`mediaAutomation.status.jobs.${key}`) : String(value || '');
+};
 const isTerminalJob = (job: MediaAutomationJob) => (
     ['completed', 'succeeded', 'failed', 'cancelled', 'canceled', 'success'].includes(jobStateValue(job))
 );
@@ -1073,6 +1082,7 @@ const EditorShell: React.FC<{ title: string; onClose: () => void; onSave: () => 
 );
 
 export const MediaAutomationDashboard: React.FC = () => {
+    const { t } = useDiscoverI18n();
     const [tab, setTab] = useState<MediaAutomationTab>(() => parseMediaAutomationTab());
     const [status, setStatus] = useState<MediaAutomationStatus>({});
     const [capabilities, setCapabilities] = useState<MediaAutomationCapabilities>({});
@@ -1268,7 +1278,7 @@ export const MediaAutomationDashboard: React.FC = () => {
             toast(success);
             await load(true);
         } catch (error) {
-            toast(error instanceof Error ? error.message : 'Media automation request failed', 'error');
+            toast(error instanceof Error ? error.message : t('mediaAutomation.errors.requestFailed'), 'error');
         } finally {
             setBusy(null);
         }
@@ -1852,14 +1862,14 @@ export const MediaAutomationDashboard: React.FC = () => {
     };
 
     const tabs: Array<{ id: MediaAutomationTab; label: string; icon: React.ComponentType<{ className?: string }> }> = [
-        { id: 'overview', label: 'Overview', icon: Gauge },
-        { id: 'queue', label: 'Queue', icon: ListRestart },
-        { id: 'pipelines', label: 'Pipelines', icon: Layers3 },
-        { id: 'libraries', label: 'Libraries', icon: FolderCog },
-        { id: 'analyzer', label: 'Analyzer', icon: ScanSearch },
-        { id: 'history', label: 'History', icon: History },
-        { id: 'system', label: 'System', icon: ServerCog },
-        { id: 'activity', label: 'Activity', icon: Activity },
+        { id: 'overview', label: t('mediaAutomation.tabs.overview'), icon: Gauge },
+        { id: 'queue', label: t('mediaAutomation.tabs.queue'), icon: ListRestart },
+        { id: 'pipelines', label: t('mediaAutomation.tabs.pipelines'), icon: Layers3 },
+        { id: 'libraries', label: t('mediaAutomation.tabs.libraries'), icon: FolderCog },
+        { id: 'analyzer', label: t('mediaAutomation.tabs.analyzer'), icon: ScanSearch },
+        { id: 'history', label: t('mediaAutomation.tabs.history'), icon: History },
+        { id: 'system', label: t('mediaAutomation.tabs.system'), icon: ServerCog },
+        { id: 'activity', label: t('mediaAutomation.tabs.activity'), icon: Activity },
     ];
 
     const activeSkipPreview = scanPreview || status?.lastScanResult || null;
@@ -1880,9 +1890,9 @@ export const MediaAutomationDashboard: React.FC = () => {
             <ToastContainer toasts={toasts} setToasts={setToasts} />
             <DashboardHero
                 accent="sky"
-                eyebrow="Media Automation"
-                title="Encode with control"
-                description="Native FFmpeg pipelines for remux, HEVC, and cleanup — with a durable queue, hardware lanes, and safe dry-run until you are ready to encode."
+                eyebrow={t('navigation.mediaAutomation')}
+                title={t('mediaAutomation.hero.title')}
+                description={t('mediaAutomation.hero.description')}
                 icon={<ServerCog className="h-3.5 w-3.5" />}
                 secondaryBlob
                 actions={(
@@ -1890,7 +1900,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                         <StatusPill value={workerStatusLabel(status)} size="md" />
                         {status.quietHoursActive && (
                             <span className="inline-flex items-center justify-center rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm font-semibold uppercase tracking-wide text-sky-200">
-                                Quiet hours
+                                {t('mediaAutomation.status.quietHours')}
                             </span>
                         )}
                         {status.streamingPauseActive && (
@@ -1899,7 +1909,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                             </span>
                         )}
                         <button type="button" className={buttonClass} onClick={() => load(true)} disabled={refreshing}>
-                            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
+                            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> {t('mediaAutomation.common.refresh')}
                         </button>
                     </>
                 )}
@@ -1994,88 +2004,88 @@ export const MediaAutomationDashboard: React.FC = () => {
                     )}
                     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                         <StatCard
-                            label="Queued"
+                            label={t('mediaAutomation.stats.queued')}
                             value={asText(status.queuedJobs ?? queueCounts.queued, '0')}
-                            hint="Waiting in lane"
+                            hint={t('mediaAutomation.stats.waitingInLane')}
                             icon={<ListRestart className="h-4 w-4 text-amber-200" />}
                             tone="border-amber-400/30 bg-amber-500/10 text-amber-100"
                         />
                         <StatCard
-                            label="Processing"
+                            label={t('mediaAutomation.stats.processing')}
                             value={asText(status.activeJobs ?? queueCounts.active, '0')}
-                            hint="Active encodes"
+                            hint={t('mediaAutomation.stats.activeEncodes')}
                             icon={<Loader2 className="h-4 w-4 text-sky-200" />}
                             tone="border-sky-400/30 bg-sky-500/10 text-sky-100"
                         />
                         <StatCard
-                            label="Completed"
+                            label={t('mediaAutomation.stats.completed')}
                             value={asText(status.completedJobs ?? queueCounts.completed, '0')}
-                            hint="History (all time)"
+                            hint={t('mediaAutomation.stats.historyAllTime')}
                             icon={<CheckCircle2 className="h-4 w-4 text-emerald-200" />}
                             tone="border-emerald-400/30 bg-emerald-500/10 text-emerald-100"
                         />
                         <StatCard
-                            label="Failed"
+                            label={t('mediaAutomation.stats.failed')}
                             value={asText(status.failedJobs ?? queueCounts.failed, '0')}
-                            hint="History (all time)"
+                            hint={t('mediaAutomation.stats.historyAllTime')}
                             icon={<AlertTriangle className="h-4 w-4 text-red-200" />}
                             tone="border-red-400/30 bg-red-500/10 text-red-100"
                         />
                     </div>
                     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                         <StatCard
-                            label="Processed 24h"
+                            label={t('mediaAutomation.stats.processed24h')}
                             value={asText(status.metrics?.processed24h ?? 0, '0')}
-                            hint="History · last day"
+                            hint={t('mediaAutomation.stats.historyLastDay')}
                             icon={<Gauge className="h-4 w-4 text-emerald-200" />}
                             tone="border-white/10 bg-white/[0.03] text-text"
                         />
                         <StatCard
-                            label="Failed 24h"
+                            label={t('mediaAutomation.stats.failed24h')}
                             value={asText(status.metrics?.failed24h ?? 0, '0')}
-                            hint="History · last day"
+                            hint={t('mediaAutomation.stats.historyLastDay')}
                             icon={<AlertTriangle className="h-4 w-4 text-red-200" />}
                             tone="border-white/10 bg-white/[0.03] text-text"
                         />
                         <StatCard
-                            label="Success rate"
+                            label={t('mediaAutomation.stats.successRate')}
                             value={status.metrics?.successRate24h == null ? '-' : `${status.metrics.successRate24h}%`}
-                            hint="History · last 24h"
+                            hint={t('mediaAutomation.stats.historyLast24h')}
                             icon={<CheckCircle2 className="h-4 w-4 text-plex" />}
                             tone="border-plex/30 bg-plex/10 text-text"
                         />
                         <StatCard
-                            label="Bytes out"
+                            label={t('mediaAutomation.stats.bytesOut')}
                             value={formatBytes(status.metrics?.bytesOut24h)}
-                            hint="History · last 24h"
+                            hint={t('mediaAutomation.stats.historyLast24h')}
                             icon={<ServerCog className="h-4 w-4 text-sky-200" />}
                             tone="border-white/10 bg-white/[0.03] text-text"
                         />
                         <StatCard
-                            label="Bytes saved"
+                            label={t('mediaAutomation.stats.bytesSaved')}
                             value={formatBytes(status.metrics?.bytesSaved24h)}
-                            hint="History · last 24h"
+                            hint={t('mediaAutomation.stats.historyLast24h')}
                             icon={<CheckCircle2 className="h-4 w-4 text-emerald-200" />}
                             tone="border-emerald-500/30 bg-emerald-500/10 text-text"
                         />
                         <StatCard
-                            label="Encode time"
+                            label={t('mediaAutomation.stats.encodeTime')}
                             value={formatDurationSeconds(Math.round(Number(status.metrics?.encodeMs24h || 0) / 1000)) || '0s'}
-                            hint="History · last 24h"
+                            hint={t('mediaAutomation.stats.historyLast24h')}
                             icon={<Gauge className="h-4 w-4 text-plex" />}
                             tone="border-white/10 bg-white/[0.03] text-text"
                         />
                         <StatCard
-                            label="Saved 7d"
+                            label={t('mediaAutomation.stats.saved7d')}
                             value={formatBytes(status.metrics?.bytesSaved7d ?? status.savings?.['7d']?.bytesSaved)}
-                            hint="History aggregate"
+                            hint={t('mediaAutomation.stats.historyAggregate')}
                             icon={<CheckCircle2 className="h-4 w-4 text-emerald-200" />}
                             tone="border-emerald-500/30 bg-emerald-500/10 text-text"
                         />
                         <StatCard
-                            label="Saved 30d"
+                            label={t('mediaAutomation.stats.saved30d')}
                             value={formatBytes(status.metrics?.bytesSaved30d ?? status.savings?.['30d']?.bytesSaved)}
-                            hint="History aggregate"
+                            hint={t('mediaAutomation.stats.historyAggregate')}
                             icon={<History className="h-4 w-4 text-sky-200" />}
                             tone="border-sky-500/30 bg-sky-500/10 text-text"
                         />
@@ -2578,7 +2588,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                             const sample = String(match?.samplePath || '').trim();
                                             if (sample) setEnqueuePath(sample);
                                         }}
-                                        options={[{ value: '', label: 'Automatic pipeline' }, ...pipelines.map((pipeline) => ({ value: String(pipeline.id ?? ''), label: pipeline.name }))]}
+                                        options={[{ value: '', label: t('mediaAutomation.queue.automaticPipeline') }, ...pipelines.map((pipeline) => ({ value: String(pipeline.id ?? ''), label: pipeline.name }))]}
                                     />
                                     <button
                                         type="button"
@@ -2590,22 +2600,22 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         }}
                                     >
                                         {busy?.startsWith('queue-sample-') ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                                        Queue sample
+                                        {t('mediaAutomation.queue.queueSample')}
                                     </button>
                                     <button type="button" className={primaryButtonClass} disabled={!enqueuePath.trim() || busy !== null} onClick={() => runAction('enqueue', () => mediaAutomationApi.enqueue(enqueuePath.trim(), enqueuePipelineId || undefined), 'Path added to queue.').then(() => setEnqueuePath(''))}>
-                                        {busy === 'enqueue' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Enqueue
+                                        {busy === 'enqueue' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} {t('mediaAutomation.queue.enqueue')}
                                     </button>
                                 </div>
-                                <p className="text-xs text-muted">Pick a pipeline with a saved sample file to auto-fill the path, or use Queue sample for one click.</p>
+                                <p className="text-xs text-muted">{t('mediaAutomation.queue.sampleHint')}</p>
                             </div>
                         </section>
                     </div>
                     {jobs.length === 0 ? (
                         <EmptyState
                             icon={ListRestart}
-                            title="Queue is empty"
-                            detail="Enqueue a path, run Scan now, or wait for the library watcher to discover matching media."
-                            actionLabel="Scan now"
+                            title={t('mediaAutomation.queue.emptyTitle')}
+                            detail={t('mediaAutomation.queue.emptyDetail')}
+                            actionLabel={t('mediaAutomation.queue.scanNow')}
                             onAction={() => void runScanNow()}
                         />
                     ) : (
@@ -2619,14 +2629,14 @@ export const MediaAutomationDashboard: React.FC = () => {
                                             onClick={() => selectQueueViewFilter('all')}
                                             aria-pressed={queueViewFilter === 'all'}
                                         >
-                                            All
+                                            {t('mediaAutomation.queue.all')}
                                         </button>
                                         {([
-                                            ['active', 'Active', queueCounts.active],
-                                            ['queued', 'Queued', queueCounts.queued],
-                                            ['dry-run', 'Dry-run', queueCounts.dryRun],
-                                            ['failed', 'Failed', queueCounts.failed],
-                                            ['completed', 'Completed', queueCounts.completed],
+                                            ['active', t('mediaAutomation.queue.active'), queueCounts.active],
+                                            ['queued', t('mediaAutomation.queue.queued'), queueCounts.queued],
+                                            ['dry-run', t('mediaAutomation.queue.dryRun'), queueCounts.dryRun],
+                                            ['failed', t('mediaAutomation.queue.failed'), queueCounts.failed],
+                                            ['completed', t('mediaAutomation.queue.completed'), queueCounts.completed],
                                         ] as const).map(([id, label, count]) => (
                                             <button
                                                 key={id}
@@ -2640,12 +2650,12 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         ))}
                                     </div>
                                     <label className="relative block w-full lg:max-w-xs">
-                                        <span className="sr-only">Search queue</span>
+                                        <span className="sr-only">{t('mediaAutomation.queue.search')}</span>
                                         <input
                                             className={`${fieldClass} pl-3`}
                                             value={queueSearch}
                                             onChange={(event) => setQueueSearch(event.target.value)}
-                                            placeholder="Search path or pipeline…"
+                                            placeholder={t('mediaAutomation.queue.searchPlaceholder')}
                                         />
                                     </label>
                                 </div>
@@ -2656,7 +2666,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         value={queueLibraryFilter}
                                         onChange={setQueueLibraryFilter}
                                         options={[
-                                            { value: '', label: 'All libraries' },
+                                            { value: '', label: t('mediaAutomation.queue.allLibraries') },
                                             ...queueLibraryOptions.map(([id, name]) => ({ value: id, label: name })),
                                         ]}
                                     />
@@ -2666,7 +2676,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         value={queuePipelineFilter}
                                         onChange={setQueuePipelineFilter}
                                         options={[
-                                            { value: '', label: 'All pipelines' },
+                                            { value: '', label: t('mediaAutomation.queue.allPipelines') },
                                             ...queuePipelineOptions.map(([id, name]) => ({ value: id, label: name })),
                                         ]}
                                     />
@@ -2674,11 +2684,11 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         className="appearance-none text-[16px] leading-5 w-full sm:max-w-xs rounded-lg border border-white/10 bg-background/70 px-3 py-2 text-[16px] text-text placeholder:text-muted/60 outline-none transition focus:border-plex focus:ring-1 focus:ring-plex"
                                         value={queueErrorFilter}
                                         onChange={(event) => setQueueErrorFilter(event.target.value)}
-                                        placeholder="Filter by error text…"
+                                        placeholder={t('mediaAutomation.queue.errorFilterPlaceholder')}
                                     />
                                     <label className="flex items-center gap-2 text-xs font-semibold text-muted">
-                                        <span className="whitespace-nowrap" title="Show paths relative to the library root (Sonarr-style)">
-                                            Relative paths
+                                        <span className="whitespace-nowrap" title={t('mediaAutomation.queue.relativePathsHint')}>
+                                            {t('mediaAutomation.queue.relativePaths')}
                                         </span>
                                         <SettingsSwitch
                                             checked={relativePaths}
@@ -2693,7 +2703,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         />
                                     </label>
                                     <label className="flex items-center gap-2 text-xs font-semibold text-muted sm:ml-auto">
-                                        <span className="whitespace-nowrap">Per page</span>
+                                        <span className="whitespace-nowrap">{t('mediaAutomation.queue.perPage')}</span>
                                         <CustomSelect
                                             compact
                                             className="min-w-[5.5rem]"
@@ -2833,7 +2843,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                             </section>
                             {filteredJobs.length === 0 ? (
                                 <div className={`${panelClass} p-6 text-center text-sm text-muted`}>
-                                    No jobs match this filter{queueSearch.trim() || queueLibraryFilter || queuePipelineFilter || queueErrorFilter.trim() ? ' / filters' : ''}.
+                                    {t('mediaAutomation.queue.noMatches', { filters: queueSearch.trim() || queueLibraryFilter || queuePipelineFilter || queueErrorFilter.trim() ? t('mediaAutomation.queue.filtersSuffix') : '' })}
                                 </div>
                             ) : (
                                 <>
@@ -2868,7 +2878,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 />
                                                 <div className="min-w-0">
                                                     <div className="flex flex-wrap items-center gap-2">
-                                                        <StatusPill value={cancelPending ? 'cancelling' : jobState} />
+                                                        <StatusPill value={jobStatusLabel(cancelPending ? 'cancelling' : jobState, t)} />
                                                         <HardwareBadge job={job} />
                                                         <ProfileBadge job={job} pipelines={pipelines} />
                                                         {(Array.isArray(job.metadata?.tags) ? job.metadata.tags : []).map((tag: string) => (
@@ -2877,13 +2887,13 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                         <span className="text-xs text-muted">#{jobId}</span>
                                                         {job.priority != null && <span className="text-xs text-muted">P{job.priority}</span>}
                                                         {!terminal && percent != null && <span className="text-xs font-semibold text-plex">{Math.round(percent)}%</span>}
-                                                        {!terminal && progressMeta.etaLabel && <span className="text-xs text-amber-300">ETA {progressMeta.etaLabel}</span>}
+                                                        {!terminal && progressMeta.etaLabel && <span className="text-xs text-amber-300">{t('mediaAutomation.progress.eta', { value: progressMeta.etaLabel })}</span>}
                                                         {!terminal && progressMeta.speedLabel && <span className="text-xs text-muted">{progressMeta.speedLabel}</span>}
                                                         {!terminal && progressMeta.fpsLabel && <span className="text-xs text-muted">{progressMeta.fpsLabel}</span>}
                                                     </div>
                                                     {jobHardwareInfo(job)?.fallback && (
                                                         <p className="mt-1 text-xs text-amber-300">
-                                                            Hardware fell back to CPU{jobHardwareInfo(job)?.requested ? ` (wanted ${jobHardwareInfo(job)?.requested})` : ''}. Check /dev/dri and Capabilities after Test worker.
+                                                            {t('mediaAutomation.jobs.hardwareFallback', { requested: jobHardwareInfo(job)?.requested ? ` (wanted ${jobHardwareInfo(job)?.requested})` : '' })}
                                                         </p>
                                                     )}
                                                     <p
@@ -2896,7 +2906,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                             libraryId: job.libraryId,
                                                             libraries,
                                                             libraryRoots: libraries.map((library) => library.rootPath),
-                                                        }) || 'Path not reported'}
+                                                        }) || t('mediaAutomation.jobs.pathNotReported')}
                                                     </p>
                                                     <p className="mt-1 text-xs text-muted">{formatTime(job.finishedAt || job.completedAt || job.createdAt)}</p>
                                                     {(() => {
@@ -2905,7 +2915,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                         if (outcome.skipped) {
                                                             return (
                                                                 <p className="mt-1 text-xs font-semibold text-amber-300">
-                                                                    Skipped: {formatSkipReasonLabel(outcome.skipReason)}
+                                                                    {t('mediaAutomation.progress.skipped', { reason: formatSkipReasonLabel(outcome.skipReason) })}
                                                                 </p>
                                                             );
                                                         }
@@ -2916,7 +2926,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                                 {outcome.savedLine && (
                                                                     <span className="text-emerald-300">
                                                                         {parts.length ? ' · ' : ''}
-                                                                        saved {outcome.savedLine}
+                                                                        {t('mediaAutomation.progress.saved', { value: outcome.savedLine })}
                                                                         {outcome.savingsPercent != null && outcome.savingsPercent > 0
                                                                             ? ` (${outcome.savingsPercent}%)`
                                                                             : ''}
@@ -2926,10 +2936,10 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                         );
                                                     })()}
                                                     {!terminal && progressMeta.elapsedLabel && (
-                                                        <p className="mt-1 text-xs text-muted">Encoded {progressMeta.elapsedLabel}</p>
+                                                        <p className="mt-1 text-xs text-muted">{t('mediaAutomation.progress.encoded', { value: progressMeta.elapsedLabel })}</p>
                                                     )}
                                                     {isActive && percent == null && (
-                                                        <p className="mt-1 text-xs text-amber-300">Encoding started - waiting for first FFmpeg progress update…</p>
+                                                        <p className="mt-1 text-xs text-amber-300">{t('mediaAutomation.progress.waitingForProgress')}</p>
                                                     )}
                                                     {dryRunJob && ['completed', 'succeeded', 'success'].includes(state) && (
                                                         <p className="mt-1 text-xs text-amber-300">{jobDryRunReason(job)}</p>
@@ -3635,13 +3645,13 @@ export const MediaAutomationDashboard: React.FC = () => {
                 <div className="space-y-4">
                     <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                         <div>
-                            <h2 className="text-lg font-bold text-text">Task history</h2>
-                            <p className="mt-1 text-sm text-muted">Durable record of completed, failed, cancelled, and dry-run jobs beyond the rotating queue.</p>
+                            <h2 className="text-lg font-bold text-text">{t('mediaAutomation.history.title')}</h2>
+                            <p className="mt-1 text-sm text-muted">{t('mediaAutomation.history.description')}</p>
                         </div>
                         <div className="flex flex-wrap items-center gap-3">
                             <label className="flex items-center gap-2 text-xs font-semibold text-muted">
-                                <span className="whitespace-nowrap" title="Show paths relative to the library root (Sonarr-style)">
-                                    Relative paths
+                                <span className="whitespace-nowrap" title={t('mediaAutomation.queue.relativePathsHint')}>
+                                    {t('mediaAutomation.queue.relativePaths')}
                                 </span>
                                 <SettingsSwitch
                                     checked={relativePaths}
@@ -3662,7 +3672,15 @@ export const MediaAutomationDashboard: React.FC = () => {
                                     className={`${buttonClass} ${historyFilter === value ? 'border-plex/40 bg-plex/15 text-plex' : ''}`}
                                     onClick={() => setHistoryFilter(value)}
                                 >
-                                    {value}
+                                    {t(value === 'all'
+                                        ? 'mediaAutomation.queue.all'
+                                        : value === 'completed'
+                                            ? 'mediaAutomation.status.jobs.completed'
+                                            : value === 'failed'
+                                                ? 'mediaAutomation.status.jobs.failed'
+                                                : value === 'cancelled'
+                                                    ? 'mediaAutomation.status.jobs.cancelled'
+                                                    : 'mediaAutomation.queue.dryRun')}
                                 </button>
                             ))}
                             <button
@@ -3691,13 +3709,13 @@ export const MediaAutomationDashboard: React.FC = () => {
                         className={fieldClass}
                         value={historySearch}
                         onChange={(event) => setHistorySearch(event.target.value)}
-                        placeholder="Search path, pipeline, tags…"
+                        placeholder={t('mediaAutomation.history.searchPlaceholder')}
                     />
                     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                        <StatCard label="Saved 7d" value={formatBytes(status.savings?.['7d']?.bytesSaved)} hint="History" icon={<CheckCircle2 className="h-4 w-4 text-emerald-200" />} tone="border-emerald-500/30 bg-emerald-500/10 text-text" />
-                        <StatCard label="Encode 7d" value={formatDurationSeconds(Math.round(Number(status.savings?.['7d']?.encodeMs || 0) / 1000)) || '0s'} hint="History" icon={<Gauge className="h-4 w-4 text-plex" />} tone="border-white/10 bg-white/[0.03] text-text" />
-                        <StatCard label="Saved 30d" value={formatBytes(status.savings?.['30d']?.bytesSaved)} hint="History" icon={<History className="h-4 w-4 text-sky-200" />} tone="border-sky-500/30 bg-sky-500/10 text-text" />
-                        <StatCard label="Encode 30d" value={formatDurationSeconds(Math.round(Number(status.savings?.['30d']?.encodeMs || 0) / 1000)) || '0s'} hint="History" icon={<Gauge className="h-4 w-4 text-muted" />} tone="border-white/10 bg-white/[0.03] text-text" />
+                        <StatCard label={t('mediaAutomation.stats.saved7d')} value={formatBytes(status.savings?.['7d']?.bytesSaved)} hint={t('mediaAutomation.tabs.history')} icon={<CheckCircle2 className="h-4 w-4 text-emerald-200" />} tone="border-emerald-500/30 bg-emerald-500/10 text-text" />
+                        <StatCard label={t('mediaAutomation.stats.encode7d')} value={formatDurationSeconds(Math.round(Number(status.savings?.['7d']?.encodeMs || 0) / 1000)) || '0s'} hint={t('mediaAutomation.tabs.history')} icon={<Gauge className="h-4 w-4 text-plex" />} tone="border-white/10 bg-white/[0.03] text-text" />
+                        <StatCard label={t('mediaAutomation.stats.saved30d')} value={formatBytes(status.savings?.['30d']?.bytesSaved)} hint={t('mediaAutomation.tabs.history')} icon={<History className="h-4 w-4 text-sky-200" />} tone="border-sky-500/30 bg-sky-500/10 text-text" />
+                        <StatCard label={t('mediaAutomation.stats.encode30d')} value={formatDurationSeconds(Math.round(Number(status.savings?.['30d']?.encodeMs || 0) / 1000)) || '0s'} hint={t('mediaAutomation.tabs.history')} icon={<Gauge className="h-4 w-4 text-muted" />} tone="border-white/10 bg-white/[0.03] text-text" />
                     </div>
                     <div className="space-y-2">
                         {historyEntries
@@ -3717,7 +3735,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                     .includes(needle);
                             })
                             .map((entry) => {
-                                const sizeSummary = historySizeSummary(entry);
+                                const sizeSummary = historySizeSummary(entry, t);
                                 return (
                                 <article key={entry.id} className={`${panelClass} space-y-2 p-4`}>
                                     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -3753,7 +3771,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                                 className="text-xs text-muted"
                                                 dateTime={entry.finishedAt || entry.startedAt || entry.createdAt || undefined}
                                                 title={entry.startedAt && entry.finishedAt
-                                                    ? `Started ${formatTime(entry.startedAt)} · Finished ${formatTime(entry.finishedAt)}`
+                                                    ? t('mediaAutomation.history.timestampTooltip', { started: formatTime(entry.startedAt), finished: formatTime(entry.finishedAt) })
                                                     : undefined}
                                             >
                                                 {formatTime(entry.finishedAt || entry.startedAt || entry.createdAt)}
@@ -3765,11 +3783,11 @@ export const MediaAutomationDashboard: React.FC = () => {
                                             <span className="font-mono text-emerald-200">{sizeSummary.sizeLine}</span>
                                         ) : (
                                             <>
-                                                <span>{formatBytes(entry.sourceBytes)} in</span>
-                                                <span>{formatBytes(entry.outputBytes)} out</span>
+                                                <span>{t('mediaAutomation.history.sizeIn', { value: formatBytes(entry.sourceBytes) })}</span>
+                                                <span>{t('mediaAutomation.history.sizeOut', { value: formatBytes(entry.outputBytes) })}</span>
                                             </>
                                         )}
-                                        <span className="text-emerald-300">{formatBytes(entry.bytesSaved)} saved{sizeSummary?.savingsPercent != null && sizeSummary.savingsPercent > 0 ? ` (${sizeSummary.savingsPercent}%)` : ''}</span>
+                                        <span className="text-emerald-300">{t('mediaAutomation.history.saved', { value: formatBytes(entry.bytesSaved) })}{sizeSummary?.savingsPercent != null && sizeSummary.savingsPercent > 0 ? ` (${sizeSummary.savingsPercent}%)` : ''}</span>
                                         <span>{formatDurationSeconds(Math.round(Number(entry.durationMs || 0) / 1000)) || '0s'}</span>
                                         {entry.adapterLabel || entry.adapter ? <span>{entry.adapterLabel || entry.adapter}</span> : null}
                                         {(entry.tags || []).map((tag) => (
@@ -3778,9 +3796,9 @@ export const MediaAutomationDashboard: React.FC = () => {
                                     </div>
                                     {entry.delivery && (
                                         <p className="text-xs text-muted">
-                                            Delivery: {String((entry.delivery as { deliveredPath?: string; error?: string }).deliveredPath
+                                            {t('mediaAutomation.history.delivery')} {String((entry.delivery as { deliveredPath?: string; error?: string }).deliveredPath
                                                 || (entry.delivery as { error?: string }).error
-                                                || 'recorded')}
+                                                || t('mediaAutomation.history.deliveryRecorded'))}
                                         </p>
                                     )}
                                     <button

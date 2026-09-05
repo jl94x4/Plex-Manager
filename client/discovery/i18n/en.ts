@@ -2910,6 +2910,19 @@ Object.assign(en, { maintenance: {
             errors: { ...en.maintenance.errors, loadOverview: 'Failed to load cleaner overview', loadCandidates: 'Failed to load candidates', loadExclusions: 'Failed to load exclusions summary.', loadLibrary: 'Failed to load library posters.', loadStorage: 'Failed to load storage summary.' }
 } });
 
+Object.assign(en, { mediaAutomation: {
+    tabs: { overview: 'Overview', queue: 'Queue', pipelines: 'Pipelines', libraries: 'Libraries', analyzer: 'Analyzer', history: 'History', system: 'System', activity: 'Activity' },
+    hero: { title: 'Encode with control', description: 'Native FFmpeg pipelines for remux, HEVC, and cleanup — with a durable queue, hardware lanes, and safe dry-run until you are ready to encode.' },
+    common: { refresh: 'Refresh' },
+    errors: { requestFailed: 'Media automation request failed' },
+    jobs: { pathNotReported: 'Path not reported', hardwareFallback: 'Hardware fell back to CPU{requested}. Check /dev/dri and Capabilities after Test worker.' },
+    progress: { eta: 'ETA {value}', encoded: 'Encoded {value}', skipped: 'Skipped: {reason}', saved: 'saved {value}', waitingForProgress: 'Encoding started - waiting for first FFmpeg progress update…' },
+    status: { quietHours: 'Quiet hours', jobs: { queued: 'Queued', pending: 'Pending', waiting: 'Waiting', running: 'Running', active: 'Active', processing: 'Processing', paused: 'Paused', retrying: 'Retrying', completed: 'Completed', failed: 'Failed', skipped: 'Skipped', cancelling: 'Cancelling', cancelled: 'Cancelled' } },
+    queue: { all: 'All', active: 'Active', queued: 'Queued', dryRun: 'Dry-run', failed: 'Failed', completed: 'Completed', search: 'Search queue', searchPlaceholder: 'Search path or pipeline…', errorFilterPlaceholder: 'Filter by error text…', allLibraries: 'All libraries', allPipelines: 'All pipelines', relativePaths: 'Relative paths', relativePathsHint: 'Show paths relative to the library root (Sonarr-style)', perPage: 'Per page', filtersSuffix: ' / filters', noMatches: 'No jobs match this filter{filters}.', automaticPipeline: 'Automatic pipeline', queueSample: 'Queue sample', enqueue: 'Enqueue', sampleHint: 'Pick a pipeline with a saved sample file to auto-fill the path, or use Queue sample for one click.', emptyTitle: 'Queue is empty', emptyDetail: 'Enqueue a path, run Scan now, or wait for the library watcher to discover matching media.', scanNow: 'Scan now' },
+    history: { title: 'Task history', description: 'Durable record of completed, failed, cancelled, and dry-run jobs beyond the rotating queue.', searchPlaceholder: 'Search path, pipeline, tags…', timestampTooltip: 'Started {started} · Finished {finished}', sizeIn: '{value} in', sizeOut: '{value} out', saved: '{value} saved', delivery: 'Delivery:', deliveryRecorded: 'recorded' },
+    stats: { queued: 'Queued', waitingInLane: 'Waiting in lane', processing: 'Processing', activeEncodes: 'Active encodes', completed: 'Completed', failed: 'Failed', historyAllTime: 'History (all time)', processed24h: 'Processed 24h', historyLastDay: 'History · last day', failed24h: 'Failed 24h', successRate: 'Success rate', historyLast24h: 'History · last 24h', bytesOut: 'Bytes out', bytesSaved: 'Bytes saved', encodeTime: 'Encode time', saved7d: 'Saved 7d', encode7d: 'Encode 7d', historyAggregate: 'History aggregate', saved30d: 'Saved 30d', encode30d: 'Encode 30d' },
+} });
+
 Object.assign(en, { maintenance: {
     ...en.maintenance,
     labels: { ...en.maintenance.labels, true: 'True', false: 'False', minMax: 'min,max', values: 'v1,v2', value: 'value', enabled: 'Enabled', disabled: 'Disabled', matches: 'Matches', grace: 'Grace', graceDays: 'Grace Days', maxActions: 'Max Actions', collectionName: 'Collection Name', matchLogic: 'Match Logic', matchLogicHint: 'How rule conditions are combined.', graceHint: 'Grace countdown starts when the rule is created.', resetGraceHint: "Reset this rule's grace countdown to now.", filterName: 'Filter Name', matchedTitles: 'Matched Titles', noPoster: 'No Poster', eligible: 'Eligible', mapped: 'mapped', unmapped: 'Unmapped', ambiguous: 'Ambiguous', instanceMappingHint: 'Ambiguous instance mapping', index: 'Index', mediaItems: 'media items', lastBuild: 'Last build', requestRecords: 'Request records' },
@@ -3156,4 +3169,46 @@ Object.assign(en, { homeDashboard: { ...en.homeDashboard,
     emptyRecentMovies: 'No movies added recently.',
     emptyRecentShows: 'No shows added recently.',
     emptyRecentMusic: 'No music added recently.',
+} });
+
+Object.assign(en, {
+    expiredAccess: {
+        restrictedPortal: 'Restricted portal',
+        defaultTitle: 'Access expired',
+        unknownDate: 'an unknown date',
+        defaultMessage: 'Your access expired on {date}. Your {server} library access is currently disabled. Please contact the server administrator if you would like to renew.',
+        expiredOn: 'Expired on',
+        mediaAccess: 'Media access',
+        openSupport: 'Open Support',
+        emailAdmin: 'Email admin',
+    },
+});
+
+Object.assign(en, { settings: { ...en.settings,
+    search: {
+        label: 'Find Setting',
+        placeholder: 'Search settings...',
+        recent: 'Recent',
+        results: 'Results',
+        empty: 'No settings found.',
+        entries: {
+            publicBaseUrl: 'Public Base URL', customLogo: 'Custom Logo', portalTheme: 'Portal Theme', portalAnnouncement: 'Portal Announcement', posterQualityBadges: 'Poster Quality Badges',
+            dashboardWatchingBadge: 'Dashboard Watching Badge', tmdbTrendingSlideshow: 'TMDB Trending Slideshow', communityChat: 'Community chat', chatMentionNotifications: 'Chat @mention notifications',
+            whatsAppNumber: 'WhatsApp Number', contactEmail: 'Contact Email', watchHistorySource: 'Watch History Source', showUsernamesInAnalytics: 'Show Usernames in Analytics', analyticsCache: 'Analytics Cache',
+            mediaServerConnection: 'Media Server Connection', streamUserPrivacy: 'Stream User Privacy', defaultLibraries: 'Default Libraries', sonarrRadarrInstances: 'Sonarr & Radarr Instances',
+            downloadClients: 'Download Clients', tautulliIntegration: 'Tautulli Integration', jellyfinAnalytics: 'Jellyfin Analytics', requestApp: 'Request App (Seerr/Ombi)', tmdbApiKey: 'TMDB API Key',
+            discoverMetadataSource: 'Discover Metadata Source', requestEngine: 'Request Engine', metadataProviders: 'Metadata Providers', requestPermissions: 'Request Permissions', autoApprove: 'Auto-Approve',
+            watchlistAutoRequest: 'Watchlist Auto-Request', requestQuotas: 'Request Quotas', discoverRegion: 'Discover Region', discoverLanguage: 'Discover Language', hideAvailableMedia: 'Hide Available Media',
+            smtpAlerts: 'SMTP Alerts', notificationHealth: 'Notification Health', requestAvailableAlerts: 'Request Available Alerts', notReleasedYet: 'Not Released Yet', scannerNotifications: 'Scanner Notifications',
+            notificationTemplates: 'Notification Templates', genericWebhook: 'Generic Webhook', sendTestNotification: 'Send Test Notification', recentNotifications: 'Recent Notifications', smartSummaryNotifications: 'Smart Summary Notifications', gotifyAlerts: 'Gotify Alerts',
+            supportTickets: 'Support tickets', healthDashboard: 'Health Dashboard', cleanerExperimentalMode: 'Cleaner Experimental Mode', backupRestore: 'Backup & Restore', memory: 'Memory', diagnostics: 'Diagnostics',
+        },
+    },
+    navigation: { ...en.settings.navigation,
+        customTabs: { ...en.settings.navigation.customTabs,
+            moveTabUp: 'Move up',
+            moveTabDown: 'Move down',
+            deleteTab: 'Delete tab',
+        },
+    },
 } });
