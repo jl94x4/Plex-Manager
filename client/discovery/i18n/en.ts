@@ -2910,6 +2910,15 @@ Object.assign(en, { maintenance: {
             errors: { ...en.maintenance.errors, loadOverview: 'Failed to load cleaner overview', loadCandidates: 'Failed to load candidates', loadExclusions: 'Failed to load exclusions summary.', loadLibrary: 'Failed to load library posters.', loadStorage: 'Failed to load storage summary.' }
 } });
 
+Object.assign(en, { mediaAutomation: {
+    tabs: { overview: 'Overview', queue: 'Queue', pipelines: 'Pipelines', libraries: 'Libraries', analyzer: 'Analyzer', history: 'History', system: 'System', activity: 'Activity' },
+    hero: { title: 'Encode with control', description: 'Native FFmpeg pipelines for remux, HEVC, and cleanup — with a durable queue, hardware lanes, and safe dry-run until you are ready to encode.' },
+    status: { quietHours: 'Quiet hours' },
+    common: { refresh: 'Refresh' },
+    errors: { requestFailed: 'Media automation request failed' },
+    stats: { queued: 'Queued', waitingInLane: 'Waiting in lane', processing: 'Processing', activeEncodes: 'Active encodes', completed: 'Completed', failed: 'Failed', historyAllTime: 'History (all time)', processed24h: 'Processed 24h', historyLastDay: 'History · last day', failed24h: 'Failed 24h', successRate: 'Success rate', historyLast24h: 'History · last 24h', bytesOut: 'Bytes out', bytesSaved: 'Bytes saved', encodeTime: 'Encode time', saved7d: 'Saved 7d', historyAggregate: 'History aggregate', saved30d: 'Saved 30d' },
+} });
+
 Object.assign(en, { maintenance: {
     ...en.maintenance,
     labels: { ...en.maintenance.labels, true: 'True', false: 'False', minMax: 'min,max', values: 'v1,v2', value: 'value', enabled: 'Enabled', disabled: 'Disabled', matches: 'Matches', grace: 'Grace', graceDays: 'Grace Days', maxActions: 'Max Actions', collectionName: 'Collection Name', matchLogic: 'Match Logic', matchLogicHint: 'How rule conditions are combined.', graceHint: 'Grace countdown starts when the rule is created.', resetGraceHint: "Reset this rule's grace countdown to now.", filterName: 'Filter Name', matchedTitles: 'Matched Titles', noPoster: 'No Poster', eligible: 'Eligible', mapped: 'mapped', unmapped: 'Unmapped', ambiguous: 'Ambiguous', instanceMappingHint: 'Ambiguous instance mapping', index: 'Index', mediaItems: 'media items', lastBuild: 'Last build', requestRecords: 'Request records' },

@@ -2032,6 +2032,15 @@ Object.assign(fr, { maintenance: {
             errors: { ...fr.maintenance.errors, loadOverview: 'Impossible de charger la vue d’ensemble du nettoyage', loadCandidates: 'Impossible de charger les candidats', loadExclusions: 'Impossible de charger le résumé des exclusions.', loadLibrary: 'Impossible de charger les affiches de la bibliothèque.', loadStorage: 'Impossible de charger le résumé du stockage.' }
 } });
 
+Object.assign(fr, { mediaAutomation: {
+    tabs: { overview: 'Vue d’ensemble', queue: 'File d’attente', pipelines: 'Pipelines', libraries: 'Bibliothèques', analyzer: 'Analyseur', history: 'Historique', system: 'Système', activity: 'Activité' },
+    hero: { title: 'Encoder avec maîtrise', description: 'Pipelines FFmpeg natifs pour le remuxage, HEVC et le nettoyage — avec une file d’attente durable, des voies matérielles et une simulation sûre jusqu’à ce que vous soyez prêt à encoder.' },
+    status: { quietHours: 'Heures creuses' },
+    common: { refresh: 'Actualiser' },
+    errors: { requestFailed: 'La requête Media Automation a échoué' },
+    stats: { queued: 'En attente', waitingInLane: 'En attente dans une voie', processing: 'En cours', activeEncodes: 'Encodages actifs', completed: 'Terminées', failed: 'Échouées', historyAllTime: 'Historique (depuis le début)', processed24h: 'Traitées sur 24 h', historyLastDay: 'Historique · dernier jour', failed24h: 'Échouées sur 24 h', successRate: 'Taux de réussite', historyLast24h: 'Historique · dernières 24 h', bytesOut: 'Octets en sortie', bytesSaved: 'Octets économisés', encodeTime: 'Temps d’encodage', saved7d: 'Économisés sur 7 j', historyAggregate: 'Total de l’historique', saved30d: 'Économisés sur 30 j' },
+} });
+
 Object.assign(fr, { settings: { ...fr.settings, notifications: {
     common: { never: 'Jamais', unknownDate: 'Inconnu', unknownUser: 'Utilisateur inconnu', unread: 'non lu', all: 'Tout', loading: 'Chargement...', ready: 'Prêt', needsSetup: 'Configuration requise', email: 'E-mail', inAppBell: 'Cloche in-app', browserPush: 'Push navigateur', webPush: 'Web Push', ntfy: 'ntfy', webhook: 'Webhook' },
     page: { title: 'Notifications', description: 'Centre des alertes de disponibilité des demandes, du push navigateur, de Discord, de l’historique de la cloche in-app et des tests envoyés à soi-même. Les alertes admin SMTP et Gotify se trouvent aussi sur cette page.' },

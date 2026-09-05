@@ -38,6 +38,7 @@ import { ModalPortal } from '../shared/ModalPortal';
 import { askConfirm } from '../shared/confirm';
 import { ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { portalUrl } from '../shared/basePath';
+import { useDiscoverI18n } from '../discovery/i18n';
 import {
     DashboardHero,
     DashboardPageShell,
@@ -1073,6 +1074,7 @@ const EditorShell: React.FC<{ title: string; onClose: () => void; onSave: () => 
 );
 
 export const MediaAutomationDashboard: React.FC = () => {
+    const { t } = useDiscoverI18n();
     const [tab, setTab] = useState<MediaAutomationTab>(() => parseMediaAutomationTab());
     const [status, setStatus] = useState<MediaAutomationStatus>({});
     const [capabilities, setCapabilities] = useState<MediaAutomationCapabilities>({});
@@ -1268,7 +1270,7 @@ export const MediaAutomationDashboard: React.FC = () => {
             toast(success);
             await load(true);
         } catch (error) {
-            toast(error instanceof Error ? error.message : 'Media automation request failed', 'error');
+            toast(error instanceof Error ? error.message : t('mediaAutomation.errors.requestFailed'), 'error');
         } finally {
             setBusy(null);
         }
@@ -1852,14 +1854,14 @@ export const MediaAutomationDashboard: React.FC = () => {
     };
 
     const tabs: Array<{ id: MediaAutomationTab; label: string; icon: React.ComponentType<{ className?: string }> }> = [
-        { id: 'overview', label: 'Overview', icon: Gauge },
-        { id: 'queue', label: 'Queue', icon: ListRestart },
-        { id: 'pipelines', label: 'Pipelines', icon: Layers3 },
-        { id: 'libraries', label: 'Libraries', icon: FolderCog },
-        { id: 'analyzer', label: 'Analyzer', icon: ScanSearch },
-        { id: 'history', label: 'History', icon: History },
-        { id: 'system', label: 'System', icon: ServerCog },
-        { id: 'activity', label: 'Activity', icon: Activity },
+        { id: 'overview', label: t('mediaAutomation.tabs.overview'), icon: Gauge },
+        { id: 'queue', label: t('mediaAutomation.tabs.queue'), icon: ListRestart },
+        { id: 'pipelines', label: t('mediaAutomation.tabs.pipelines'), icon: Layers3 },
+        { id: 'libraries', label: t('mediaAutomation.tabs.libraries'), icon: FolderCog },
+        { id: 'analyzer', label: t('mediaAutomation.tabs.analyzer'), icon: ScanSearch },
+        { id: 'history', label: t('mediaAutomation.tabs.history'), icon: History },
+        { id: 'system', label: t('mediaAutomation.tabs.system'), icon: ServerCog },
+        { id: 'activity', label: t('mediaAutomation.tabs.activity'), icon: Activity },
     ];
 
     const activeSkipPreview = scanPreview || status?.lastScanResult || null;
@@ -1880,9 +1882,9 @@ export const MediaAutomationDashboard: React.FC = () => {
             <ToastContainer toasts={toasts} setToasts={setToasts} />
             <DashboardHero
                 accent="sky"
-                eyebrow="Media Automation"
-                title="Encode with control"
-                description="Native FFmpeg pipelines for remux, HEVC, and cleanup — with a durable queue, hardware lanes, and safe dry-run until you are ready to encode."
+                eyebrow={t('navigation.mediaAutomation')}
+                title={t('mediaAutomation.hero.title')}
+                description={t('mediaAutomation.hero.description')}
                 icon={<ServerCog className="h-3.5 w-3.5" />}
                 secondaryBlob
                 actions={(
@@ -1890,7 +1892,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                         <StatusPill value={workerStatusLabel(status)} size="md" />
                         {status.quietHoursActive && (
                             <span className="inline-flex items-center justify-center rounded-xl border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-sm font-semibold uppercase tracking-wide text-sky-200">
-                                Quiet hours
+                                {t('mediaAutomation.status.quietHours')}
                             </span>
                         )}
                         {status.streamingPauseActive && (
@@ -1899,7 +1901,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                             </span>
                         )}
                         <button type="button" className={buttonClass} onClick={() => load(true)} disabled={refreshing}>
-                            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> Refresh
+                            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> {t('mediaAutomation.common.refresh')}
                         </button>
                     </>
                 )}
@@ -1994,88 +1996,88 @@ export const MediaAutomationDashboard: React.FC = () => {
                     )}
                     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                         <StatCard
-                            label="Queued"
+                            label={t('mediaAutomation.stats.queued')}
                             value={asText(status.queuedJobs ?? queueCounts.queued, '0')}
-                            hint="Waiting in lane"
+                            hint={t('mediaAutomation.stats.waitingInLane')}
                             icon={<ListRestart className="h-4 w-4 text-amber-200" />}
                             tone="border-amber-400/30 bg-amber-500/10 text-amber-100"
                         />
                         <StatCard
-                            label="Processing"
+                            label={t('mediaAutomation.stats.processing')}
                             value={asText(status.activeJobs ?? queueCounts.active, '0')}
-                            hint="Active encodes"
+                            hint={t('mediaAutomation.stats.activeEncodes')}
                             icon={<Loader2 className="h-4 w-4 text-sky-200" />}
                             tone="border-sky-400/30 bg-sky-500/10 text-sky-100"
                         />
                         <StatCard
-                            label="Completed"
+                            label={t('mediaAutomation.stats.completed')}
                             value={asText(status.completedJobs ?? queueCounts.completed, '0')}
-                            hint="History (all time)"
+                            hint={t('mediaAutomation.stats.historyAllTime')}
                             icon={<CheckCircle2 className="h-4 w-4 text-emerald-200" />}
                             tone="border-emerald-400/30 bg-emerald-500/10 text-emerald-100"
                         />
                         <StatCard
-                            label="Failed"
+                            label={t('mediaAutomation.stats.failed')}
                             value={asText(status.failedJobs ?? queueCounts.failed, '0')}
-                            hint="History (all time)"
+                            hint={t('mediaAutomation.stats.historyAllTime')}
                             icon={<AlertTriangle className="h-4 w-4 text-red-200" />}
                             tone="border-red-400/30 bg-red-500/10 text-red-100"
                         />
                     </div>
                     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                         <StatCard
-                            label="Processed 24h"
+                            label={t('mediaAutomation.stats.processed24h')}
                             value={asText(status.metrics?.processed24h ?? 0, '0')}
-                            hint="History · last day"
+                            hint={t('mediaAutomation.stats.historyLastDay')}
                             icon={<Gauge className="h-4 w-4 text-emerald-200" />}
                             tone="border-white/10 bg-white/[0.03] text-text"
                         />
                         <StatCard
-                            label="Failed 24h"
+                            label={t('mediaAutomation.stats.failed24h')}
                             value={asText(status.metrics?.failed24h ?? 0, '0')}
-                            hint="History · last day"
+                            hint={t('mediaAutomation.stats.historyLastDay')}
                             icon={<AlertTriangle className="h-4 w-4 text-red-200" />}
                             tone="border-white/10 bg-white/[0.03] text-text"
                         />
                         <StatCard
-                            label="Success rate"
+                            label={t('mediaAutomation.stats.successRate')}
                             value={status.metrics?.successRate24h == null ? '-' : `${status.metrics.successRate24h}%`}
-                            hint="History · last 24h"
+                            hint={t('mediaAutomation.stats.historyLast24h')}
                             icon={<CheckCircle2 className="h-4 w-4 text-plex" />}
                             tone="border-plex/30 bg-plex/10 text-text"
                         />
                         <StatCard
-                            label="Bytes out"
+                            label={t('mediaAutomation.stats.bytesOut')}
                             value={formatBytes(status.metrics?.bytesOut24h)}
-                            hint="History · last 24h"
+                            hint={t('mediaAutomation.stats.historyLast24h')}
                             icon={<ServerCog className="h-4 w-4 text-sky-200" />}
                             tone="border-white/10 bg-white/[0.03] text-text"
                         />
                         <StatCard
-                            label="Bytes saved"
+                            label={t('mediaAutomation.stats.bytesSaved')}
                             value={formatBytes(status.metrics?.bytesSaved24h)}
-                            hint="History · last 24h"
+                            hint={t('mediaAutomation.stats.historyLast24h')}
                             icon={<CheckCircle2 className="h-4 w-4 text-emerald-200" />}
                             tone="border-emerald-500/30 bg-emerald-500/10 text-text"
                         />
                         <StatCard
-                            label="Encode time"
+                            label={t('mediaAutomation.stats.encodeTime')}
                             value={formatDurationSeconds(Math.round(Number(status.metrics?.encodeMs24h || 0) / 1000)) || '0s'}
-                            hint="History · last 24h"
+                            hint={t('mediaAutomation.stats.historyLast24h')}
                             icon={<Gauge className="h-4 w-4 text-plex" />}
                             tone="border-white/10 bg-white/[0.03] text-text"
                         />
                         <StatCard
-                            label="Saved 7d"
+                            label={t('mediaAutomation.stats.saved7d')}
                             value={formatBytes(status.metrics?.bytesSaved7d ?? status.savings?.['7d']?.bytesSaved)}
-                            hint="History aggregate"
+                            hint={t('mediaAutomation.stats.historyAggregate')}
                             icon={<CheckCircle2 className="h-4 w-4 text-emerald-200" />}
                             tone="border-emerald-500/30 bg-emerald-500/10 text-text"
                         />
                         <StatCard
-                            label="Saved 30d"
+                            label={t('mediaAutomation.stats.saved30d')}
                             value={formatBytes(status.metrics?.bytesSaved30d ?? status.savings?.['30d']?.bytesSaved)}
-                            hint="History aggregate"
+                            hint={t('mediaAutomation.stats.historyAggregate')}
                             icon={<History className="h-4 w-4 text-sky-200" />}
                             tone="border-sky-500/30 bg-sky-500/10 text-text"
                         />
