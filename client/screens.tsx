@@ -6699,11 +6699,16 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, p
     const pollJellyfinQuickConnect = useCallback(async () => {
         if (!quickConnect?.sessionId) return;
         try {
+            const storedRef = readStoredReferralRef();
             const data = await apiFetch('/api/auth/jellyfin/quick-connect/poll', {
                 method: 'POST',
-                body: JSON.stringify({ sessionId: quickConnect.sessionId }),
+                body: JSON.stringify({
+                    sessionId: quickConnect.sessionId,
+                    ...(storedRef ? { ref: storedRef } : {}),
+                }),
             });
             if (data?.success) {
+                clearStoredReferralRef();
                 setQuickConnect(null);
                 onLoginSuccess();
             }
@@ -6779,10 +6784,16 @@ export const Login: React.FC<{ onLoginSuccess: () => void, publicConfig?: any, p
         setIsLoading(true);
         setError('');
         try {
+            const storedRef = readStoredReferralRef();
             await apiFetch('/api/auth/jellyfin/login', {
                 method: 'POST',
-                body: JSON.stringify({ username: jellyfinUsername.trim(), password: jellyfinPassword }),
+                body: JSON.stringify({
+                    username: jellyfinUsername.trim(),
+                    password: jellyfinPassword,
+                    ...(storedRef ? { ref: storedRef } : {}),
+                }),
             });
+            clearStoredReferralRef();
             onLoginSuccess();
         } catch (e: any) {
             setError(e.message || 'Failed to authenticate with Jellyfin');

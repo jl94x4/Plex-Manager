@@ -2467,6 +2467,15 @@ const updateFile = async (path, defaultContent, mutator) => (
 
 const updateUsers = (mutator) => updateFile(USERS_PATH, [], mutator);
 
+/** Patch one user by id under the users lock (avoids stale full-file rewrites after slow I/O). */
+const patchUserById = async (userId, mutator) => updateUsers((users) => {
+    const idx = users.findIndex((u) => String(u.id) === String(userId));
+    if (idx < 0) return { data: users, result: null };
+    const outcome = mutator(users[idx], users);
+    if (outcome === false) return { data: users, result: null };
+    return { data: users, result: users[idx] };
+});
+
 const notifyOps = async (event, { title, body, href, dedupeKey, cooldownMs, meta, filename, service, serviceKind } = {}) => {
     try {
         const config = await loadFile(CONFIG_PATH, {});
@@ -3732,35 +3741,38 @@ const checkAndRevoke = async (config) => {
     } catch (e) { }
 
     log(`Found ${expiredUsers.length} expired user(s).`);
-    let usersModified = false;
+    let revokedCount = 0;
     for (const user of expiredUsers) {
         const revoked = await revokePlexAccess(user, config);
-        if (revoked) {
-            const userInList = users.find(u => u.id === user.id);
-            if (userInList) {
-                userInList.plexAccessStatus = 'revoked';
-                usersModified = true;
-                if (alertRuleEnabled(config, 'accessRevoked')) await sendGotifyAlert(
-                    config,
-                    'Portal access revoked',
-                    `${userInList.username || user.username} was revoked after expiry.`,
-                    8,
-                ).catch((e) => log(`Failed to send Gotify revocation alert: ${e.message}`));
+        if (!revoked) continue;
 
-                // Send expiry notification email if not already sent
-                if (!userInList.expiryEmailSent) {
-                    const emailSent = await sendExpiryEmail(config, userInList, hasLogo);
-                    if (emailSent) {
-                        userInList.expiryEmailSent = true;
-                    }
-                }
+        const userInList = await patchUserById(user.id, (entry) => {
+            if (entry.plexAccessStatus === 'revoked') return false;
+            entry.plexAccessStatus = 'revoked';
+            return true;
+        });
+        if (!userInList) continue;
+        revokedCount += 1;
+
+        if (alertRuleEnabled(config, 'accessRevoked')) await sendGotifyAlert(
+            config,
+            'Portal access revoked',
+            `${userInList.username || user.username} was revoked after expiry.`,
+            8,
+        ).catch((e) => log(`Failed to send Gotify revocation alert: ${e.message}`));
+
+        if (!userInList.expiryEmailSent) {
+            const emailSent = await sendExpiryEmail(config, userInList, hasLogo);
+            if (emailSent) {
+                await patchUserById(user.id, (entry) => {
+                    entry.expiryEmailSent = true;
+                });
             }
         }
     }
 
-    if (usersModified) {
-        await saveFile(USERS_PATH, users);
-        log('Updated local user file with revocation status.');
+    if (revokedCount > 0) {
+        log(`Updated local user file with revocation status (${revokedCount}).`);
     }
 };
 
@@ -4085,6 +4097,7 @@ const completeJellyfinPortalLogin = async (req, res, config, authData, source = 
         jellyfinIsAdmin: isAdmin,
         isAdmin,
     };
+    const ref = String(req.body?.ref || req.query?.ref || '').trim();
 
     const deletedUsers = await loadFile(DELETED_USERS_PATH, []);
     if (!isAdmin && isDeletedUser(deletedUsers, sessionUser)) {
@@ -4093,13 +4106,26 @@ const completeJellyfinPortalLogin = async (req, res, config, authData, source = 
         return res.status(403).json({ error: 'Your portal session has expired. Please contact the admin for access.' });
     }
 
-    const users = await loadFile(USERS_PATH, []);
-    const knownUser = findLocalUserForSession(users, sessionUser);
+    let users = await loadFile(USERS_PATH, []);
+    let knownUser = findLocalUserForSession(users, sessionUser);
     if (!isAdmin && !knownUser) {
-        await appendAuditLog('login_blocked_non_member', sessionUser, sessionUser);
-        clearSessionCookie(req, res);
-        log(`Jellyfin ${source} login blocked for ${sessionUser.username}: not a portal member`);
-        return res.status(403).json({ error: 'Your account is not registered for this portal.' });
+        const canSelfRegister = !!config.referralEnabled && !!ref;
+        if (canSelfRegister) {
+            await claimReferralForSession(sessionUser, config, ref);
+            users = await loadFile(USERS_PATH, []);
+            knownUser = findLocalUserForSession(users, sessionUser);
+        }
+        if (!knownUser) {
+            await appendAuditLog('login_blocked_non_member', sessionUser, sessionUser, {
+                reason: ref ? 'referral_not_granted' : 'not_a_member',
+            });
+            clearSessionCookie(req, res);
+            log(`Jellyfin ${source} login blocked for ${sessionUser.username}: not a portal member`);
+            const message = ref
+                ? 'This referral link could not be used. Please contact the admin for access.'
+                : 'Your account is not registered for this portal.';
+            return res.status(403).json({ error: message });
+        }
     }
 
     if (!isAdmin) {
@@ -4268,6 +4294,192 @@ const fetchPlexPinAuthToken = async (pinId, { attempts = 10, delayMs = 800 } = {
     return lastData || {};
 };
 
+/**
+ * Atomically claim a referral for a brand-new session user (Plex or Jellyfin/Emby).
+ * Returns { kind: 'skip'|'blocked'|'granted', ... }.
+ */
+const claimReferralForSession = async (sessionUser, config, ref) => {
+    const referralCode = String(ref || '').trim();
+    if (!config?.referralEnabled || !referralCode) return { kind: 'skip' };
+
+    const trialDays = config.referralTrialDays || 3;
+    const rewardDays = config.referralRewardDays || 7;
+    const onboardingDoc = normalizeOnboardingDocument(
+        await loadFile(ONBOARDING_PATH, emptyOnboardingDocument())
+    );
+    const isJellyfinSession = sessionUser?.authProvider === 'jellyfin' || !!sessionUser?.jellyfinId;
+
+    const claimOutcome = await withFileLock(USERS_PATH, async () => {
+        const users = await readFileUnlocked(USERS_PATH, []);
+        if (findLocalUserForSession(users, sessionUser)) return { kind: 'skip' };
+
+        return withFileLock(REFERRAL_REWARDS_PATH, async () => {
+            let rewardsDoc = normalizeReferralRewardsDocument(
+                await readFileUnlocked(REFERRAL_REWARDS_PATH, emptyReferralRewardsDocument())
+            );
+            const referrer = users.find((u) => u.id === referralCode || u.plexId === referralCode || u.jellyfinId === referralCode) || null;
+
+            const recordRewardUnlocked = async (entry) => {
+                rewardsDoc = prependReferralReward(rewardsDoc, entry);
+                await writeFileUnlocked(REFERRAL_REWARDS_PATH, rewardsDoc);
+                return rewardsDoc;
+            };
+
+            if (sameAccount(sessionUser, { id: referralCode, plexId: referralCode, jellyfinId: referralCode })
+                || (referrer && sameAccount(sessionUser, referrer))) {
+                await recordRewardUnlocked(createReferralRewardEntry({
+                    status: 'blocked',
+                    blockReason: 'self_referral',
+                    referrer: referrer || { id: referralCode },
+                    referred: sessionUser,
+                    referralCode,
+                    trialDays,
+                    rewardDays,
+                    rewardApplied: false,
+                }));
+                return { kind: 'blocked', reason: 'self_referral', referrer: referrer || { id: referralCode }, trialDays, rewardDays };
+            }
+            if (!referrer) {
+                await recordRewardUnlocked(createReferralRewardEntry({
+                    status: 'blocked',
+                    blockReason: 'referrer_not_found',
+                    referrer: { id: referralCode },
+                    referred: sessionUser,
+                    referralCode,
+                    trialDays,
+                    rewardDays,
+                    rewardApplied: false,
+                }));
+                return { kind: 'blocked', reason: 'referrer_not_found', referrer: { id: referralCode }, trialDays, rewardDays };
+            }
+            if (referrer.plexAccessStatus !== 'active') {
+                await recordRewardUnlocked(createReferralRewardEntry({
+                    status: 'blocked',
+                    blockReason: 'referrer_inactive',
+                    referrer,
+                    referred: sessionUser,
+                    referralCode,
+                    trialDays,
+                    rewardDays,
+                    rewardApplied: false,
+                }));
+                return { kind: 'blocked', reason: 'referrer_inactive', referrer, trialDays, rewardDays };
+            }
+            if (findGrantedRewardForReferred(rewardsDoc, sessionUser)) {
+                await recordRewardUnlocked(createReferralRewardEntry({
+                    status: 'blocked',
+                    blockReason: 'duplicate',
+                    referrer,
+                    referred: sessionUser,
+                    referralCode,
+                    trialDays,
+                    rewardDays,
+                    rewardApplied: false,
+                }));
+                return { kind: 'blocked', reason: 'duplicate', referrer, trialDays, rewardDays };
+            }
+
+            const previousExpiryDate = referrer.expiryDate || null;
+            const canApplyReward = !!previousExpiryDate;
+            const newExpiryDate = canApplyReward
+                ? addDays(new Date(previousExpiryDate), rewardDays).toISOString()
+                : null;
+            const newUserObj = {
+                id: sessionUser.id,
+                username: sessionUser.username,
+                email: sessionUser.email || '',
+                joiningDate: new Date().toISOString(),
+                expiryDate: addDays(new Date(), trialDays).toISOString(),
+                // Jellyfin/Emby users already authenticated on the media server.
+                plexAccessStatus: isJellyfinSession ? 'active' : 'pending',
+                isTrial: true,
+                referredBy: referrer.id || referrer.plexId || referrer.jellyfinId || referralCode,
+                referredAt: new Date().toISOString(),
+            };
+            if (sessionUser.plexId) newUserObj.plexId = sessionUser.plexId;
+            if (sessionUser.jellyfinId) {
+                newUserObj.jellyfinId = sessionUser.jellyfinId;
+                newUserObj.authProvider = 'jellyfin';
+            }
+            if (sessionUser.thumb) newUserObj.thumb = sessionUser.thumb;
+            Object.assign(newUserObj, markUserOnboardingPending(newUserObj, onboardingDoc));
+            users.push(newUserObj);
+            if (canApplyReward) {
+                referrer.expiryDate = newExpiryDate;
+            }
+            await writeFileUnlocked(USERS_PATH, users);
+            await recordRewardUnlocked(createReferralRewardEntry({
+                status: 'granted',
+                referrer,
+                referred: newUserObj,
+                referralCode,
+                trialDays,
+                rewardDays,
+                rewardApplied: canApplyReward,
+                previousExpiryDate,
+                newExpiryDate,
+            }));
+            return {
+                kind: 'granted',
+                referrer,
+                newUserObj,
+                canApplyReward,
+                previousExpiryDate,
+                newExpiryDate,
+                trialDays,
+                rewardDays,
+                inviteToPlex: !isJellyfinSession,
+            };
+        });
+    });
+
+    if (claimOutcome?.kind === 'blocked') {
+        await appendAuditLog('referral_blocked', sessionUser, claimOutcome.referrer, {
+            reason: claimOutcome.reason,
+            trialDays: claimOutcome.trialDays,
+            rewardDays: claimOutcome.rewardDays,
+        });
+    } else if (claimOutcome?.kind === 'granted') {
+        const {
+            referrer, newUserObj, canApplyReward, previousExpiryDate, newExpiryDate, inviteToPlex,
+        } = claimOutcome;
+        await appendAuditLog('referral_claimed', sessionUser, referrer, {
+            trialDays: claimOutcome.trialDays,
+            rewardDays: claimOutcome.rewardDays,
+            rewardApplied: canApplyReward,
+            previousExpiryDate,
+            newExpiryDate,
+        });
+        try {
+            const expiryLabel = newExpiryDate
+                ? new Date(newExpiryDate).toLocaleDateString()
+                : 'unlimited';
+            await createInAppNotification({
+                userId: referrer.id,
+                type: 'referral_success',
+                title: 'Your referral was successful!',
+                body: canApplyReward
+                    ? `${sessionUser.username} joined and ${claimOutcome.rewardDays} day${claimOutcome.rewardDays === 1 ? '' : 's'} were added to your access. New expiration: ${expiryLabel}.`
+                    : `${sessionUser.username} joined via your referral link. Your account is unlimited, so no bonus days were applied.`,
+                href: '/',
+                meta: {
+                    referredUserId: newUserObj.id,
+                    referredUsername: sessionUser.username,
+                    rewardDays: canApplyReward ? claimOutcome.rewardDays : 0,
+                    forceUnique: true,
+                },
+            });
+        } catch (notifyErr) {
+            log(`Failed to notify referrer ${referrer.username}: ${notifyErr.message}`);
+        }
+        if (inviteToPlex && config.serverIdentifier && config.plexToken) {
+            inviteUserToPlex(newUserObj, config).catch((e) => log('Failed to invite referral: ' + e.message));
+        }
+    }
+
+    return claimOutcome || { kind: 'skip' };
+};
+
 const handlePlexPinLogin = async (req, res, pinId, ref, { redirectOnSuccess = false } = {}) => {
     const pinData = await fetchPlexPinAuthToken(pinId);
 
@@ -4326,173 +4538,7 @@ const handlePlexPinLogin = async (req, res, pinId, ref, { redirectOnSuccess = fa
     }
 
     if (!isAdmin && config.referralEnabled && ref) {
-        const referralCode = String(ref || '').trim();
-        const trialDays = config.referralTrialDays || 3;
-        const rewardDays = config.referralRewardDays || 7;
-
-        if (referralCode) {
-            const onboardingDoc = normalizeOnboardingDocument(
-                await loadFile(ONBOARDING_PATH, emptyOnboardingDocument())
-            );
-
-            const claimOutcome = await withFileLock(USERS_PATH, async () => {
-                const users = await readFileUnlocked(USERS_PATH, []);
-                const isNewUser = !users.find(u => u.id === sessionUser.id || u.plexId === sessionUser.plexId);
-                if (!isNewUser) return { kind: 'skip' };
-
-                return withFileLock(REFERRAL_REWARDS_PATH, async () => {
-                    let rewardsDoc = normalizeReferralRewardsDocument(
-                        await readFileUnlocked(REFERRAL_REWARDS_PATH, emptyReferralRewardsDocument())
-                    );
-                    const referrer = users.find(u => u.id === referralCode || u.plexId === referralCode) || null;
-
-                    const recordRewardUnlocked = async (entry) => {
-                        rewardsDoc = prependReferralReward(rewardsDoc, entry);
-                        await writeFileUnlocked(REFERRAL_REWARDS_PATH, rewardsDoc);
-                        return rewardsDoc;
-                    };
-
-                    if (sameAccount(sessionUser, { id: referralCode, plexId: referralCode })
-                        || (referrer && sameAccount(sessionUser, referrer))) {
-                        await recordRewardUnlocked(createReferralRewardEntry({
-                            status: 'blocked',
-                            blockReason: 'self_referral',
-                            referrer: referrer || { id: referralCode },
-                            referred: sessionUser,
-                            referralCode,
-                            trialDays,
-                            rewardDays,
-                            rewardApplied: false,
-                        }));
-                        return { kind: 'blocked', reason: 'self_referral', referrer: referrer || { id: referralCode } };
-                    }
-                    if (!referrer) {
-                        await recordRewardUnlocked(createReferralRewardEntry({
-                            status: 'blocked',
-                            blockReason: 'referrer_not_found',
-                            referrer: { id: referralCode },
-                            referred: sessionUser,
-                            referralCode,
-                            trialDays,
-                            rewardDays,
-                            rewardApplied: false,
-                        }));
-                        return { kind: 'blocked', reason: 'referrer_not_found', referrer: { id: referralCode } };
-                    }
-                    if (referrer.plexAccessStatus !== 'active') {
-                        await recordRewardUnlocked(createReferralRewardEntry({
-                            status: 'blocked',
-                            blockReason: 'referrer_inactive',
-                            referrer,
-                            referred: sessionUser,
-                            referralCode,
-                            trialDays,
-                            rewardDays,
-                            rewardApplied: false,
-                        }));
-                        return { kind: 'blocked', reason: 'referrer_inactive', referrer };
-                    }
-                    if (findGrantedRewardForReferred(rewardsDoc, sessionUser)) {
-                        await recordRewardUnlocked(createReferralRewardEntry({
-                            status: 'blocked',
-                            blockReason: 'duplicate',
-                            referrer,
-                            referred: sessionUser,
-                            referralCode,
-                            trialDays,
-                            rewardDays,
-                            rewardApplied: false,
-                        }));
-                        return { kind: 'blocked', reason: 'duplicate', referrer };
-                    }
-
-                    const previousExpiryDate = referrer.expiryDate || null;
-                    const canApplyReward = !!previousExpiryDate;
-                    const newExpiryDate = canApplyReward
-                        ? addDays(new Date(previousExpiryDate), rewardDays).toISOString()
-                        : null;
-                    const newUserObj = {
-                        id: sessionUser.id,
-                        plexId: sessionUser.plexId,
-                        username: sessionUser.username,
-                        email: sessionUser.email,
-                        joiningDate: new Date().toISOString(),
-                        expiryDate: addDays(new Date(), trialDays).toISOString(),
-                        plexAccessStatus: 'pending',
-                        isTrial: true,
-                        referredBy: referrer.id || referrer.plexId || referralCode,
-                        referredAt: new Date().toISOString(),
-                    };
-                    Object.assign(newUserObj, markUserOnboardingPending(newUserObj, onboardingDoc));
-                    users.push(newUserObj);
-                    if (canApplyReward) {
-                        referrer.expiryDate = newExpiryDate;
-                    }
-                    await writeFileUnlocked(USERS_PATH, users);
-                    await recordRewardUnlocked(createReferralRewardEntry({
-                        status: 'granted',
-                        referrer,
-                        referred: newUserObj,
-                        referralCode,
-                        trialDays,
-                        rewardDays,
-                        rewardApplied: canApplyReward,
-                        previousExpiryDate,
-                        newExpiryDate,
-                    }));
-                    return {
-                        kind: 'granted',
-                        referrer,
-                        newUserObj,
-                        canApplyReward,
-                        previousExpiryDate,
-                        newExpiryDate,
-                    };
-                });
-            });
-
-            if (claimOutcome?.kind === 'blocked') {
-                await appendAuditLog('referral_blocked', sessionUser, claimOutcome.referrer, {
-                    reason: claimOutcome.reason,
-                    trialDays,
-                    rewardDays,
-                });
-            } else if (claimOutcome?.kind === 'granted') {
-                const { referrer, newUserObj, canApplyReward, previousExpiryDate, newExpiryDate } = claimOutcome;
-                await appendAuditLog('referral_claimed', sessionUser, referrer, {
-                    trialDays,
-                    rewardDays,
-                    rewardApplied: canApplyReward,
-                    previousExpiryDate,
-                    newExpiryDate,
-                });
-                try {
-                    const expiryLabel = newExpiryDate
-                        ? new Date(newExpiryDate).toLocaleDateString()
-                        : 'unlimited';
-                    await createInAppNotification({
-                        userId: referrer.id,
-                        type: 'referral_success',
-                        title: 'Your referral was successful!',
-                        body: canApplyReward
-                            ? `${sessionUser.username} joined and ${rewardDays} day${rewardDays === 1 ? '' : 's'} were added to your access. New expiration: ${expiryLabel}.`
-                            : `${sessionUser.username} joined via your referral link. Your account is unlimited, so no bonus days were applied.`,
-                        href: '/',
-                        meta: {
-                            referredUserId: newUserObj.id,
-                            referredUsername: sessionUser.username,
-                            rewardDays: canApplyReward ? rewardDays : 0,
-                            forceUnique: true,
-                        },
-                    });
-                } catch (notifyErr) {
-                    log(`Failed to notify referrer ${referrer.username}: ${notifyErr.message}`);
-                }
-                if (config.serverIdentifier && config.plexToken) {
-                    inviteUserToPlex(newUserObj, config).catch(e => log('Failed to invite referral: ' + e.message));
-                }
-            }
-        }
+        await claimReferralForSession(sessionUser, config, ref);
     }
 
     if (!isAdmin) {
@@ -5350,7 +5396,9 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
     }
 
     if (localUser && reconcileTrialAccessFlag(localUser)) {
-        await saveFile(USERS_PATH, users);
+        await patchUserById(localUser.id, (entry) => {
+            reconcileTrialAccessFlag(entry);
+        });
     }
 
     const { actor: _actor, impersonatingUserId, ...sessionPublic } = req.user;
@@ -13837,8 +13885,8 @@ app.post('/api/invites/:code/claim', authRateLimit, async (req, res) => {
     const inviteIndex = invites.findIndex(i => i.code === req.params.code);
     if (inviteIndex === -1) return res.status(404).json({ error: 'Invite code not found or revoked.' });
 
-    const invite = invites[inviteIndex];
-    if (invite.maxUses !== 'unlimited' && invite.currentUses >= invite.maxUses) {
+    const invitePreview = invites[inviteIndex];
+    if (invitePreview.maxUses !== 'unlimited' && invitePreview.currentUses >= invitePreview.maxUses) {
         return res.status(400).json({ error: 'Invite code has reached its maximum usage limit.' });
     }
 
@@ -13860,57 +13908,70 @@ app.post('/api/invites/:code/claim', authRateLimit, async (req, res) => {
         if (!plexRes.ok) return res.status(401).json({ error: 'Invalid Plex token' });
 
         const plexUser = await plexRes.json();
-        const users = await loadFile(USERS_PATH, []);
-
-        // Check if user already exists
-        if (users.find(u => String(u.plexId) === String(plexUser.id) || u.email === plexUser.email)) {
-            return res.status(400).json({ error: 'You are already a member of this server.' });
-        }
-
-        // Calculate expiry date
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        today.setDate(today.getDate() + invite.durationDays);
-        const expiryDate = today.toISOString();
-
-        const inviteLibraryIds = normalizeLibraryIds(invite.libraryIds);
-        const newUser = {
-            id: randomUUID(),
-            plexId: plexUser.id,
-            username: plexUser.username,
-            email: plexUser.email,
-            thumb: plexUser.thumb,
-            expiryDate: expiryDate,
-            joiningDate: new Date().toISOString(),
-            plexAccessStatus: 'pending',
-            isTrial: false,
-            libraryIds: inviteLibraryIds,
-        };
         const onboardingDoc = normalizeOnboardingDocument(
             await loadFile(ONBOARDING_PATH, emptyOnboardingDocument())
         );
-        Object.assign(newUser, markUserOnboardingPending(newUser, onboardingDoc));
 
-        users.push(newUser);
-        await saveFile(USERS_PATH, users);
+        // Atomically re-check maxUses + membership, then create user and consume invite.
+        const claimed = await withFileLock(INVITES_PATH, async () => (
+            withFileLock(USERS_PATH, async () => {
+                const lockedInvites = await readFileUnlocked(INVITES_PATH, []);
+                const lockedInviteIndex = lockedInvites.findIndex((i) => i.code === req.params.code);
+                if (lockedInviteIndex === -1) {
+                    return { status: 404, error: 'Invite code not found or revoked.' };
+                }
+                const invite = lockedInvites[lockedInviteIndex];
+                if (invite.maxUses !== 'unlimited' && (invite.currentUses || 0) >= invite.maxUses) {
+                    return { status: 400, error: 'Invite code has reached its maximum usage limit.' };
+                }
 
-        // Send actual Plex invite
-        await inviteUserToPlex(newUser, config, inviteLibraryIds.length > 0 ? inviteLibraryIds : null).catch(e => log('Failed to invite claimed user: ' + e.message));
+                const users = await readFileUnlocked(USERS_PATH, []);
+                if (users.find((u) => String(u.plexId) === String(plexUser.id) || u.email === plexUser.email)) {
+                    return { status: 400, error: 'You are already a member of this server.' };
+                }
 
-        // Update invite usage
-        // Re-read to prevent race condition during long Plex API calls
-        let freshInvites = await loadFile(INVITES_PATH, []);
-        const freshIndex = freshInvites.findIndex(i => i.code === req.params.code);
-        if (freshIndex !== -1) {
-            freshInvites[freshIndex].currentUses = (freshInvites[freshIndex].currentUses || 0) + 1;
-            if (!freshInvites[freshIndex].usedBy) freshInvites[freshIndex].usedBy = [];
-            freshInvites[freshIndex].usedBy.push({
-                username: plexUser.username,
-                email: plexUser.email,
-                date: new Date().toISOString()
-            });
-            await saveFile(INVITES_PATH, freshInvites);
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                today.setDate(today.getDate() + invite.durationDays);
+                const expiryDate = today.toISOString();
+                const inviteLibraryIds = normalizeLibraryIds(invite.libraryIds);
+                const newUser = {
+                    id: randomUUID(),
+                    plexId: plexUser.id,
+                    username: plexUser.username,
+                    email: plexUser.email,
+                    thumb: plexUser.thumb,
+                    expiryDate: expiryDate,
+                    joiningDate: new Date().toISOString(),
+                    plexAccessStatus: 'pending',
+                    isTrial: false,
+                    libraryIds: inviteLibraryIds,
+                };
+                Object.assign(newUser, markUserOnboardingPending(newUser, onboardingDoc));
+                users.push(newUser);
+                await writeFileUnlocked(USERS_PATH, users);
+
+                invite.currentUses = (invite.currentUses || 0) + 1;
+                if (!invite.usedBy) invite.usedBy = [];
+                invite.usedBy.push({
+                    username: plexUser.username,
+                    email: plexUser.email,
+                    date: new Date().toISOString(),
+                });
+                await writeFileUnlocked(INVITES_PATH, lockedInvites);
+
+                return { status: 200, newUser, invite, inviteLibraryIds };
+            })
+        ));
+
+        if (claimed.status !== 200) {
+            return res.status(claimed.status).json({ error: claimed.error });
         }
+
+        const { newUser, invite, inviteLibraryIds } = claimed;
+
+        // Send actual Plex invite (outside locks — slow network I/O)
+        await inviteUserToPlex(newUser, config, inviteLibraryIds.length > 0 ? inviteLibraryIds : null).catch(e => log('Failed to invite claimed user: ' + e.message));
 
         await appendAuditLog('invite_claimed', { username: plexUser.username, id: plexUser.id }, newUser, { code: invite.code });
 
@@ -14789,48 +14850,62 @@ app.get('/api/audit-log/export', requireAdmin, async (req, res) => {
 app.put('/api/users/:id', requireAdmin, async (req, res) => {
     const { id } = req.params;
     const { expiryDate, exemptFromCleanup, optOutNewsletter, requestOverrides, libraryIds } = req.body;
-    let users = await loadFile(USERS_PATH, []);
-    const userIndex = users.findIndex(u => u.id === id);
-    if (userIndex === -1) return res.status(404).json({ error: 'User not found.' });
-
-    const previousExpiryDate = users[userIndex].expiryDate;
     const libraryIdsProvided = libraryIds !== undefined;
+
+    let previousExpiryDate = null;
     let plexShareUpdated = false;
     let plexShareError = null;
+    let savedUser;
 
-    if (expiryDate !== undefined) {
-        users[userIndex].expiryDate = expiryDate;
-    }
-    if (exemptFromCleanup !== undefined) {
-        users[userIndex].exemptFromCleanup = !!exemptFromCleanup;
-    }
-    if (optOutNewsletter !== undefined) {
-        users[userIndex].optOutNewsletter = !!optOutNewsletter;
-    }
-    if (requestOverrides !== undefined) {
-        users[userIndex].requestOverrides = normalizeUserRequestOverrides(requestOverrides);
-    }
-    if (libraryIdsProvided) {
-        users[userIndex].libraryIds = normalizeLibraryIds(libraryIds);
-    }
+    try {
+        savedUser = await updateUsers((users) => {
+            const userIndex = users.findIndex(u => u.id === id);
+            if (userIndex === -1) {
+                const err = new Error('User not found.');
+                err.status = 404;
+                throw err;
+            }
+            previousExpiryDate = users[userIndex].expiryDate;
 
-    reconcileTrialAccessFlag(users[userIndex]);
+            if (expiryDate !== undefined) {
+                users[userIndex].expiryDate = expiryDate;
+            }
+            if (exemptFromCleanup !== undefined) {
+                users[userIndex].exemptFromCleanup = !!exemptFromCleanup;
+            }
+            if (optOutNewsletter !== undefined) {
+                users[userIndex].optOutNewsletter = !!optOutNewsletter;
+            }
+            if (requestOverrides !== undefined) {
+                users[userIndex].requestOverrides = normalizeUserRequestOverrides(requestOverrides);
+            }
+            if (libraryIdsProvided) {
+                users[userIndex].libraryIds = normalizeLibraryIds(libraryIds);
+            }
 
-    await saveFile(USERS_PATH, users);
+            reconcileTrialAccessFlag(users[userIndex]);
+            return { data: users, result: { ...users[userIndex] } };
+        });
+    } catch (err) {
+        if (err?.status) return res.status(err.status).json({ error: err.message });
+        throw err;
+    }
 
     const config = await loadFile(CONFIG_PATH, {});
 
     if (libraryIdsProvided) {
         try {
-            const shareResult = await updatePlexShareLibraries(users[userIndex], config, users[userIndex].libraryIds);
+            const shareResult = await updatePlexShareLibraries(savedUser, config, savedUser.libraryIds);
             plexShareUpdated = !!shareResult.ok;
-            if (plexShareUpdated && users[userIndex].plexAccessStatus === 'revoked') {
-                users[userIndex].plexAccessStatus = 'pending';
-                await saveFile(USERS_PATH, users);
+            if (plexShareUpdated && savedUser.plexAccessStatus === 'revoked') {
+                const patched = await patchUserById(id, (entry) => {
+                    entry.plexAccessStatus = 'pending';
+                });
+                if (patched) savedUser.plexAccessStatus = 'pending';
             }
             if (plexShareUpdated) {
-                await appendAuditLog('user_libraries_updated', req.user, users[userIndex], {
-                    libraryIds: users[userIndex].libraryIds,
+                await appendAuditLog('user_libraries_updated', req.user, savedUser, {
+                    libraryIds: savedUser.libraryIds,
                 });
             } else {
                 plexShareError = shareResult.error || 'Saved locally but failed to update Plex library access.';
@@ -14842,29 +14917,31 @@ app.put('/api/users/:id', requireAdmin, async (req, res) => {
     }
 
     if (expiryDate !== undefined && expiryDate !== previousExpiryDate) {
-        await appendAuditLog('user_expiry_updated', req.user, users[userIndex], { previousExpiryDate, expiryDate });
-        // Send adjustment email
+        await appendAuditLog('user_expiry_updated', req.user, savedUser, { previousExpiryDate, expiryDate });
         const logoPath = path.join(process.cwd(), 'static', 'logo.png');
         let hasLogo = false;
         try { await fs.access(logoPath); hasLogo = true; } catch (e) { }
-        await sendAdjustmentEmail(config, users[userIndex], hasLogo);
+        await sendAdjustmentEmail(config, savedUser, hasLogo);
 
-        // Auto re-invite if revoked and new date is in the future
-        if (users[userIndex].plexAccessStatus === 'revoked') {
-            const days = getDaysUntilExpiry(users[userIndex].expiryDate);
+        if (savedUser.plexAccessStatus === 'revoked') {
+            const days = getDaysUntilExpiry(savedUser.expiryDate);
             if (days === null || days >= 0) {
-                const inviteLibs = resolveInviteLibraryIds(users[userIndex], config);
-                const invited = await inviteUserToPlex(users[userIndex], config, inviteLibs.length > 0 ? inviteLibs : null);
+                const inviteLibs = resolveInviteLibraryIds(savedUser, config);
+                const invited = await inviteUserToPlex(savedUser, config, inviteLibs.length > 0 ? inviteLibs : null);
                 if (invited) {
-                    users[userIndex].plexAccessStatus = 'pending';
-                    await saveFile(USERS_PATH, users);
-                    await appendAuditLog('relink_invite_sent', req.user, users[userIndex]);
+                    const patched = await patchUserById(id, (entry) => {
+                        entry.plexAccessStatus = 'pending';
+                    });
+                    if (patched) {
+                        savedUser.plexAccessStatus = 'pending';
+                        await appendAuditLog('relink_invite_sent', req.user, savedUser);
+                    }
                 }
             }
         }
     }
 
-    const payload = sanitizeUserForApi(users[userIndex]);
+    const payload = sanitizeUserForApi(savedUser);
     if (plexShareError) {
         return res.status(200).json({ ...payload, warning: plexShareError, plexShareUpdated: false });
     }
@@ -14948,36 +15025,46 @@ app.post('/api/users/bulk-update', requireAdmin, async (req, res) => {
     }
 
     try {
-        let users = await loadFile(USERS_PATH, []);
-        let updatedCount = 0;
+        const idSet = new Set(userIds.map(String));
         const config = await loadFile(CONFIG_PATH, {});
         const logoPath = path.join(process.cwd(), 'static', 'logo.png');
         let hasLogo = false;
         try { await fs.access(logoPath); hasLogo = true; } catch (e) { }
 
-        for (const user of users) {
-            if (userIds.includes(user.id)) {
+        const { updatedCount, touched } = await updateUsers((users) => {
+            const nextTouched = [];
+            for (const user of users) {
+                if (!idSet.has(String(user.id))) continue;
+                const wasRevoked = user.plexAccessStatus === 'revoked';
                 applyBulkAction(user, action, customDate);
-                updatedCount++;
-                await appendAuditLog('user_bulk_updated', req.user, user, { action, customDate: customDate || null });
-                await sendAdjustmentEmail(config, user, hasLogo);
+                nextTouched.push({
+                    id: user.id,
+                    snapshot: { ...user },
+                    wasRevoked,
+                    shouldReinvite: wasRevoked && (getDaysUntilExpiry(user.expiryDate) === null || getDaysUntilExpiry(user.expiryDate) >= 0),
+                });
+            }
+            return { data: users, result: { updatedCount: nextTouched.length, touched: nextTouched } };
+        });
 
-                // Auto re-invite if revoked and new date is in the future
-                if (user.plexAccessStatus === 'revoked') {
-                    const days = getDaysUntilExpiry(user.expiryDate);
-                    if (days === null || days >= 0) {
-                        const inviteLibs = resolveInviteLibraryIds(user, config);
-                        const invited = await inviteUserToPlex(user, config, inviteLibs.length > 0 ? inviteLibs : null);
-                        if (invited) {
-                            user.plexAccessStatus = 'pending';
-                            await appendAuditLog('relink_invite_sent', req.user, user);
-                        }
+        for (const item of touched) {
+            await appendAuditLog('user_bulk_updated', req.user, item.snapshot, { action, customDate: customDate || null });
+            await sendAdjustmentEmail(config, item.snapshot, hasLogo);
+
+            if (item.shouldReinvite) {
+                const inviteLibs = resolveInviteLibraryIds(item.snapshot, config);
+                const invited = await inviteUserToPlex(item.snapshot, config, inviteLibs.length > 0 ? inviteLibs : null);
+                if (invited) {
+                    const patched = await patchUserById(item.id, (entry) => {
+                        entry.plexAccessStatus = 'pending';
+                    });
+                    if (patched) {
+                        await appendAuditLog('relink_invite_sent', req.user, patched);
                     }
                 }
             }
         }
 
-        await saveFile(USERS_PATH, users);
         log(`Bulk updated ${updatedCount} users with action: ${action}`);
         res.json({ message: `Successfully updated ${updatedCount} users.` });
     } catch (error) {
@@ -14995,37 +15082,43 @@ app.post('/api/users/bulk-libraries', requireAdmin, async (req, res) => {
     }
 
     try {
-        let users = await loadFile(USERS_PATH, []);
         const config = await loadFile(CONFIG_PATH, {});
         const normalized = normalizeLibraryIds(libraryIds);
         const idSet = new Set(userIds.map(String));
-        let updatedCount = 0;
+
+        const { updatedCount, touched } = await updateUsers((users) => {
+            const nextTouched = [];
+            for (const user of users) {
+                if (!idSet.has(String(user.id))) continue;
+                user.libraryIds = normalized;
+                nextTouched.push({ id: user.id, snapshot: { ...user } });
+            }
+            return { data: users, result: { updatedCount: nextTouched.length, touched: nextTouched } };
+        });
+
         let plexUpdatedCount = 0;
         let plexFailedCount = 0;
 
-        for (const user of users) {
-            if (!idSet.has(String(user.id))) continue;
-            user.libraryIds = normalized;
-            updatedCount++;
-            await appendAuditLog('user_bulk_libraries_updated', req.user, user, { libraryIds: normalized });
-
+        for (const item of touched) {
+            await appendAuditLog('user_bulk_libraries_updated', req.user, item.snapshot, { libraryIds: normalized });
             try {
-                const shareResult = await updatePlexShareLibraries(user, config, normalized);
+                const shareResult = await updatePlexShareLibraries(item.snapshot, config, normalized);
                 if (shareResult.ok) {
                     plexUpdatedCount++;
-                    if (user.plexAccessStatus === 'revoked') {
-                        user.plexAccessStatus = 'pending';
+                    if (item.snapshot.plexAccessStatus === 'revoked') {
+                        await patchUserById(item.id, (entry) => {
+                            entry.plexAccessStatus = 'pending';
+                        });
                     }
                 } else {
                     plexFailedCount++;
                 }
             } catch (error) {
                 plexFailedCount++;
-                log(`Bulk library update failed for ${user.username}: ${error.message}`);
+                log(`Bulk library update failed for ${item.snapshot.username}: ${error.message}`);
             }
         }
 
-        await saveFile(USERS_PATH, users);
         log(`Bulk library update: ${updatedCount} users saved, ${plexUpdatedCount} Plex shares updated, ${plexFailedCount} failed`);
         res.json({
             message: `Updated libraries for ${updatedCount} user${updatedCount === 1 ? '' : 's'}.`,
@@ -21020,7 +21113,7 @@ const checkAndCleanupInactive = async (config) => {
         hasLogo = true;
     } catch (e) { /* optional logo */ }
 
-    let usersUpdated = false;
+    let revokedCount = 0;
 
     for (const { user, lastWatchedMs, accountId } of candidates) {
         log(`[INACTIVE CLEANUP] User ${user.email || user.username} last watched: ${lastWatchedMs > 0 ? new Date(lastWatchedMs).toISOString() : 'Never'}. Removing access.`);
@@ -21031,20 +21124,25 @@ const checkAndCleanupInactive = async (config) => {
             continue;
         }
 
-        user.plexAccessStatus = 'revoked';
-        const days = getDaysUntilExpiry(user.expiryDate);
-        if (days === null || days >= 0) {
-            const past = new Date();
-            past.setHours(0, 0, 0, 0);
-            past.setDate(past.getDate() - 1);
-            const y = past.getFullYear();
-            const m = String(past.getMonth() + 1).padStart(2, '0');
-            const d = String(past.getDate()).padStart(2, '0');
-            user.expiryDate = `${y}-${m}-${d}T12:00:00.000Z`;
-        }
-        usersUpdated = true;
+        const updated = await patchUserById(user.id, (entry) => {
+            if (entry.plexAccessStatus === 'revoked' && entry.expiryEmailSent) return false;
+            entry.plexAccessStatus = 'revoked';
+            const days = getDaysUntilExpiry(entry.expiryDate);
+            if (days === null || days >= 0) {
+                const past = new Date();
+                past.setHours(0, 0, 0, 0);
+                past.setDate(past.getDate() - 1);
+                const y = past.getFullYear();
+                const m = String(past.getMonth() + 1).padStart(2, '0');
+                const d = String(past.getDate()).padStart(2, '0');
+                entry.expiryDate = `${y}-${m}-${d}T12:00:00.000Z`;
+            }
+            return true;
+        });
+        if (!updated) continue;
+        revokedCount += 1;
 
-        await appendAuditLog('user_inactive_cleanup', { username: 'System', email: 'system@local' }, user, {
+        await appendAuditLog('user_inactive_cleanup', { username: 'System', email: 'system@local' }, updated, {
             reason: `Inactive for > ${thresholdDays} days`,
             lastWatched: lastWatchedMs > 0 ? new Date(lastWatchedMs).toISOString() : 'Never',
             accountId,
@@ -21054,19 +21152,23 @@ const checkAndCleanupInactive = async (config) => {
             await sendGotifyAlert(
                 config,
                 'Portal access revoked',
-                `${user.username || user.email} was revoked after inactive cleanup.`,
+                `${updated.username || updated.email} was revoked after inactive cleanup.`,
                 8,
             ).catch((e) => log(`Failed to send Gotify inactive-cleanup alert: ${e.message}`));
         }
 
-        if (!user.expiryEmailSent) {
-            const emailSent = await sendExpiryEmail(config, user, hasLogo);
-            if (emailSent) user.expiryEmailSent = true;
+        if (!updated.expiryEmailSent) {
+            const emailSent = await sendExpiryEmail(config, updated, hasLogo);
+            if (emailSent) {
+                await patchUserById(user.id, (entry) => {
+                    entry.expiryEmailSent = true;
+                });
+            }
         }
     }
 
-    if (usersUpdated) {
-        await saveFile(USERS_PATH, users);
+    if (revokedCount > 0) {
+        log(`[INACTIVE CLEANUP] Updated ${revokedCount} user(s).`);
     }
 };
 
