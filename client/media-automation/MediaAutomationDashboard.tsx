@@ -2580,7 +2580,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                             const sample = String(match?.samplePath || '').trim();
                                             if (sample) setEnqueuePath(sample);
                                         }}
-                                        options={[{ value: '', label: 'Automatic pipeline' }, ...pipelines.map((pipeline) => ({ value: String(pipeline.id ?? ''), label: pipeline.name }))]}
+                                        options={[{ value: '', label: t('mediaAutomation.queue.automaticPipeline') }, ...pipelines.map((pipeline) => ({ value: String(pipeline.id ?? ''), label: pipeline.name }))]}
                                     />
                                     <button
                                         type="button"
@@ -2592,22 +2592,22 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         }}
                                     >
                                         {busy?.startsWith('queue-sample-') ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
-                                        Queue sample
+                                        {t('mediaAutomation.queue.queueSample')}
                                     </button>
                                     <button type="button" className={primaryButtonClass} disabled={!enqueuePath.trim() || busy !== null} onClick={() => runAction('enqueue', () => mediaAutomationApi.enqueue(enqueuePath.trim(), enqueuePipelineId || undefined), 'Path added to queue.').then(() => setEnqueuePath(''))}>
-                                        {busy === 'enqueue' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Enqueue
+                                        {busy === 'enqueue' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} {t('mediaAutomation.queue.enqueue')}
                                     </button>
                                 </div>
-                                <p className="text-xs text-muted">Pick a pipeline with a saved sample file to auto-fill the path, or use Queue sample for one click.</p>
+                                <p className="text-xs text-muted">{t('mediaAutomation.queue.sampleHint')}</p>
                             </div>
                         </section>
                     </div>
                     {jobs.length === 0 ? (
                         <EmptyState
                             icon={ListRestart}
-                            title="Queue is empty"
-                            detail="Enqueue a path, run Scan now, or wait for the library watcher to discover matching media."
-                            actionLabel="Scan now"
+                            title={t('mediaAutomation.queue.emptyTitle')}
+                            detail={t('mediaAutomation.queue.emptyDetail')}
+                            actionLabel={t('mediaAutomation.queue.scanNow')}
                             onAction={() => void runScanNow()}
                         />
                     ) : (
@@ -2621,14 +2621,14 @@ export const MediaAutomationDashboard: React.FC = () => {
                                             onClick={() => selectQueueViewFilter('all')}
                                             aria-pressed={queueViewFilter === 'all'}
                                         >
-                                            All
+                                            {t('mediaAutomation.queue.all')}
                                         </button>
                                         {([
-                                            ['active', 'Active', queueCounts.active],
-                                            ['queued', 'Queued', queueCounts.queued],
-                                            ['dry-run', 'Dry-run', queueCounts.dryRun],
-                                            ['failed', 'Failed', queueCounts.failed],
-                                            ['completed', 'Completed', queueCounts.completed],
+                                            ['active', t('mediaAutomation.queue.active'), queueCounts.active],
+                                            ['queued', t('mediaAutomation.queue.queued'), queueCounts.queued],
+                                            ['dry-run', t('mediaAutomation.queue.dryRun'), queueCounts.dryRun],
+                                            ['failed', t('mediaAutomation.queue.failed'), queueCounts.failed],
+                                            ['completed', t('mediaAutomation.queue.completed'), queueCounts.completed],
                                         ] as const).map(([id, label, count]) => (
                                             <button
                                                 key={id}
@@ -2642,12 +2642,12 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         ))}
                                     </div>
                                     <label className="relative block w-full lg:max-w-xs">
-                                        <span className="sr-only">Search queue</span>
+                                        <span className="sr-only">{t('mediaAutomation.queue.search')}</span>
                                         <input
                                             className={`${fieldClass} pl-3`}
                                             value={queueSearch}
                                             onChange={(event) => setQueueSearch(event.target.value)}
-                                            placeholder="Search path or pipeline…"
+                                            placeholder={t('mediaAutomation.queue.searchPlaceholder')}
                                         />
                                     </label>
                                 </div>
@@ -2658,7 +2658,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         value={queueLibraryFilter}
                                         onChange={setQueueLibraryFilter}
                                         options={[
-                                            { value: '', label: 'All libraries' },
+                                            { value: '', label: t('mediaAutomation.queue.allLibraries') },
                                             ...queueLibraryOptions.map(([id, name]) => ({ value: id, label: name })),
                                         ]}
                                     />
@@ -2668,7 +2668,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         value={queuePipelineFilter}
                                         onChange={setQueuePipelineFilter}
                                         options={[
-                                            { value: '', label: 'All pipelines' },
+                                            { value: '', label: t('mediaAutomation.queue.allPipelines') },
                                             ...queuePipelineOptions.map(([id, name]) => ({ value: id, label: name })),
                                         ]}
                                     />
@@ -2676,11 +2676,11 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         className="appearance-none text-[16px] leading-5 w-full sm:max-w-xs rounded-lg border border-white/10 bg-background/70 px-3 py-2 text-[16px] text-text placeholder:text-muted/60 outline-none transition focus:border-plex focus:ring-1 focus:ring-plex"
                                         value={queueErrorFilter}
                                         onChange={(event) => setQueueErrorFilter(event.target.value)}
-                                        placeholder="Filter by error text…"
+                                        placeholder={t('mediaAutomation.queue.errorFilterPlaceholder')}
                                     />
                                     <label className="flex items-center gap-2 text-xs font-semibold text-muted">
-                                        <span className="whitespace-nowrap" title="Show paths relative to the library root (Sonarr-style)">
-                                            Relative paths
+                                        <span className="whitespace-nowrap" title={t('mediaAutomation.queue.relativePathsHint')}>
+                                            {t('mediaAutomation.queue.relativePaths')}
                                         </span>
                                         <SettingsSwitch
                                             checked={relativePaths}
@@ -2695,7 +2695,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                                         />
                                     </label>
                                     <label className="flex items-center gap-2 text-xs font-semibold text-muted sm:ml-auto">
-                                        <span className="whitespace-nowrap">Per page</span>
+                                        <span className="whitespace-nowrap">{t('mediaAutomation.queue.perPage')}</span>
                                         <CustomSelect
                                             compact
                                             className="min-w-[5.5rem]"
@@ -2835,7 +2835,7 @@ export const MediaAutomationDashboard: React.FC = () => {
                             </section>
                             {filteredJobs.length === 0 ? (
                                 <div className={`${panelClass} p-6 text-center text-sm text-muted`}>
-                                    No jobs match this filter{queueSearch.trim() || queueLibraryFilter || queuePipelineFilter || queueErrorFilter.trim() ? ' / filters' : ''}.
+                                    {t('mediaAutomation.queue.noMatches', { filters: queueSearch.trim() || queueLibraryFilter || queuePipelineFilter || queueErrorFilter.trim() ? t('mediaAutomation.queue.filtersSuffix') : '' })}
                                 </div>
                             ) : (
                                 <>
