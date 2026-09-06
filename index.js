@@ -218,7 +218,7 @@ import {
     runSpotifySyncScheduledJob,
     SPOTIFY_SYNC_SCHEDULE_CHECK_MS,
 } from './lib/spotify-to-plex-scheduler.js';
-import { createSupportTicketFromMediaIssue, attachTicketIdsToIssues } from './lib/support-tickets/fromIssue.js';
+import { createSupportTicketFromMediaIssue, attachTicketIdsToIssues, resolveSupportTicketFromMediaIssue } from './lib/support-tickets/fromIssue.js';
 import { mapTautulliHistoryRowToPlexItem } from './lib/achievements/tautulliHistory.js';
 import { isTautulliWatchHistorySource, buildAchievementsHomeRankContext, summarizeAchievementsBackfill, levelProgress } from './lib/achievements/index.js';
 import { loadAchievementsState, setLeaderboardOptOut } from './lib/achievements/store.js';
@@ -11694,12 +11694,30 @@ app.post('/api/discovery/my-issues/:id/:status', requireAuth, requireMember, asy
             const portalIssues = getPortalIssueService(config);
             await portalIssues.assertMemberOwnsIssue(req.user, issueId);
             await portalIssues.updateIssueStatus(issueId, status, req.user);
+            if (status === 'resolved') {
+                await resolveSupportTicketFromMediaIssue({
+                    config,
+                    dataDir: SUPPORT_TICKETS_DIR,
+                    issueId,
+                    engine: 'portal',
+                    log,
+                });
+            }
             return res.json({ success: true, message: status === 'resolved' ? 'Issue marked resolved.' : 'Issue reopened.' });
         }
         const gate = getRequestAppGate(config);
         if (!gate.ready) return res.status(400).json({ error: 'Request app not configured' });
         await requestAppService.assertMemberOwnsIssue(config, req.user, issueId);
         await requestAppService.updateIssueStatus(config, issueId, status);
+        if (status === 'resolved') {
+            await resolveSupportTicketFromMediaIssue({
+                config,
+                dataDir: SUPPORT_TICKETS_DIR,
+                issueId,
+                engine: 'seerr',
+                log,
+            });
+        }
         res.json({ success: true, message: status === 'resolved' ? 'Issue marked resolved.' : 'Issue reopened.' });
     } catch (e) {
         log(`Discovery issue status error: ${e.message}`);
@@ -11871,6 +11889,15 @@ app.post('/api/issues/:id/:status', requireAdmin, async (req, res) => {
         if (getRequestEngine(config) === 'portal') {
             const portalIssues = getPortalIssueService(config);
             await portalIssues.updateIssueStatus(issueId, status, req.user);
+            if (status === 'resolved') {
+                await resolveSupportTicketFromMediaIssue({
+                    config,
+                    dataDir: SUPPORT_TICKETS_DIR,
+                    issueId,
+                    engine: 'portal',
+                    log,
+                });
+            }
             const title = String(req.body?.title || '').trim();
             await appendAuditLog(
                 status === 'resolved' ? 'issue_resolved' : 'issue_reopened',
@@ -11883,6 +11910,15 @@ app.post('/api/issues/:id/:status', requireAdmin, async (req, res) => {
         const gate = getRequestAppGate(config);
         if (!gate.ready) return res.status(400).json({ error: 'Request app not configured' });
         await requestAppService.updateIssueStatus(config, issueId, status);
+        if (status === 'resolved') {
+            await resolveSupportTicketFromMediaIssue({
+                config,
+                dataDir: SUPPORT_TICKETS_DIR,
+                issueId,
+                engine: 'seerr',
+                log,
+            });
+        }
         const title = String(req.body?.title || '').trim();
         await appendAuditLog(
             status === 'resolved' ? 'issue_resolved' : 'issue_reopened',
@@ -19964,6 +20000,23 @@ registerSupportTicketRoutes(app, {
     resolveLocalUser: async (sessionUser) => {
         const users = await loadFile(USERS_PATH, []);
         return findLocalUserForSession(users, sessionUser);
+    },
+    resolveLinkedMediaIssue: async ({ issueId, engine } = {}) => {
+        const config = await loadFile(CONFIG_PATH, {});
+        const key = String(issueId || '').trim();
+        if (!key) return;
+        const preferred = String(engine || '').toLowerCase();
+        const usePortal = preferred === 'portal'
+            || (!preferred && getRequestEngine(config) === 'portal')
+            || getRequestEngine(config) === 'portal';
+        if (usePortal || preferred === 'portal') {
+            const portalIssues = getPortalIssueService(config);
+            await portalIssues.updateIssueStatus(key, 'resolved', null);
+            return;
+        }
+        const gate = getRequestAppGate(config);
+        if (!gate.ready) return;
+        await requestAppService.updateIssueStatus(config, key, 'resolved');
     },
     log,
 });
