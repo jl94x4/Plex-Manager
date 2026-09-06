@@ -651,6 +651,7 @@ export const SettingsDashboard: React.FC = () => {
     const [savedArrInstances, setSavedArrInstances] = useState<ArrInstance[]>([]);
     const [downloadClients, setDownloadClients] = useState<DownloadClientConfig[]>([]);
     const [tautulliUrl, setTautulliUrl] = useState('');
+    const [notifyTautulliApiFailed, setNotifyTautulliApiFailed] = useState(true);
     const [tautulliApiKey, setTautulliApiKey] = useState('');
     const [jellyfinAnalyticsProvider, setJellyfinAnalyticsProvider] = useState('jellyglance');
     const [jellystatUrl, setJellystatUrl] = useState('');
@@ -760,7 +761,7 @@ export const SettingsDashboard: React.FC = () => {
     const [ntfyEvents, setNtfyEvents] = useState<Record<string, boolean>>({
         available: true, approved: true, declined: true, season: true, episode: false, admin_pending: true,
         collexions_failed: true, scanner_failed: true, scanner_deleted: true, scanner_upgrade: true, scanner_import: true, scanner_grab: true, scanner_update: true, scanner_interaction: true, spotify_sync_failed: true, status_down: true, status_up: true,
-        media_job_failed: true, media_job_completed: false,
+        media_job_failed: true, media_job_completed: false, tautulli_api_failed: true,
         support_ticket: true, support_reply: true, support_media_issue: true,
     });
     const [webhookEnabled, setWebhookEnabled] = useState(false);
@@ -769,7 +770,7 @@ export const SettingsDashboard: React.FC = () => {
     const [webhookEvents, setWebhookEvents] = useState<Record<string, boolean>>({
         available: true, approved: false, declined: false, season: false, episode: false, admin_pending: false,
         collexions_failed: false, scanner_failed: false, scanner_deleted: false, scanner_upgrade: false, scanner_import: false, scanner_grab: false, scanner_update: false, scanner_interaction: false, spotify_sync_failed: false, status_down: false, status_up: false,
-        media_job_failed: false, media_job_completed: false,
+        media_job_failed: false, media_job_completed: false, tautulli_api_failed: false,
         support_ticket: false, support_reply: false, support_media_issue: false,
     });
     const [watchHistorySource, setWatchHistorySource] = useState<'plex' | 'tautulli'>('plex');
@@ -1541,6 +1542,7 @@ export const SettingsDashboard: React.FC = () => {
             setSavedArrInstances(loadedArrInstances.map((entry) => ({ ...entry })));
             setDownloadClients(Array.isArray(initialSettings.downloadClients) ? initialSettings.downloadClients : []);
             setTautulliUrl(initialSettings.tautulliUrl || '');
+            setNotifyTautulliApiFailed(initialSettings.notifyTautulliApiFailed !== false);
             setTautulliApiKey(initialSettings.tautulliApiKey || '');
             setJellyfinAnalyticsProvider(initialSettings.jellyfinAnalyticsProvider === 'jellystat' ? 'jellystat' : 'jellyglance');
             setJellystatUrl(initialSettings.jellystatUrl || '');
@@ -1792,14 +1794,14 @@ export const SettingsDashboard: React.FC = () => {
                     ? {
                         available: true, approved: true, declined: true, season: true, episode: false, admin_pending: true,
                         collexions_failed: true, scanner_failed: true, scanner_deleted: true, scanner_upgrade: true, scanner_import: true, scanner_grab: true, scanner_update: true, scanner_interaction: true, spotify_sync_failed: true, status_down: true, status_up: true,
-                        media_job_failed: true, media_job_completed: false,
+                        media_job_failed: true, media_job_completed: false, tautulli_api_failed: true,
                         support_ticket: true, support_reply: true, support_media_issue: true,
                         ...initialSettings.ntfyEvents,
                     }
                     : {
                         available: true, approved: true, declined: true, season: true, episode: false, admin_pending: true,
                         collexions_failed: true, scanner_failed: true, scanner_deleted: true, scanner_upgrade: true, scanner_import: true, scanner_grab: true, scanner_update: true, scanner_interaction: true, spotify_sync_failed: true, status_down: true, status_up: true,
-                        media_job_failed: true, media_job_completed: false,
+                        media_job_failed: true, media_job_completed: false, tautulli_api_failed: true,
                         support_ticket: true, support_reply: true, support_media_issue: true,
                     },
             );
@@ -1811,14 +1813,14 @@ export const SettingsDashboard: React.FC = () => {
                     ? {
                         available: true, approved: false, declined: false, season: false, episode: false, admin_pending: false,
                         collexions_failed: false, scanner_failed: false, scanner_deleted: false, scanner_upgrade: false, scanner_import: false, scanner_grab: false, scanner_update: false, scanner_interaction: false, spotify_sync_failed: false, status_down: false, status_up: false,
-                        media_job_failed: false, media_job_completed: false,
+                        media_job_failed: false, media_job_completed: false, tautulli_api_failed: false,
                         support_ticket: false, support_reply: false, support_media_issue: false,
                         ...initialSettings.webhookEvents,
                     }
                     : {
                         available: true, approved: false, declined: false, season: false, episode: false, admin_pending: false,
                         collexions_failed: false, scanner_failed: false, scanner_deleted: false, scanner_upgrade: false, scanner_import: false, scanner_grab: false, scanner_update: false, scanner_interaction: false, spotify_sync_failed: false, status_down: false, status_up: false,
-                        media_job_failed: false, media_job_completed: false,
+                        media_job_failed: false, media_job_completed: false, tautulli_api_failed: false,
                         support_ticket: false, support_reply: false, support_media_issue: false,
                     },
             );
@@ -2214,6 +2216,7 @@ export const SettingsDashboard: React.FC = () => {
             downloadClients,
             tautulliUrl,
             tautulliApiKey,
+            notifyTautulliApiFailed,
             jellyfinAnalyticsProvider,
             jellystatUrl,
             jellystatApiKey,
@@ -3474,8 +3477,15 @@ export const SettingsDashboard: React.FC = () => {
                                     type="tautulli"
                                     payload={{ tautulliUrl, tautulliApiKey }}
                                     disabled={!hasIntegrationCredentials(tautulliUrl, tautulliApiKey, initialSettings.tautulliUrl, initialSettings.tautulliApiKey)}
-                                    className="mb-6"
+                                    className="mb-4"
                                     onMessage={(msg, ok) => addToast(msg, ok ? 'success' : 'error')}
+                                />
+                                <SettingsToggleRow
+                                    title="Notify when Tautulli API fails"
+                                    description="Alert admins (bell / push / ntfy) when SMP cannot reach Tautulli or the API returns an error. Cooldown 30 minutes. Each admin can mute this under Preferences."
+                                    checked={notifyTautulliApiFailed}
+                                    onChange={setNotifyTautulliApiFailed}
+                                    className="mb-6"
                                 />
                                 </div>
                             )}

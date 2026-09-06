@@ -165,6 +165,8 @@ export interface AppSettings {
     downloadClients?: DownloadClientConfig[];
     tautulliUrl?: string;
     tautulliApiKey?: string;
+    /** Alert admins when Tautulli API calls fail (site kill-switch). Default on. */
+    notifyTautulliApiFailed?: boolean;
     jellyfinAnalyticsProvider?: 'jellystat' | 'jellyglance';
     jellystatUrl?: string;
     jellystatApiKey?: string;

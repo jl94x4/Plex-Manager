@@ -100,6 +100,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
     const [notifyStatusUp, setNotifyStatusUp] = useState(user?.notifyStatusUp !== false);
     const [notifyMediaJobFailed, setNotifyMediaJobFailed] = useState(user?.notifyMediaJobFailed !== false);
     const [notifyMediaJobCompleted, setNotifyMediaJobCompleted] = useState(user?.notifyMediaJobCompleted === true);
+    const [notifyTautulliApiFailed, setNotifyTautulliApiFailed] = useState(user?.notifyTautulliApiFailed !== false);
     const [notifySupportTicket, setNotifySupportTicket] = useState(user?.notifySupportTicket !== false);
     const [notifySupportReply, setNotifySupportReply] = useState(user?.notifySupportReply !== false);
     const [notifySupportMediaIssue, setNotifySupportMediaIssue] = useState(user?.notifySupportMediaIssue !== false);
@@ -152,6 +153,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
         setNotifyStatusUp(user?.notifyStatusUp !== false);
         setNotifyMediaJobFailed(user?.notifyMediaJobFailed !== false);
         setNotifyMediaJobCompleted(user?.notifyMediaJobCompleted === true);
+        setNotifyTautulliApiFailed(user?.notifyTautulliApiFailed !== false);
         setNotifySupportTicket(user?.notifySupportTicket !== false);
         setNotifySupportReply(user?.notifySupportReply !== false);
         setNotifySupportMediaIssue(user?.notifySupportMediaIssue !== false);
@@ -196,6 +198,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
         user?.notifyStatusUp,
         user?.notifyMediaJobFailed,
         user?.notifyMediaJobCompleted,
+        user?.notifyTautulliApiFailed,
         user?.notifySupportTicket,
         user?.notifySupportReply,
         user?.notifySupportMediaIssue,
@@ -305,6 +308,7 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                     notifyStatusUp,
                     notifyMediaJobFailed,
                     notifyMediaJobCompleted,
+                    notifyTautulliApiFailed,
                     notifySupportTicket,
                     notifySupportReply,
                     notifySupportMediaIssue,
@@ -738,6 +742,14 @@ export const PreferencesPage: React.FC<Props> = ({ sessionInfo, refreshSession, 
                                     on={notifyMediaJobCompleted}
                                     onToggle={flip(setNotifyMediaJobCompleted)}
                                     ariaLabel={t('homeDashboard.toggleMediaJobCompletedAria')}
+                                    disabled={busy}
+                                />
+                                <PrefToggle
+                                    title={t('homeDashboard.tautulliApiFailedAlerts')}
+                                    hint={t('homeDashboard.tautulliApiFailedAlertsHint')}
+                                    on={notifyTautulliApiFailed}
+                                    onToggle={flip(setNotifyTautulliApiFailed)}
+                                    ariaLabel={t('homeDashboard.toggleTautulliApiFailedAria')}
                                     disabled={busy}
                                 />
                                 <PrefToggle

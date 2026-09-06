@@ -422,6 +422,7 @@ export const NotificationsSettingsTab: React.FC<Props> = ({
         status_up: t('settings.notifications.events.status_up'),
         media_job_failed: t('settings.notifications.events.media_job_failed'),
         media_job_completed: t('settings.notifications.events.media_job_completed'),
+        tautulli_api_failed: t('settings.notifications.events.tautulli_api_failed'),
         support_ticket: t('settings.notifications.events.support_ticket'),
         support_reply: t('settings.notifications.events.support_reply'),
         support_media_issue: t('settings.notifications.events.support_media_issue'),

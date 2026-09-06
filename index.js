@@ -4783,6 +4783,7 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
             notifyStatusUp,
             notifyMediaJobFailed,
             notifyMediaJobCompleted,
+            notifyTautulliApiFailed,
             notifySupportTicket,
             notifySupportReply,
             notifySupportMediaIssue,
@@ -4857,6 +4858,7 @@ app.post('/api/users/preferences', requireAuth, requireMember, async (req, res) 
                 notifyStatusUp,
                 notifyMediaJobFailed,
                 notifyMediaJobCompleted,
+                notifyTautulliApiFailed,
                 notifySupportTicket,
                 notifySupportReply,
                 notifySupportMediaIssue,
@@ -5889,6 +5891,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 downloadClients: maskDownloadClientsForApi(config.downloadClients, SECRET_MASK),
                 tautulliUrl: config.tautulliUrl || '',
                 tautulliApiKey: config.tautulliApiKey ? SECRET_MASK : '',
+                notifyTautulliApiFailed: config.notifyTautulliApiFailed !== false,
                 jellyfinAnalyticsProvider: normalizeJellyfinAnalyticsProvider(config.jellyfinAnalyticsProvider, config),
                 jellystatUrl: config.jellystatUrl || '',
                 jellystatApiKey: config.jellystatApiKey ? SECRET_MASK : '',
@@ -6103,6 +6106,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 downloadClients: [],
                 tautulliUrl: '',
                 tautulliApiKey: '',
+                notifyTautulliApiFailed: true,
                 jellyfinAnalyticsProvider: 'jellyglance',
                 jellystatUrl: '',
                 jellystatApiKey: '',
@@ -6265,7 +6269,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         summaryNotifyEnabled, summaryNotifyFrequency, summaryNotifyDay, summaryNotifyTime,
         summaryNotifyInApp, summaryNotifyWebPush, summaryNotifyEmail, summaryMetrics,
         publicDomain, requestUrl, contactUrl, contactWhatsApp, contactEmail,
-        sonarrUrl, sonarrApiKey, radarrUrl, radarrApiKey, arrInstances, downloadClients, tautulliUrl, tautulliApiKey, jellyfinAnalyticsProvider, jellystatUrl, jellystatApiKey, jellyglanceUrl, jellyglanceApiKey,
+        sonarrUrl, sonarrApiKey, radarrUrl, radarrApiKey, arrInstances, downloadClients, tautulliUrl, tautulliApiKey, notifyTautulliApiFailed, jellyfinAnalyticsProvider, jellystatUrl, jellystatApiKey, jellyglanceUrl, jellyglanceApiKey,
         requestAppType, requestAppUrl, requestAppFetchUrl, requestAppApiKey,
         requestDiscoverRegion, requestDiscoverLanguage, requestHideAvailableMedia, discoverySource, requestEngine,
         requestQuotaLimit, requestQuotaDays, requestQuotaLimit4k, autoApproveMovies, autoApproveTv,
@@ -6599,6 +6603,9 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         downloadClients: nextDownloadClients,
         tautulliUrl: safeTautulliUrl,
         tautulliApiKey: resolveSecret(tautulliApiKey, existingConfig.tautulliApiKey),
+        notifyTautulliApiFailed: notifyTautulliApiFailed !== undefined
+            ? !!notifyTautulliApiFailed
+            : (existingConfig.notifyTautulliApiFailed !== false),
         jellyfinAnalyticsProvider: normalizeJellyfinAnalyticsProvider(jellyfinAnalyticsProvider || existingConfig.jellyfinAnalyticsProvider, existingConfig),
         jellystatUrl: safeJellystatUrl,
         jellystatApiKey: resolveSecret(jellystatApiKey, existingConfig.jellystatApiKey),
@@ -17182,20 +17189,44 @@ const tautulliHistoryRowsFromPayload = (payload) => {
     return null;
 };
 
+const notifyTautulliApiFailure = (error) => {
+    void (async () => {
+        try {
+            const config = await loadFile(CONFIG_PATH, {});
+            if (!config?.tautulliUrl || !config?.tautulliApiKey) return;
+            if (config.notifyTautulliApiFailed === false) return;
+            const detail = String(error?.message || error || 'Tautulli API request failed').trim();
+            await notifyOps('tautulli_api_failed', {
+                title: detail || 'Tautulli API request failed',
+                body: 'Check Media Stack → Tautulli URL and API key, then Test connection.',
+                href: '/settings#tautulli',
+                dedupeKey: 'tautulli:api-failed',
+            });
+        } catch {
+            /* ignore notify failures */
+        }
+    })();
+};
+
 const fetchTautulliApi = async (tUrl, params, { timeoutMs = 20000 } = {}) => {
-    const search = new URLSearchParams(params);
-    const res = await fetchWithTimeout(`${tUrl}/api/v2?${search.toString()}`, {
-        headers: { Accept: 'application/json' },
-    }, timeoutMs);
-    if (!res.ok) {
-        throw new Error(`Tautulli HTTP ${res.status}`);
+    try {
+        const search = new URLSearchParams(params);
+        const res = await fetchWithTimeout(`${tUrl}/api/v2?${search.toString()}`, {
+            headers: { Accept: 'application/json' },
+        }, timeoutMs);
+        if (!res.ok) {
+            throw new Error(`Tautulli HTTP ${res.status}`);
+        }
+        const payload = await res.json();
+        const result = String(payload?.response?.result || '').toLowerCase();
+        if (result && result !== 'success') {
+            throw new Error(payload?.response?.message || `Tautulli ${params.cmd || 'API'} failed`);
+        }
+        return payload;
+    } catch (error) {
+        notifyTautulliApiFailure(error);
+        throw error;
     }
-    const payload = await res.json();
-    const result = String(payload?.response?.result || '').toLowerCase();
-    if (result && result !== 'success') {
-        throw new Error(payload?.response?.message || `Tautulli ${params.cmd || 'API'} failed`);
-    }
-    return payload;
 };
 
 const fetchTautulliHistoryPage = async (tUrl, config, extraParams = {}, { timeoutMs = 25000 } = {}) => {
