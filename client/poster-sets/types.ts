@@ -51,6 +51,17 @@ export type PosterSetsConfig = {
     tpdbCacheWarmSource?: 'full' | 'recent';
     /** Skip titles that already have a TPDB set list on disk. */
     tpdbCacheSkipCached?: boolean;
+    /**
+     * When Plex posts library.new, resolve the title on ThePosterDB and cache set lists + images.
+     * Requires Enable local TPDB cache. Uses /api/poster-sets/webhook.
+     */
+    tpdbCacheOnLibraryAdd?: boolean;
+    /** One-shot first-run backfill of last 20 movies + 20 shows (server-managed). */
+    tpdbFirstRunBackfillDone?: boolean;
+    /** Shared-secret for Plex → Poster Sets library.new webhook (?token=). */
+    webhookToken?: string;
+    /** Server-only: rotate webhookToken on next save. */
+    rotateWebhookToken?: boolean;
 };
 
 export type PosterSetsWatch = {
@@ -464,4 +475,7 @@ export const DEFAULT_POSTER_SETS_CONFIG: PosterSetsConfig = {
     tpdbCacheWarmMedia: 'all',
     tpdbCacheWarmSource: 'full',
     tpdbCacheSkipCached: true,
+    tpdbCacheOnLibraryAdd: true,
+    tpdbFirstRunBackfillDone: false,
+    webhookToken: '',
 };

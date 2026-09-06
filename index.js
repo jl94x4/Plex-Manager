@@ -1172,6 +1172,7 @@ const portalCsrfMiddleware = (req, res, next) => {
     if (!String(req.path || '').startsWith('/api/')) return next();
     // External integrations (no browser session / CSRF header).
     if (String(req.path || '').startsWith('/api/editions/webhook')) return next();
+    if (String(req.path || '').startsWith('/api/poster-sets/webhook')) return next();
     if (String(req.path || '').startsWith('/api/overlays/collexions-collection-updated')) return next();
     const headerOk = String(req.get(PORTAL_CSRF_HEADER) || '') === PORTAL_CSRF_VALUE;
     if (headerOk || isSameOriginApiRequest(req)) return next();

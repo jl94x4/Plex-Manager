@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
     CheckCircle2,
     ChevronDown,
@@ -28,6 +28,7 @@ import { StickySaveBar } from '../../shared/StickySaveBar';
 import { BetaBadge, PosterSetsBetaBanner } from '../../shared/BetaBadge';
 import { askConfirm } from '../../shared/confirm';
 import { normalizeUpgraderGridSize } from '../../shared/portalLayout';
+import { portalUrl } from '../../shared/basePath';
 import { posterSetsApi } from '../api';
 import { MEDIUX_FILTER_OPTIONS, type PosterSetsConfig } from '../types';
 import { formatTpdbEta } from '../shared/tpdbCacheUi';
@@ -357,6 +358,13 @@ export const PosterSetsSettingsView: React.FC = () => {
         initialUrlState,
         initialLocation,
     } = usePosterSetsDashboard();
+
+    const webhookUrl = useMemo(() => {
+        if (typeof window === 'undefined') return '';
+        const token = String(configDraft.webhookToken || '').trim();
+        if (!token) return '';
+        return `${window.location.origin}${portalUrl('/api/poster-sets/webhook')}?token=${encodeURIComponent(token)}`;
+    }, [configDraft.webhookToken]);
 
     const [tpdbCacheStatus, setTpdbCacheStatus] = useState<Awaited<ReturnType<typeof posterSetsApi.tpdbCacheStatus>> | null>(null);
     const [tpdbCookiePaste, setTpdbCookiePaste] = useState('');
@@ -722,7 +730,11 @@ export const PosterSetsSettingsView: React.FC = () => {
                                         onChange={(next) => setConfigDraft((prev) => ({
                                             ...prev,
                                             tpdbLocalCacheEnabled: next,
-                                            ...(next ? {} : { tpdbAggressivePrefetch: false, tpdbWarmParallelWorkers: false }),
+                                            ...(next ? {} : {
+                                                tpdbAggressivePrefetch: false,
+                                                tpdbWarmParallelWorkers: false,
+                                                tpdbCacheOnLibraryAdd: false,
+                                            }),
                                         }))}
                                         className="!py-3"
                                     />
@@ -741,6 +753,73 @@ export const PosterSetsSettingsView: React.FC = () => {
                                                         ? 'Enabled but empty — click Build cache from library, or wait for background catch-up after save.'
                                                         : null}
                                         </p>
+                                    )}
+                                    <SettingsToggleRow
+                                        title="Cache on Plex library add"
+                                        description="When Plex adds a movie or show (library.new webhook), download all ThePosterDB posters for that title into the local cache. On first enable, also backfills the last 20 movies and last 20 shows."
+                                        checked={
+                                            configDraft.tpdbLocalCacheEnabled === true
+                                            && configDraft.tpdbCacheOnLibraryAdd !== false
+                                        }
+                                        onChange={(next) => setConfigDraft((prev) => ({
+                                            ...prev,
+                                            tpdbCacheOnLibraryAdd: next,
+                                            ...(next ? { tpdbLocalCacheEnabled: true } : {}),
+                                        }))}
+                                        disabled={configDraft.tpdbLocalCacheEnabled !== true}
+                                        className="!py-3"
+                                    />
+                                    {configDraft.tpdbLocalCacheEnabled === true
+                                        && configDraft.tpdbCacheOnLibraryAdd !== false && (
+                                        <div className="mb-3 rounded-lg border border-white/10 bg-black/30 px-3 py-2.5">
+                                            <p className="text-[10px] font-bold uppercase tracking-wider text-muted mb-1">
+                                                Plex webhook URL
+                                            </p>
+                                            {webhookUrl ? (
+                                                <>
+                                                    <code className="text-[11px] break-all text-plex">{webhookUrl}</code>
+                                                    <p className="mt-2 text-[11px] text-muted">
+                                                        Add this under Plex Settings → Network → Webhooks (Plex Pass).
+                                                        Treat the token like a password. Opening the URL in a browser only returns a health check.
+                                                    </p>
+                                                    <button
+                                                        type="button"
+                                                        disabled={busy !== null}
+                                                        onClick={async () => {
+                                                            setBusy('save');
+                                                            try {
+                                                                const response = await posterSetsApi.saveConfig({
+                                                                    ...configDraft,
+                                                                    rotateWebhookToken: true,
+                                                                });
+                                                                setConfigDraft({
+                                                                    ...response.config,
+                                                                    token: response.config.hasToken ? '********' : '',
+                                                                    tpdb_password: response.config.hasTpdbPassword ? '********' : '',
+                                                                });
+                                                                toast('Webhook token rotated — update the URL in Plex', 'success');
+                                                            } catch (error) {
+                                                                toast(error instanceof Error ? error.message : 'Failed to rotate token', 'error');
+                                                            } finally {
+                                                                setBusy(null);
+                                                            }
+                                                        }}
+                                                        className="mt-2 text-xs font-bold text-plex hover:underline disabled:opacity-50"
+                                                    >
+                                                        Rotate webhook token
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <p className="text-[11px] text-muted">
+                                                    Save settings to generate a secret webhook URL for Plex.
+                                                </p>
+                                            )}
+                                            {configDraft.tpdbFirstRunBackfillDone !== true && (
+                                                <p className="mt-2 text-[11px] text-amber-200/90">
+                                                    First-run backfill pending: last 20 movies + 20 shows will cache after save (or on next portal start).
+                                                </p>
+                                            )}
+                                        </div>
                                     )}
                                     <SettingsToggleRow
                                         title="Prefetch set images (library titles only)"
