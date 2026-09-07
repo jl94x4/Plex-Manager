@@ -17,7 +17,6 @@ import {
     type PortalScrollSnapshot,
 } from './shared/posterSetsScroll';
 import {
-    DEFAULT_UPGRADER_GRID_SIZE,
     normalizeUpgraderGridSize,
     upgraderLandscapeGridStyle,
     upgraderPosterGridClass,
@@ -65,6 +64,7 @@ import {
 } from './libraryRecent';
 import {
     ALL_MEDIUX_FILTER_IDS,
+    DEFAULT_POSTER_SETS_GRID_SIZE,
     DISCOVER_SUB_NAV,
     POSTER_SETS_GRID_STORAGE_KEY,
     POSTER_SETS_LIBRARY_DETAIL_LAYOUT_KEY,
@@ -159,8 +159,10 @@ export function usePosterSetsDashboardState() {
     const searchSetsSectionRef = useRef<HTMLDivElement | null>(null);
     const [recentTick, setRecentTick] = useState(0);
     const [gridSize, setGridSize] = useState<UpgraderGridSize>(() => {
-        if (typeof window === 'undefined') return DEFAULT_UPGRADER_GRID_SIZE;
-        return normalizeUpgraderGridSize(window.localStorage.getItem(POSTER_SETS_GRID_STORAGE_KEY));
+        if (typeof window === 'undefined') return DEFAULT_POSTER_SETS_GRID_SIZE;
+        const stored = window.localStorage.getItem(POSTER_SETS_GRID_STORAGE_KEY);
+        if (stored === 'small' || stored === 'medium' || stored === 'large' || stored === 'xlarge') return stored;
+        return DEFAULT_POSTER_SETS_GRID_SIZE;
     });
     const [libraryDetailLayout, setLibraryDetailLayout] = useState(() => {
         if (typeof window === 'undefined') return normalizeLibraryDetailLayout('drawer');
@@ -1660,7 +1662,7 @@ export function usePosterSetsDashboardState() {
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
-        window.localStorage.setItem(POSTER_SETS_GRID_STORAGE_KEY, gridSize === 'list' ? DEFAULT_UPGRADER_GRID_SIZE : gridSize);
+        window.localStorage.setItem(POSTER_SETS_GRID_STORAGE_KEY, gridSize === 'list' ? DEFAULT_POSTER_SETS_GRID_SIZE : gridSize);
     }, [gridSize]);
 
     useEffect(() => {
@@ -1669,15 +1671,15 @@ export function usePosterSetsDashboardState() {
     }, [libraryDetailLayout]);
 
     const posterGridClass = useMemo(
-        () => upgraderPosterGridClass(gridSize === 'list' ? DEFAULT_UPGRADER_GRID_SIZE : gridSize),
+        () => upgraderPosterGridClass(gridSize === 'list' ? DEFAULT_POSTER_SETS_GRID_SIZE : gridSize),
         [gridSize],
     );
     const posterGridStyle = useMemo(
-        () => upgraderPosterGridStyle(gridSize === 'list' ? DEFAULT_UPGRADER_GRID_SIZE : gridSize),
+        () => upgraderPosterGridStyle(gridSize === 'list' ? DEFAULT_POSTER_SETS_GRID_SIZE : gridSize),
         [gridSize],
     );
     const titleCardGridStyle = useMemo(
-        () => upgraderLandscapeGridStyle(gridSize === 'list' ? DEFAULT_UPGRADER_GRID_SIZE : gridSize),
+        () => upgraderLandscapeGridStyle(gridSize === 'list' ? DEFAULT_POSTER_SETS_GRID_SIZE : gridSize),
         [gridSize],
     );
     const searchSetsUseTitleCardGrid = useMemo(
