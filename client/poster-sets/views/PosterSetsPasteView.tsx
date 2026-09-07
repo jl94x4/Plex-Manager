@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ClipboardPaste,
     ExternalLink,
@@ -14,6 +14,7 @@ import {
     BrowseSetCard,
     PreviewAssetGallery,
     RelatedSetsRail,
+    StatusPill,
     buttonClass,
     fieldClass,
     isTitleCardSet,
@@ -40,6 +41,9 @@ export const PosterSetsPasteView: React.FC = () => {
         bulkText,
         setBulkText,
         configDraft,
+        queuePaused,
+        activeJob,
+        jobLogs,
         useFindId,
         runBulk,
         runPreview,
@@ -77,6 +81,62 @@ export const PosterSetsPasteView: React.FC = () => {
     } = usePosterSetsDashboard();
 
     const [titlePageLoading, setTitlePageLoading] = useState(false);
+    const bulkLogRef = useRef<HTMLDivElement | null>(null);
+    const bulkJob = activeJob?.type === 'bulk' ? activeJob : null;
+    const bulkBusy = busy === 'bulk' || busy === 'bulk-file';
+    const showBulkStatus = Boolean(bulkJob) || bulkBusy;
+    const bulkSetCount = Number(bulkJob?.input?.count || bulkJob?.input?.lineCount || bulkJob?.input?.urls?.length || 0);
+    const bulkUploaded = typeof bulkJob?.result?.uploaded === 'number'
+        ? Number(bulkJob.result.uploaded)
+        : (typeof bulkJob?.uploaded === 'number' ? bulkJob.uploaded : null);
+    const bulkAttempted = typeof bulkJob?.result?.attempted === 'number'
+        ? Number(bulkJob.result.attempted)
+        : (typeof bulkJob?.attempted === 'number' ? bulkJob.attempted : null);
+    const bulkJobsDone = typeof bulkJob?.result?.jobs === 'number' ? Number(bulkJob.result.jobs) : null;
+    const bulkState = String(bulkJob?.state || (bulkBusy ? 'queued' : '')).toLowerCase();
+    const bulkLogs = bulkJob ? jobLogs : [];
+    const bulkCountLabel = bulkSetCount > 0
+        ? `${bulkSetCount} URL${bulkSetCount === 1 ? '' : 's'}`
+        : (bulkJob?.input?.fromFile ? String(bulkJob.input.file || 'bulk file') : 'bulk list');
+    const bulkSourceLabel = bulkJob?.input?.fromFile
+        ? ` from ${bulkJob.input.file || 'bulk_import.txt'}`
+        : '';
+    const bulkSummary = (() => {
+        if (!bulkJob && bulkBusy) return 'Starting bulk import…';
+        if (bulkState === 'running') {
+            return bulkBusy
+                ? `Applying ${bulkCountLabel}${bulkSourceLabel}… Also adding matching sets to Watching.`
+                : `Applying ${bulkCountLabel}${bulkSourceLabel}…`;
+        }
+        if (bulkBusy && bulkState === 'queued') {
+            return queuePaused
+                ? `Queued ${bulkCountLabel}${bulkSourceLabel} — the queue is paused. Adding matching sets to Watching…`
+                : `Queued ${bulkCountLabel}${bulkSourceLabel}. Adding matching sets to Watching…`;
+        }
+        if (bulkState === 'queued') {
+            return queuePaused
+                ? `Queued ${bulkCountLabel}${bulkSourceLabel} — waiting because the queue is paused.`
+                : `Queued ${bulkCountLabel}${bulkSourceLabel} — waiting for a free worker.`;
+        }
+        if (bulkState === 'succeeded') {
+            const uploaded = bulkUploaded ?? 0;
+            const attemptedBit = bulkAttempted != null ? ` / ${bulkAttempted}` : '';
+            const jobsBit = bulkJobsDone != null
+                ? ` across ${bulkJobsDone} set${bulkJobsDone === 1 ? '' : 's'}`
+                : '';
+            return `Finished — uploaded ${uploaded}${attemptedBit} poster${uploaded === 1 ? '' : 's'}${jobsBit}.`;
+        }
+        if (bulkState === 'failed' || bulkState === 'cancelled') {
+            return bulkJob?.error || `Bulk ${bulkState}.`;
+        }
+        return `Bulk ${bulkCountLabel}${bulkSourceLabel}.`;
+    })();
+
+    useEffect(() => {
+        const node = bulkLogRef.current;
+        if (!node) return;
+        node.scrollTop = node.scrollHeight;
+    }, [bulkLogs, bulkJob?.id]);
 
     const stayOnPaste = useCallback((setUrlValue: string) => {
         setTab('paste');
@@ -347,6 +407,34 @@ export const PosterSetsPasteView: React.FC = () => {
                             Apply from {configDraft.bulk_txt || 'bulk_import.txt'}
                         </button>
                     </div>
+                    {showBulkStatus ? (
+                        <div className="space-y-2 rounded-xl border border-white/10 bg-black/30 p-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <p className="text-xs font-bold text-text">Bulk progress</p>
+                                <StatusPill value={bulkState || 'queued'} />
+                            </div>
+                            <p className={`text-xs ${bulkState === 'failed' ? 'text-red-300' : 'text-muted'}`}>
+                                {bulkSummary}
+                            </p>
+                            {bulkJob?.error && bulkState !== 'failed' ? (
+                                <p className="text-xs text-red-300">{bulkJob.error}</p>
+                            ) : null}
+                            <div
+                                ref={bulkLogRef}
+                                className="max-h-40 overflow-y-auto rounded-lg border border-white/10 bg-black/40 px-2.5 py-2 font-mono text-[11px] leading-5 text-muted custom-scrollbar"
+                            >
+                                {bulkLogs.length ? bulkLogs.map((line, index) => (
+                                    <p key={`${index}-${line.slice(0, 32)}`}>{line}</p>
+                                )) : (
+                                    <p>
+                                        {bulkState === 'queued' || bulkBusy
+                                            ? 'Waiting for the worker to start…'
+                                            : 'Waiting for progress…'}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    ) : null}
                 </div>
             </section>
         </div>

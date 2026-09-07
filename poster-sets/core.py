@@ -5558,7 +5558,10 @@ def warm_library_titles(
 
 def apply_bulk(urls: Sequence[str], config: dict, progress: ProgressFn = None) -> dict:
     outcomes = []
-    for url in urls:
+    total = len(urls)
+    emit(progress, f"Starting bulk apply ({total} URL{'s' if total != 1 else ''})")
+    for index, url in enumerate(urls, start=1):
+        emit(progress, f"Set {index}/{total} · {url}")
         if "/user/" in url and "theposterdb.com" in url:
             emit(progress, f"Scraping user uploads from {url}")
             soup = cook_soup(url)
@@ -5570,11 +5573,13 @@ def apply_bulk(urls: Sequence[str], config: dict, progress: ProgressFn = None) -
                 outcomes.append(apply_url(page_url, config, progress=progress))
         else:
             outcomes.append(apply_url(url, config, progress=progress))
+    uploaded = sum(int(item.get("uploaded") or 0) for item in outcomes)
+    emit(progress, f"Bulk finished — uploaded {uploaded} poster{'s' if uploaded != 1 else ''} across {len(outcomes)} set{'s' if len(outcomes) != 1 else ''}")
     return {
-        "ok": sum(int(item.get("uploaded") or 0) for item in outcomes) > 0,
+        "ok": uploaded > 0,
         "urls": len(urls),
         "jobs": len(outcomes),
-        "uploaded": sum(int(item.get("uploaded") or 0) for item in outcomes),
+        "uploaded": uploaded,
         "outcomes": outcomes,
-        "error": None if sum(int(item.get("uploaded") or 0) for item in outcomes) > 0 else "Bulk apply uploaded 0 posters.",
+        "error": None if uploaded > 0 else "Bulk apply uploaded 0 posters.",
     }
