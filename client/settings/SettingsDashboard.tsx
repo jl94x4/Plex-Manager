@@ -680,6 +680,7 @@ export const SettingsDashboard: React.FC = () => {
     const [portalAllowRequest4kMovies, setPortalAllowRequest4kMovies] = useState(true);
     const [portalAllowRequest4kTv, setPortalAllowRequest4kTv] = useState(true);
     const [portalAllowAdvancedRequests, setPortalAllowAdvancedRequests] = useState(true);
+    const [portalAllowRequestTags, setPortalAllowRequestTags] = useState(true);
     const [portalShowRecentlyAdded, setPortalShowRecentlyAdded] = useState(true);
     const [portalShowWatchlist, setPortalShowWatchlist] = useState(true);
     const [discoverNowPlayingEnabled, setDiscoverNowPlayingEnabled] = useState(true);
@@ -1576,6 +1577,7 @@ export const SettingsDashboard: React.FC = () => {
             setPortalAllowRequest4kMovies(initialSettings.portalAllowRequest4kMovies !== false);
             setPortalAllowRequest4kTv(initialSettings.portalAllowRequest4kTv !== false);
             setPortalAllowAdvancedRequests(initialSettings.portalAllowAdvancedRequests !== false);
+            setPortalAllowRequestTags(initialSettings.portalAllowRequestTags !== false);
             setPortalShowRecentlyAdded(initialSettings.portalShowRecentlyAdded !== false);
             setPortalShowWatchlist(initialSettings.portalShowWatchlist !== false);
             setDiscoverNowPlayingEnabled(initialSettings.discoverNowPlayingEnabled !== false);
@@ -2243,6 +2245,7 @@ export const SettingsDashboard: React.FC = () => {
             portalAllowRequest4kMovies,
             portalAllowRequest4kTv,
             portalAllowAdvancedRequests,
+            portalAllowRequestTags,
             portalShowRecentlyAdded,
             portalShowWatchlist,
             discoverNowPlayingEnabled,
@@ -3816,6 +3819,13 @@ export const SettingsDashboard: React.FC = () => {
                                             description="When off, members only submit Request Movie/Show (plus seasons or HD/4K if needed). Destination server, quality profile, root folder, and tags stay hidden and *arr defaults are used."
                                             checked={portalAllowAdvancedRequests}
                                             onChange={setPortalAllowAdvancedRequests}
+                                            border={false}
+                                        />
+                                        <SettingsToggleRow
+                                            title="Allow request tags"
+                                            description="When off, the tags field is hidden on the member request form. *arr still uses its default tags."
+                                            checked={portalAllowRequestTags}
+                                            onChange={setPortalAllowRequestTags}
                                             border={false}
                                         />
                                         <SettingsToggleRow title="Show recently added on Discover home" checked={portalShowRecentlyAdded} onChange={setPortalShowRecentlyAdded} border={false} />

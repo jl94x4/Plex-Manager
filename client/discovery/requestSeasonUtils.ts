@@ -557,6 +557,7 @@ export type RequestOptionsPayload = {
     canRequest: boolean;
     canRequest4k: boolean;
     canRequestAdvanced?: boolean;
+    canRequestTags?: boolean;
     has4kServer: boolean;
     hasHdServer: boolean;
     /** Movie only — which qualities already have a file in Radarr / Seerr. */
@@ -582,6 +583,7 @@ export type RequestOptionsPayload = {
         request4kMovie?: boolean;
         request4kTv?: boolean;
         requestAdvanced?: boolean;
+        requestTags?: boolean;
         createIssues?: boolean;
         viewIssues?: boolean;
     };

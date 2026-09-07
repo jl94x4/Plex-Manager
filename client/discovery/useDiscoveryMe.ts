@@ -22,6 +22,7 @@ export type DiscoveryMeProfile = {
         request4kMovie?: boolean;
         request4kTv?: boolean;
         requestAdvanced?: boolean;
+        requestTags?: boolean;
         createIssues: boolean;
         viewIssues?: boolean;
         autoApprove?: boolean;

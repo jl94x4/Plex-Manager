@@ -6,6 +6,7 @@ import { NoPosterPlaceholder } from '../shared/NoPosterPlaceholder';
 import { CustomSelect } from '../shared/ui';
 import { formatNotifyMeHint, formatQuotaHint } from './requestSeasonUtils';
 import { useDiscoverI18n } from './i18n';
+import { formatRootFolderLabel } from '../../lib/portal-request/rootFolderLabel.js';
 
 type AlbumTarget = {
     mbid: string;
@@ -240,6 +241,10 @@ export const MusicRequestModal: React.FC<Props> = ({
                                     <p className="text-xs text-muted">{quotaHint}</p>
                                 )}
                                 {options.canRequestAdvanced && !options.canNotify && !options.isWatching && (
+                                    ((options.servers || []).length > 1
+                                        || !serviceOptions
+                                        || (serviceOptions.profiles || []).length !== 1
+                                        || (serviceOptions.rootFolders || []).length !== 1) && (
                                     <button
                                         type="button"
                                         onClick={() => setShowAdvanced((v) => !v)}
@@ -247,8 +252,14 @@ export const MusicRequestModal: React.FC<Props> = ({
                                     >
                                         {showAdvanced ? t('request.hideAdvanced') : t('request.advancedOptions')}
                                     </button>
+                                    )
                                 )}
                                 {showAdvanced && options.canRequestAdvanced && !options.canNotify && !options.isWatching && (
+                                    ((options.servers || []).length > 1
+                                        || serviceLoading
+                                        || !serviceOptions
+                                        || (serviceOptions.profiles || []).length !== 1
+                                        || (serviceOptions.rootFolders || []).length !== 1) && (
                                     <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-white/[0.02] p-3">
                                         {serviceLoading ? (
                                             <div className="py-4 flex justify-center text-muted">
@@ -256,6 +267,7 @@ export const MusicRequestModal: React.FC<Props> = ({
                                             </div>
                                         ) : serviceOptions ? (
                                             <>
+                                                {(options.servers || []).length > 1 && (
                                                 <CustomSelect
                                                     label={t('music.lidarrServer')}
                                                     value={serverId != null ? String(serverId) : ''}
@@ -265,6 +277,8 @@ export const MusicRequestModal: React.FC<Props> = ({
                                                         label: s.name,
                                                     }))}
                                                 />
+                                                )}
+                                                {(serviceOptions.profiles || []).length !== 1 && (
                                                 <CustomSelect
                                                     label={t('request.qualityProfile')}
                                                     value={profileId != null ? String(profileId) : ''}
@@ -274,24 +288,28 @@ export const MusicRequestModal: React.FC<Props> = ({
                                                         label: p.name,
                                                     }))}
                                                 />
+                                                )}
+                                                {(serviceOptions.rootFolders || []).length !== 1 && (
                                                 <CustomSelect
                                                     label={t('request.rootFolder')}
                                                     value={rootFolder}
                                                     onChange={setRootFolder}
                                                     options={(serviceOptions.rootFolders || []).map((f) => ({
                                                         value: f.path,
-                                                        label: f.freeSpace != null
-                                                            ? `${f.path} (${formatBytes(f.freeSpace, t('storage.free'))})`
-                                                            : f.path,
+                                                        label: formatRootFolderLabel(f, {
+                                                            folders: serviceOptions.rootFolders,
+                                                            freeText: formatBytes(f.freeSpace, t('storage.free')),
+                                                        }),
                                                     }))}
                                                 />
+                                                )}
                                             </>
                                         ) : (
                                             <p className="text-xs text-muted">{t('music.lidarrOptionsFailed')}</p>
                                         )}
                                     </div>
+                                    )
                                 )}
-                                {(options.canNotify || options.isWatching) ? (
                                     <button
                                         type="button"
                                         disabled={submitting}

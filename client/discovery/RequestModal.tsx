@@ -15,6 +15,7 @@ import {
 import { resolveTmdbImageUrl } from './tmdbImageUrl';
 import { translateDiscoverStatus, useDiscoverI18n } from './i18n';
 import { mediaStatusChipClass } from './DiscoverStatusOverlay';
+import { formatRootFolderLabel } from '../../lib/portal-request/rootFolderLabel.js';
 
 type Props = {
     open: boolean;
@@ -61,10 +62,14 @@ const formatBytes = (bytes?: number | null, freeLabel = 'free') => {
     return `${parseFloat((n / Math.pow(k, i)).toFixed(1))} ${sizes[i]} ${freeLabel}`;
 };
 
-const rootFolderLabel = (folder: { path: string; freeSpace?: number | null }, freeLabel = 'free') => {
-    const free = formatBytes(folder.freeSpace, freeLabel);
-    return free ? `${folder.path} (${free})` : folder.path;
-};
+const rootFolderLabel = (
+    folder: { path: string; freeSpace?: number | null },
+    folders: { path: string }[] = [],
+    freeLabel = 'free',
+) => formatRootFolderLabel(folder, {
+    folders,
+    freeText: formatBytes(folder.freeSpace, freeLabel),
+});
 
 const formatSeasonName = (
     name: string | undefined,
@@ -656,7 +661,7 @@ export const RequestModal: React.FC<Props> = ({
             else if (fallbackServer?.id != null) body.serverId = fallbackServer.id;
             if (form.profileId != null) body.profileId = form.profileId;
             if (form.rootFolder) body.rootFolder = form.rootFolder;
-            if (form.selectedTags.length) body.tags = form.selectedTags;
+            if (options.canRequestTags !== false && form.selectedTags.length) body.tags = form.selectedTags;
         } else if (fallbackServer?.id != null) {
             body.serverId = fallbackServer.id;
         }
@@ -760,20 +765,25 @@ export const RequestModal: React.FC<Props> = ({
     const overview = (options?.overview || fallbackOverview || '').trim();
     const posterUrl = resolveTmdbImageUrl(options?.posterPath || fallbackPosterPath, 'w342');
     const notifyOnly = !!(options?.canNotify || options?.isWatching);
-    const showAdvancedSection = !!options?.canRequestAdvanced && !notifyOnly;
+    const showTagsField = options?.canRequestTags !== false;
+    const advancedProfiles = activeForm.serviceOptions?.profiles || [];
+    const advancedFolders = activeForm.serviceOptions?.rootFolders || [];
+    const showServerSelect = filteredServers.length > 1;
+    const showProfileSelect = advancedProfiles.length !== 1;
+    const showFolderSelect = advancedFolders.length !== 1;
+    const bothQualitiesSelected = selectedQualities.has('hd') && selectedQualities.has('4k');
+    const advancedHasChoices = showTagsField
+        || !activeForm.loaded
+        || showServerSelect
+        || showProfileSelect
+        || showFolderSelect;
+    const showAdvancedSection = !!options?.canRequestAdvanced && !notifyOnly && advancedHasChoices;
     // Show HD + UHD chips whenever a 4K *arr exists, or 4K requests are allowed
     // (so members still see the dual picker when permissions are on).
     const showQualityPicker = !notifyOnly && (!!options?.has4kServer || !!options?.canRequest4k
         || ((options?.servers || []).length > 1));
     const advancedLoading = showAdvancedSection && showAdvanced && activeForm.loading && !activeForm.loaded;
-    const bothQualitiesSelected = selectedQualities.has('hd') && selectedQualities.has('4k');
-    const showRoutingFields = !advancedLoading && (
-        filteredServers.length > 0
-        || (activeForm.serviceOptions?.rootFolders || []).length > 0
-        || (activeForm.serviceOptions?.profiles || []).length > 0
-        || !!activeForm.rootFolder
-        || !!activeForm.profileId
-    );
+    const showRoutingFields = !advancedLoading && (showServerSelect || showProfileSelect || showFolderSelect);
 
     const seasonsSection = !notifyOnly && mediaType === 'tv' && (options?.seasons?.length || 0) > 0 ? (
         <div>
@@ -1128,49 +1138,42 @@ export const RequestModal: React.FC<Props> = ({
 
                                                     {showRoutingFields && (
                                                         <div className={`flex flex-col gap-3 ${bothQualitiesSelected ? '' : 'pt-3'}`}>
-                                                            {(filteredServers.length > 0) && (
+                                                            {showServerSelect && (
                                                                 <div>
                                                                     <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-2">
                                                                         {t('request.destinationServer')}
                                                                     </label>
-                                                                    {filteredServers.length === 1 ? (
-                                                                        <p className="rounded-lg border border-white/10 bg-black/20 px-3 py-2.5 text-sm text-white/80">
-                                                                            {filteredServers[0].isDefault
-                                                                                ? `${filteredServers[0].name} (${t('common.default')})`
-                                                                                : filteredServers[0].name}
-                                                                        </p>
-                                                                    ) : (
-                                                                        <CustomSelect
-                                                                            value={String(activeForm.serverId ?? '')}
-                                                                            onChange={(val) => {
-                                                                                const nextId = Number(val);
-                                                                                updateQualityForm(advancedQuality, { serverId: nextId });
-                                                                                if (options) {
-                                                                                    loadServiceOptions(options, advancedQuality, nextId, null, {
-                                                                                        preserveSelections: false,
-                                                                                    });
-                                                                                }
-                                                                            }}
-                                                                            options={filteredServers.map((server) => ({
-                                                                                value: String(server.id),
-                                                                                label: server.isDefault ? `${server.name} (${t('common.default')})` : server.name,
-                                                                            }))}
-                                                                        />
-                                                                    )}
+                                                                    <CustomSelect
+                                                                        value={String(activeForm.serverId ?? '')}
+                                                                        onChange={(val) => {
+                                                                            const nextId = Number(val);
+                                                                            updateQualityForm(advancedQuality, { serverId: nextId });
+                                                                            if (options) {
+                                                                                loadServiceOptions(options, advancedQuality, nextId, null, {
+                                                                                    preserveSelections: false,
+                                                                                });
+                                                                            }
+                                                                        }}
+                                                                        options={filteredServers.map((server) => ({
+                                                                            value: String(server.id),
+                                                                            label: server.isDefault ? `${server.name} (${t('common.default')})` : server.name,
+                                                                        }))}
+                                                                    />
                                                                 </div>
                                                             )}
 
+                                                            {showProfileSelect && (
                                                             <div>
                                                                 <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-2">
                                                                     {t('request.qualityProfile')}
                                                                 </label>
-                                                                {(activeForm.serviceOptions?.profiles || []).length > 0 ? (
+                                                                {advancedProfiles.length > 0 ? (
                                                                     <CustomSelect
                                                                         value={String(activeForm.profileId ?? '')}
                                                                         onChange={(val) => updateQualityForm(advancedQuality, {
                                                                             profileId: Number(val),
                                                                         })}
-                                                                        options={(activeForm.serviceOptions?.profiles || []).map((profile) => ({
+                                                                        options={advancedProfiles.map((profile) => ({
                                                                             value: String(profile.id),
                                                                             label: profile.name,
                                                                         }))}
@@ -1181,20 +1184,22 @@ export const RequestModal: React.FC<Props> = ({
                                                                     </p>
                                                                 )}
                                                             </div>
+                                                            )}
 
+                                                            {showFolderSelect && (
                                                             <div>
                                                                 <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-2">
                                                                     {t('request.rootFolder')}
                                                                 </label>
-                                                                {(activeForm.serviceOptions?.rootFolders || []).length > 0 ? (
+                                                                {advancedFolders.length > 0 ? (
                                                                     <CustomSelect
                                                                         value={activeForm.rootFolder}
                                                                         onChange={(val) => updateQualityForm(advancedQuality, {
                                                                             rootFolder: val,
                                                                         })}
-                                                                        options={(activeForm.serviceOptions?.rootFolders || []).map((folder) => ({
+                                                                        options={advancedFolders.map((folder) => ({
                                                                             value: folder.path,
-                                                                            label: rootFolderLabel(folder, t('storage.free')),
+                                                                            label: rootFolderLabel(folder, advancedFolders, t('storage.free')),
                                                                         }))}
                                                                     />
                                                                 ) : (
@@ -1203,9 +1208,11 @@ export const RequestModal: React.FC<Props> = ({
                                                                     </p>
                                                                 )}
                                                             </div>
+                                                            )}
                                                         </div>
                                                     )}
 
+                                                    {showTagsField && (
                                                     <div className={showRoutingFields || bothQualitiesSelected ? '' : 'pt-3'}>
                                                         <label className="block text-xs font-bold uppercase tracking-wider text-white/40 mb-2">
                                                             {t('request.tags')}
@@ -1271,6 +1278,7 @@ export const RequestModal: React.FC<Props> = ({
                                                             {t('request.tagHint')}
                                                         </p>
                                                     </div>
+                                                    )}
                                                 </>
                                             )}
                                         </div>

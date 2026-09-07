@@ -6274,7 +6274,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         requestDiscoverRegion, requestDiscoverLanguage, requestHideAvailableMedia, discoverySource, requestEngine,
         requestQuotaLimit, requestQuotaDays, requestQuotaLimit4k, autoApproveMovies, autoApproveTv,
         portalAllowRequestMovies, portalAllowRequestTv, portalAllowRequest4kMovies, portalAllowRequest4kTv,
-        portalAllowAdvancedRequests, portalShowRecentlyAdded, portalShowWatchlist, discoverNowPlayingEnabled, homeNowPlayingCompanionEnabled,
+        portalAllowAdvancedRequests, portalAllowRequestTags, portalShowRecentlyAdded, portalShowWatchlist, discoverNowPlayingEnabled, homeNowPlayingCompanionEnabled,
         autoApproveMovies4k, autoApproveTv4k, portalAutoRequestMovies, portalAutoRequestTv,
         seriesMetadataProvider, animeMetadataProvider, tvdbApiKey,
         inactiveCleanupEnabled, inactiveCleanupDays,
@@ -6651,6 +6651,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
             portalAllowRequest4kMovies,
             portalAllowRequest4kTv,
             portalAllowAdvancedRequests,
+            portalAllowRequestTags,
             portalShowRecentlyAdded,
             portalShowWatchlist,
             autoApproveMovies4k,
@@ -11282,6 +11283,7 @@ app.get('/api/discovery/me', requireAuth, requireMember, async (req, res) => {
                     request4kMovie: policy.allowRequest4kMovies,
                     request4kTv: policy.allowRequest4kTv,
                     requestAdvanced: policy.allowAdvancedRequests,
+                    requestTags: policy.allowRequestTags !== false,
                     createIssues: true,
                     viewIssues: true,
                 },
@@ -11365,6 +11367,9 @@ app.post('/api/discovery/request-tags', requireAuth, requireMember, async (req, 
             const policy = resolveMemberRequestPolicy(config, portalUser);
             if (!policy.allowAdvancedRequests) {
                 return res.status(403).json({ error: 'Advanced request options are disabled.' });
+            }
+            if (!policy.allowRequestTags) {
+                return res.status(403).json({ error: 'Request tags are disabled.' });
             }
             const portalRequests = getPortalRequestService(config);
             const tag = await portalRequests.createPortalTag({

@@ -14,6 +14,7 @@ import type {
 } from './types';
 import { useDiscoverI18n } from '../discovery/i18n';
 import { goToProfile, profileKeyForRequester } from '../profile/helpers';
+import { formatRootFolderLabel } from '../../lib/portal-request/rootFolderLabel.js';
 
 type Props = {
     requestId: number;
@@ -459,6 +460,7 @@ export const RequestApprovalModal: React.FC<Props> = ({
                                         />
                                     </div>
                                 )}
+                                {(serviceOptions?.profiles || []).length !== 1 && (
                                 <div>
                                     <label className="block text-xs font-semibold text-muted mb-1.5">{t('requestsAdmin.modal.qualityProfile')}</label>
                                     <CustomSelect
@@ -470,6 +472,8 @@ export const RequestApprovalModal: React.FC<Props> = ({
                                         }))}
                                     />
                                 </div>
+                                )}
+                                {(serviceOptions?.rootFolders || []).length !== 1 && (
                                 <div className="sm:col-span-2">
                                     <label className="block text-xs font-semibold text-muted mb-1.5">{t('requestsAdmin.modal.rootFolder')}</label>
                                     <CustomSelect
@@ -477,13 +481,14 @@ export const RequestApprovalModal: React.FC<Props> = ({
                                         onChange={setRootFolder}
                                         options={(serviceOptions?.rootFolders || []).map((f) => ({
                                             value: f.path,
-                                            label: (() => {
-                                                const free = formatBytes(f.freeSpace, t('requestsAdmin.modal.free'));
-                                                return free ? `${f.path} (${free})` : f.path;
-                                            })(),
+                                            label: formatRootFolderLabel(f, {
+                                                folders: serviceOptions?.rootFolders || [],
+                                                freeText: formatBytes(f.freeSpace, t('requestsAdmin.modal.free')),
+                                            }),
                                         }))}
                                     />
                                 </div>
+                                )}
                                 {requestAsOptions.length > 1 && (
                                     <div className="sm:col-span-2">
                                         <label className="block text-xs font-semibold text-muted mb-1.5">{t('requestsAdmin.modal.requestAs')}</label>
