@@ -29,6 +29,7 @@ import { askConfirm } from '../../shared/confirm';
 import { ModalPortal } from '../../shared/ModalPortal';
 import { normalizeUpgraderGridSize } from '../../shared/portalLayout';
 import { posterSetsApi } from '../api';
+import { addWatchWithTitleReplaceConfirm } from '../pinWatch';
 import { MEDIUX_FILTER_OPTIONS, type PosterSetsWatch } from '../types';
 import { isPosterSetsUpstreamOutage } from '../upstreamErrors';
 import { PosterSetsSetupChecklist } from '../PosterSetsSetupChecklist';
@@ -806,11 +807,14 @@ export const PosterSetsWatchingView: React.FC = () => {
                             }
                             setBusy('watches');
                             try {
-                                await posterSetsApi.addWatch({ url: target });
+                                const result = await addWatchWithTitleReplaceConfirm({ url: target });
+                                if (result.cancelled) return;
                                 setWatchUrlDraft('');
                                 setWatchesPage(1);
                                 await loadWatches();
-                                toast('Watch pinned. Current assets baselined — only future new art will queue.');
+                                toast(result.replaced
+                                    ? 'Replaced the watched set for that title.'
+                                    : 'Watch pinned. Current assets baselined — only future new art will queue.');
                             } catch (error) {
                                 toast(error instanceof Error ? error.message : 'Failed to pin watch', 'error');
                             } finally {

@@ -15,7 +15,8 @@ import {
 import { askConfirm } from '../shared/confirm';
 import { ModalPortal } from '../shared/ModalPortal';
 import { SettingsToggleRow } from '../shared/ui';
-import { posterSetsApi } from './api';
+import { posterSetsApi, PosterSetsTitleWatchConflict } from './api';
+import { addWatchWithTitleReplaceConfirm, confirmReplaceTitleWatch } from './pinWatch';
 import { isPosterSetsUpstreamOutage } from './upstreamErrors';
 import { pickAutoMatchedTitle, rankSearchTitlesForLibraryItem, catalogTitleMatchesLibraryItem } from './autoMatchTitle';
 import { fetchPosterSetsForTitle } from './fetchPosterSetsForTitle';
@@ -582,6 +583,32 @@ export function LibraryTitleDetailPanel({
             toast('Apply a poster set first, or select a set to watch.', 'error');
             return;
         }
+        let replacedTitleWatch = false;
+        if (nextEnabled) {
+            const target = String(titleWatchSetUrl || '').trim();
+            const itemTmdb = String(item.tmdbId || '').trim();
+            const others = watches.filter((watch) => {
+                const url = String(watch.url || '').trim();
+                if (target && url === target) return false;
+                if (item.id && String(watch.plexHint?.ratingKey || '') === String(item.id)) return true;
+                if (itemTmdb && String(watch.tmdbId || '') === itemTmdb) return true;
+                return String(watch.title || '').trim().toLowerCase() === item.title.trim().toLowerCase();
+            });
+            if (others.length) {
+                const confirmed = await confirmReplaceTitleWatch(new PosterSetsTitleWatchConflict({
+                    existing: others,
+                    incoming: {
+                        title: item.title,
+                        url: target,
+                        user: currentSetMeta()?.user,
+                        provider: currentSetMeta()?.provider,
+                    } as PosterSetsWatch,
+                    error: `Already watching a set for ${item.title}.`,
+                }));
+                if (!confirmed) return;
+                replacedTitleWatch = true;
+            }
+        }
         setBusy('title-watch');
         try {
             await posterSetsApi.titleWatch({
@@ -592,7 +619,9 @@ export function LibraryTitleDetailPanel({
                 enabled: nextEnabled,
                 setMeta: nextEnabled ? currentSetMeta() : undefined,
             });
-            toast(nextEnabled ? 'Watching this title for poster updates.' : 'Stopped watching this title.');
+            toast(nextEnabled
+                ? (replacedTitleWatch ? 'Replaced the watched set for this title.' : 'Watching this title for poster updates.')
+                : 'Stopped watching this title.');
             await refreshTitleStatus();
             onWatchAdded?.();
         } catch (error) {
@@ -840,8 +869,11 @@ export function LibraryTitleDetailPanel({
         }
         setBusy('watch');
         try {
-            await posterSetsApi.addWatch({ url: target });
-            toast('Watching set for updates.');
+            const result = await addWatchWithTitleReplaceConfirm({ url: target });
+            if (result.cancelled) return;
+            toast(result.replaced
+                ? 'Replaced the watched set for this title.'
+                : 'Watching set for updates.');
             onWatchAdded?.();
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Failed to add watch', 'error');

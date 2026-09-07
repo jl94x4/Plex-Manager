@@ -21,6 +21,34 @@ import type {
 
 const ROOT = '/api/poster-sets';
 
+export class PosterSetsTitleWatchConflict extends Error {
+    code = 'title_watch_exists' as const;
+    existing: PosterSetsWatch[];
+    incoming: PosterSetsWatch | null;
+
+    constructor(data: {
+        error?: string;
+        existing?: PosterSetsWatch[];
+        incoming?: PosterSetsWatch | null;
+    }) {
+        super(data.error || 'Already watching a set for this title.');
+        this.name = 'PosterSetsTitleWatchConflict';
+        this.existing = Array.isArray(data.existing) ? data.existing : [];
+        this.incoming = data.incoming || null;
+    }
+}
+
+export type PosterSetsAddWatchPayload = {
+    url: string;
+    title?: string;
+    user?: string;
+    thumbUrl?: string;
+    provider?: string;
+    setId?: string;
+    mediuxFilters?: string[];
+    replaceExisting?: boolean;
+};
+
 export type TpdbCacheDiskAudit = {
     scannedAt?: string;
     elapsedMs?: number;
@@ -315,17 +343,29 @@ export const posterSetsApi = {
         watches?: PosterSetsWatch[];
         stats?: PosterSetsWatchStats;
     }>,
-    addWatch: (payload: {
-        url: string;
-        title?: string;
-        user?: string;
-        thumbUrl?: string;
-        provider?: string;
-        setId?: string;
-        mediuxFilters?: string[];
-    }) => (
-        apiFetch(`${ROOT}/watches`, json(payload)) as Promise<{ ok: boolean; watch: PosterSetsWatch }>
-    ),
+    addWatch: async (payload: PosterSetsAddWatchPayload) => {
+        const response = await fetch(portalUrl(`${ROOT}/watches`), {
+            credentials: 'same-origin',
+            ...json(payload),
+            headers: portalRequestHeaders(),
+        });
+        const data = await response.json().catch(() => ({ error: 'Failed to add watch' })) as {
+            ok?: boolean;
+            watch?: PosterSetsWatch;
+            replaced?: PosterSetsWatch[];
+            error?: string;
+            code?: string;
+            existing?: PosterSetsWatch[];
+            incoming?: PosterSetsWatch | null;
+        };
+        if (response.status === 409 && data.code === 'title_watch_exists') {
+            throw new PosterSetsTitleWatchConflict(data);
+        }
+        if (!response.ok) {
+            throw new Error(data.error || `Failed to add watch (${response.status})`);
+        }
+        return data as { ok: boolean; watch: PosterSetsWatch; replaced?: PosterSetsWatch[] };
+    },
     patchWatch: (id: string, patch: {
         mediuxFilters?: string[];
         enabled?: boolean;

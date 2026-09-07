@@ -24,6 +24,7 @@ import {
     type UpgraderGridSize,
 } from '../shared/portalLayout';
 import { posterSetsApi } from './api';
+import { addWatchWithTitleReplaceConfirm } from './pinWatch';
 import { isPosterSetsUpstreamOutage } from './upstreamErrors';
 import {
     DEFAULT_POSTER_SETS_CONFIG,
@@ -1562,7 +1563,7 @@ export function usePosterSetsDashboardState() {
                 rememberRecentFromContext(jobSetMeta(response.job) || setMeta, entry.url);
                 queued += 1;
                 try {
-                    await posterSetsApi.addWatch({
+                    const result = await addWatchWithTitleReplaceConfirm({
                         url: entry.url,
                         title: entry.title || undefined,
                         user: entry.user || undefined,
@@ -1570,7 +1571,7 @@ export function usePosterSetsDashboardState() {
                         provider: entry.provider || undefined,
                         setId: entry.setId || undefined,
                     });
-                    watched += 1;
+                    if (result.ok) watched += 1;
                 } catch {
                     /* apply still queued */
                 }
@@ -1596,7 +1597,7 @@ export function usePosterSetsDashboardState() {
         let added = 0;
         try {
             for (const entry of entries) {
-                await posterSetsApi.addWatch({
+                const result = await addWatchWithTitleReplaceConfirm({
                     url: entry.url,
                     title: entry.title || undefined,
                     user: entry.user || undefined,
@@ -1604,7 +1605,8 @@ export function usePosterSetsDashboardState() {
                     provider: entry.provider || undefined,
                     setId: entry.setId || undefined,
                 });
-                added += 1;
+                if (result.cancelled) continue;
+                if (result.ok) added += 1;
             }
             clearBulkSelection();
             await loadWatches();
@@ -2245,8 +2247,8 @@ export function usePosterSetsDashboardState() {
                 let watched = 0;
                 for (const url of urls) {
                     try {
-                        await posterSetsApi.addWatch({ url });
-                        watched += 1;
+                        const result = await addWatchWithTitleReplaceConfirm({ url });
+                        if (result.ok) watched += 1;
                     } catch {
                         /* apply still queued */
                     }
