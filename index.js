@@ -9768,20 +9768,15 @@ const fetchEarliestTautulliPlayUnix = async (config, {
     const tautulliUserId = resolveTautulliUserId(users, { username, email, plexAccountName });
     if (!tautulliUserId) return null;
 
-    const params = new URLSearchParams({
-        apikey: config.tautulliApiKey,
-        cmd: 'get_history',
+    const rows = await fetchTautulliHistoryPage(tUrl, config, {
         order_column: 'started',
         order_dir: 'asc',
-        start: '0',
-        length: '1',
-        user_id: String(tautulliUserId),
+        start: 0,
+        length: 1,
+        user_id: tautulliUserId,
         grouping: '0',
-    });
-    const response = await fetch(`${tUrl}/api/v2?${params.toString()}`, { headers: { Accept: 'application/json' } })
-        .then((r) => r.json())
-        .catch(() => null);
-    const row = response?.response?.data?.data?.[0];
+    }, { throwOnError: false });
+    const row = Array.isArray(rows) ? rows[0] : null;
     const started = Number(row?.started || row?.date || 0);
     return started > 0 ? started : null;
 };
@@ -11707,6 +11702,7 @@ app.post('/api/discovery/my-issues/:id/:status', requireAuth, requireMember, asy
                     dataDir: SUPPORT_TICKETS_DIR,
                     issueId,
                     engine: 'portal',
+                    isAdmin: false,
                     log,
                 });
             }
@@ -11722,6 +11718,7 @@ app.post('/api/discovery/my-issues/:id/:status', requireAuth, requireMember, asy
                 dataDir: SUPPORT_TICKETS_DIR,
                 issueId,
                 engine: 'seerr',
+                isAdmin: false,
                 log,
             });
         }
@@ -11902,6 +11899,7 @@ app.post('/api/issues/:id/:status', requireAdmin, async (req, res) => {
                     dataDir: SUPPORT_TICKETS_DIR,
                     issueId,
                     engine: 'portal',
+                    isAdmin: true,
                     log,
                 });
             }
@@ -11923,6 +11921,7 @@ app.post('/api/issues/:id/:status', requireAdmin, async (req, res) => {
                 dataDir: SUPPORT_TICKETS_DIR,
                 issueId,
                 engine: 'seerr',
+                isAdmin: true,
                 log,
             });
         }
@@ -16576,9 +16575,14 @@ app.get('/api/plex/discover-search', requireAuth, requireAdmin, async (req, res)
             item.history = [];
             try {
                 if (config.tautulliUrl && config.tautulliApiKey) {
-                    const tSearch = encodeURIComponent(item.title);
-                    const fetchUrl = `${config.tautulliUrl.replace(/\/+$/, '')}/api/v2?apikey=${config.tautulliApiKey}&cmd=get_history&search=${tSearch}&length=50`;
-                    const resData = await fetch(fetchUrl, { headers: { 'Accept': 'application/json' } }).then(r => r.json());
+                    const tUrl = resolveIntegrationUrlForFetch(config.tautulliUrl);
+                    if (!tUrl) return;
+                    const resData = await fetchTautulliApi(tUrl, {
+                        apikey: config.tautulliApiKey,
+                        cmd: 'get_history',
+                        search: item.title,
+                        length: '50',
+                    }, { throwOnError: false });
                     if (resData && resData.response && resData.response.data && resData.response.data.data) {
                         const historyData = resData.response.data.data;
                         item.history = historyData
@@ -17208,7 +17212,7 @@ const notifyTautulliApiFailure = (error) => {
     })();
 };
 
-const fetchTautulliApi = async (tUrl, params, { timeoutMs = 20000 } = {}) => {
+const fetchTautulliApi = async (tUrl, params, { timeoutMs = 20000, throwOnError = true } = {}) => {
     try {
         const search = new URLSearchParams(params);
         const res = await fetchWithTimeout(`${tUrl}/api/v2?${search.toString()}`, {
@@ -17225,11 +17229,12 @@ const fetchTautulliApi = async (tUrl, params, { timeoutMs = 20000 } = {}) => {
         return payload;
     } catch (error) {
         notifyTautulliApiFailure(error);
+        if (!throwOnError) return null;
         throw error;
     }
 };
 
-const fetchTautulliHistoryPage = async (tUrl, config, extraParams = {}, { timeoutMs = 25000 } = {}) => {
+const fetchTautulliHistoryPage = async (tUrl, config, extraParams = {}, { timeoutMs = 25000, throwOnError = true } = {}) => {
     const payload = await fetchTautulliApi(tUrl, {
         apikey: config.tautulliApiKey,
         cmd: 'get_history',
@@ -17241,9 +17246,10 @@ const fetchTautulliHistoryPage = async (tUrl, config, extraParams = {}, { timeou
         ...(extraParams.user_id ? { user_id: String(extraParams.user_id) } : {}),
         ...(extraParams.start_date ? { start_date: String(extraParams.start_date) } : {}),
         ...(extraParams.search ? { search: String(extraParams.search) } : {}),
-    }, { timeoutMs });
+    }, { timeoutMs, throwOnError });
     const rows = tautulliHistoryRowsFromPayload(payload);
     if (rows == null) {
+        if (!throwOnError) return null;
         throw new Error('Tautulli get_history returned an unexpected payload');
     }
     return rows;
@@ -17321,9 +17327,10 @@ const fetchTautulliUsers = async (config) => {
     }
     const tUrl = resolveIntegrationUrlForFetch(config.tautulliUrl);
     if (!tUrl) return [];
-    const response = await fetch(`${tUrl}/api/v2?apikey=${encodeURIComponent(config.tautulliApiKey)}&cmd=get_users`, {
-        headers: { Accept: 'application/json' },
-    }).then((r) => r.json()).catch(() => null);
+    const response = await fetchTautulliApi(tUrl, {
+        apikey: config.tautulliApiKey,
+        cmd: 'get_users',
+    }, { throwOnError: false });
     const users = Array.isArray(response?.response?.data) ? response.response.data : [];
     cachedTautulliUsers = users;
     cachedTautulliUsersAt = Date.now();
@@ -17368,9 +17375,10 @@ const fetchTautulliTimezone = async (config) => {
     const tUrl = resolveIntegrationUrlForFetch(config.tautulliUrl);
     if (!tUrl) return process.env.PORTAL_TIMEZONE || process.env.TZ || 'UTC';
 
-    const response = await fetch(`${tUrl}/api/v2?apikey=${encodeURIComponent(config.tautulliApiKey)}&cmd=get_settings`, {
-        headers: { Accept: 'application/json' },
-    }).then((r) => r.json()).catch(() => null);
+    const response = await fetchTautulliApi(tUrl, {
+        apikey: config.tautulliApiKey,
+        cmd: 'get_settings',
+    }, { throwOnError: false });
     const settings = response?.response?.data || {};
     const timezone = settings?.timezone
         || settings?.General?.timezone
@@ -17385,17 +17393,14 @@ const fetchTautulliTimezone = async (config) => {
 
 const fetchTautulliPlaysByHourOfDay = async (config, tUrl, tautulliUserId, timeRangeDays) => {
     const timeRange = timeRangeDays === 'all' ? 'all' : String(timeRangeDays || 30);
-    const params = new URLSearchParams({
+    const response = await fetchTautulliApi(tUrl, {
         apikey: config.tautulliApiKey,
         cmd: 'get_plays_by_hourofday',
         time_range: timeRange,
         y_axis: 'plays',
         user_id: String(tautulliUserId),
         grouping: '0',
-    });
-    const response = await fetch(`${tUrl}/api/v2?${params.toString()}`, {
-        headers: { Accept: 'application/json' },
-    }).then((r) => r.json()).catch(() => null);
+    }, { throwOnError: false });
     const data = response?.response?.data;
     if (!data?.series || !Array.isArray(data.series)) return null;
 
@@ -17421,22 +17426,14 @@ const fetchTautulliUserHistoryStarts = async (config, tUrl, tautulliUserId, { af
 
     while (!done && startedTimestamps.length < maxItems) {
         const length = Math.min(TAUTULLI_HISTORY_PAGE_SIZE, maxItems - startedTimestamps.length);
-        const params = new URLSearchParams({
-            apikey: config.tautulliApiKey,
-            cmd: 'get_history',
+        const rows = await fetchTautulliHistoryPage(tUrl, config, {
             order_column: 'started',
             order_dir: 'desc',
-            start: String(offset),
-            length: String(length),
-            user_id: String(tautulliUserId),
+            start: offset,
+            length,
+            user_id: tautulliUserId,
             grouping: '0',
-        });
-
-        const response = await fetch(`${tUrl}/api/v2?${params.toString()}`, { headers: { Accept: 'application/json' } })
-            .then((r) => r.json())
-            .catch(() => null);
-
-        const rows = response?.response?.data?.data;
+        }, { throwOnError: false });
         if (!Array.isArray(rows) || rows.length === 0) break;
 
         for (const row of rows) {
@@ -17482,22 +17479,14 @@ const fetchTautulliUserHistoryItems = async (config, {
 
     while (!done && items.length < maxItems) {
         const length = Math.min(TAUTULLI_USER_HISTORY_PAGE_SIZE, maxItems - items.length);
-        const params = new URLSearchParams({
-            apikey: config.tautulliApiKey,
-            cmd: 'get_history',
+        const rows = await fetchTautulliHistoryPage(tUrl, config, {
             order_column: 'started',
             order_dir: 'desc',
-            start: String(offset),
-            length: String(length),
-            user_id: String(tautulliUserId),
+            start: offset,
+            length,
+            user_id: tautulliUserId,
             grouping: '0',
-        });
-
-        const response = await fetch(`${tUrl}/api/v2?${params.toString()}`, { headers: { Accept: 'application/json' } })
-            .then((r) => r.json())
-            .catch(() => null);
-
-        const rows = response?.response?.data?.data;
+        }, { timeoutMs: 60000, throwOnError: false });
         if (!Array.isArray(rows) || rows.length === 0) break;
 
         for (const row of rows) {
@@ -17803,16 +17792,13 @@ app.get('/api/tautulli/stats', requireAuth, requireMember, async (req, res) => {
                  * Request those stats by id, using a long window for peak/lifetime-style records.
                  */
                 const fetchHomeStat = async (statId, { timeRange = 3650, statsCount = 50 } = {}) => {
-                    const params = new URLSearchParams({
+                    const body = await fetchTautulliApi(tUrl, {
                         apikey: apiKey,
                         cmd: 'get_home_stats',
                         stat_id: String(statId),
                         stats_count: String(statsCount),
                         time_range: String(Math.max(1, Number(timeRange) || 3650)),
-                    });
-                    const body = await fetchWithTimeout(`${tUrl}/api/v2?${params.toString()}`, {
-                        headers: { Accept: 'application/json' },
-                    }, 8000).then((r) => r.json()).catch(() => null);
+                    }, { timeoutMs: 8000, throwOnError: false });
                     const data = body?.response?.data;
                     if (Array.isArray(data)) {
                         return data.find((entry) => entry?.stat_id === statId) || data[0] || null;
@@ -17929,15 +17915,17 @@ app.get('/api/tautulli/graphs', requireAuth, requireMember, async (req, res) => 
                     'get_plays_by_top_10_users'
                 ];
                 const results = await Promise.all(
-                    endpoints.map((cmd) => {
-                        let url = `${tUrl}/api/v2?apikey=${config.tautulliApiKey}&cmd=${cmd}&time_range=${days}`;
+                    endpoints.map(async (cmd) => {
+                        const params = {
+                            apikey: config.tautulliApiKey,
+                            cmd,
+                            time_range: String(days),
+                        };
                         if (cmd !== 'get_concurrent_streams_by_stream_type') {
-                            url += `&y_axis=${yAxis}`;
+                            params.y_axis = yAxis;
                         }
-                        return fetch(url, { headers: { 'Accept': 'application/json' } })
-                            .then((r) => r.json())
-                            .then((j) => ({ cmd, data: j?.response?.data || {} }))
-                            .catch(() => ({ cmd, data: {} }));
+                        const j = await fetchTautulliApi(tUrl, params, { throwOnError: false });
+                        return { cmd, data: j?.response?.data || {} };
                     })
                 );
                 const payload = {};
@@ -19022,10 +19010,10 @@ app.get('/api/plex/analytics/day', requireAuth, requireMember, async (req, res) 
                 return res.status(503).json({ error: 'Tautulli not configured' });
             }
             const tUrl = resolveIntegrationUrlForFetch(config.tautulliUrl);
-            const cmdUrl = `${tUrl}/api/v2?apikey=${config.tautulliApiKey}&cmd=get_history&start_date=${dateStr}&length=100000`;
-            const resp = await fetch(cmdUrl, { headers: { 'Accept': 'application/json' }});
-            const json = await resp.json();
-            const items = json?.response?.data?.data || [];
+            const items = await fetchTautulliHistoryPage(tUrl, config, {
+                start_date: dateStr,
+                length: 100000,
+            }, { timeoutMs: 60000 }) || [];
             
             const hours = new Array(24).fill(0);
             items.forEach(item => {
@@ -20037,10 +20025,13 @@ registerSupportTicketRoutes(app, {
         const key = String(issueId || '').trim();
         if (!key) return;
         const preferred = String(engine || '').toLowerCase();
-        const usePortal = preferred === 'portal'
-            || (!preferred && getRequestEngine(config) === 'portal')
-            || getRequestEngine(config) === 'portal';
-        if (usePortal || preferred === 'portal') {
+        const seerrLike = preferred === 'seerr'
+            || preferred === 'overseerr'
+            || preferred === 'jellyseerr';
+        const usePortal = !seerrLike && (
+            preferred === 'portal' || getRequestEngine(config) === 'portal'
+        );
+        if (usePortal) {
             const portalIssues = getPortalIssueService(config);
             await portalIssues.updateIssueStatus(key, 'resolved', null);
             return;
@@ -20111,7 +20102,7 @@ app.get('/api/plex/analytics/user/:id/history', requireAdmin, async (req, res) =
             const tautulliUserId = resolveTautulliUserId(tUsers, { username: targetUser?.username, email: targetUser?.email, plexAccountName });
 
             if (tautulliUserId) {
-                const params = new URLSearchParams({
+                const tRes = await fetchTautulliApi(tUrl, {
                     apikey: config.tautulliApiKey,
                     cmd: 'get_history',
                     order_column: 'date',
@@ -20119,10 +20110,8 @@ app.get('/api/plex/analytics/user/:id/history', requireAdmin, async (req, res) =
                     start: String((page - 1) * limit),
                     length: String(limit),
                     user_id: String(tautulliUserId),
-                    search: search
-                });
-                const tRes = await fetch(`${tUrl}/api/v2?${params.toString()}`, { headers: { Accept: 'application/json' } })
-                    .then(r => r.json()).catch(() => null);
+                    search: search,
+                }, { throwOnError: false });
                 
                 if (tRes && tRes.response && tRes.response.data && tRes.response.data.data) {
                     totalRecords = tRes.response.data.recordsFiltered;
