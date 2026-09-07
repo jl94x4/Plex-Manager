@@ -183,6 +183,19 @@ export const MusicRequestModal: React.FC<Props> = ({
     const overview = options?.overview || fallbackOverview || '';
     const posterUrl = album?.coverUrl || options?.posterUrl || options?.posterPath || fallbackPosterUrl || null;
     const quotaHint = options?.quota ? formatQuotaHint(options.quota, t('mediaType.music'), t) : '';
+    const musicServers = options?.servers || [];
+    const showMusicAdvanced = !!options?.canRequestAdvanced && !options?.canNotify && !options?.isWatching;
+    const musicHasAdvancedChoices = musicServers.length > 1
+        || !serviceOptions
+        || (serviceOptions.profiles || []).length !== 1
+        || (serviceOptions.rootFolders || []).length !== 1;
+    const showMusicAdvancedPanel = showAdvanced && showMusicAdvanced && (
+        musicServers.length > 1
+        || serviceLoading
+        || !serviceOptions
+        || (serviceOptions.profiles || []).length !== 1
+        || (serviceOptions.rootFolders || []).length !== 1
+    );
 
     return (
         <ModalPortal open={open}>
@@ -240,11 +253,7 @@ export const MusicRequestModal: React.FC<Props> = ({
                                 {quotaHint && (
                                     <p className="text-xs text-muted">{quotaHint}</p>
                                 )}
-                                {options.canRequestAdvanced && !options.canNotify && !options.isWatching && (
-                                    ((options.servers || []).length > 1
-                                        || !serviceOptions
-                                        || (serviceOptions.profiles || []).length !== 1
-                                        || (serviceOptions.rootFolders || []).length !== 1) && (
+                                {showMusicAdvanced && musicHasAdvancedChoices && (
                                     <button
                                         type="button"
                                         onClick={() => setShowAdvanced((v) => !v)}
@@ -252,14 +261,8 @@ export const MusicRequestModal: React.FC<Props> = ({
                                     >
                                         {showAdvanced ? t('request.hideAdvanced') : t('request.advancedOptions')}
                                     </button>
-                                    )
                                 )}
-                                {showAdvanced && options.canRequestAdvanced && !options.canNotify && !options.isWatching && (
-                                    ((options.servers || []).length > 1
-                                        || serviceLoading
-                                        || !serviceOptions
-                                        || (serviceOptions.profiles || []).length !== 1
-                                        || (serviceOptions.rootFolders || []).length !== 1) && (
+                                {showMusicAdvancedPanel && (
                                     <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-white/[0.02] p-3">
                                         {serviceLoading ? (
                                             <div className="py-4 flex justify-center text-muted">
@@ -267,12 +270,12 @@ export const MusicRequestModal: React.FC<Props> = ({
                                             </div>
                                         ) : serviceOptions ? (
                                             <>
-                                                {(options.servers || []).length > 1 && (
+                                                {musicServers.length > 1 && (
                                                 <CustomSelect
                                                     label={t('music.lidarrServer')}
                                                     value={serverId != null ? String(serverId) : ''}
                                                     onChange={(v) => setServerId(Number(v) || null)}
-                                                    options={(options.servers || []).map((s: any) => ({
+                                                    options={musicServers.map((s: any) => ({
                                                         value: String(s.id),
                                                         label: s.name,
                                                     }))}
@@ -308,8 +311,8 @@ export const MusicRequestModal: React.FC<Props> = ({
                                             <p className="text-xs text-muted">{t('music.lidarrOptionsFailed')}</p>
                                         )}
                                     </div>
-                                    )
                                 )}
+                                {(options.canNotify || options.isWatching) ? (
                                     <button
                                         type="button"
                                         disabled={submitting}
