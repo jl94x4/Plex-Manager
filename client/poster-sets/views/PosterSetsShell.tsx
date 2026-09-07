@@ -64,6 +64,7 @@ export const PosterSetsShell: React.FC = () => {
         goToPrimaryTab,
         queueStats,
         watchStatsState,
+        historyJobs,
         goToDiscoverView,
         selectedBulkCount,
         inspectorOpen,
@@ -86,6 +87,9 @@ export const PosterSetsShell: React.FC = () => {
     const lastJob = status?.recentJobs?.[0] || null;
     const lastJobState = formatJobState(lastJob?.state);
     const lastJobFailed = /fail|error|cancel/i.test(String(lastJob?.state || ''));
+    const failedHistoryCount = historyJobs.filter((job) => (
+        ['failed', 'error'].includes(String(job.state || '').toLowerCase())
+    )).length;
 
     const statusItems = [
         {
@@ -212,9 +216,14 @@ export const PosterSetsShell: React.FC = () => {
                                             {watchStatsState.enabled}
                                         </span>
                                     ) : null}
-                                    {id === 'logs' && (watchStatsState.errored || 0) > 0 ? (
+                                    {id === 'watches' && (watchStatsState.errored || 0) > 0 ? (
                                         <span className="rounded-full bg-red-500/30 px-1.5 py-0.5 text-[10px] font-bold text-red-200">
                                             {watchStatsState.errored}
+                                        </span>
+                                    ) : null}
+                                    {id === 'logs' && failedHistoryCount > 0 ? (
+                                        <span className="rounded-full bg-red-500/30 px-1.5 py-0.5 text-[10px] font-bold text-red-200">
+                                            {failedHistoryCount}
                                         </span>
                                     ) : null}
                                 </button>
@@ -261,9 +270,14 @@ export const PosterSetsShell: React.FC = () => {
                                     {watchStatsState.enabled}
                                 </span>
                             ) : null}
-                            {id === 'logs' && (watchStatsState.errored || 0) > 0 ? (
+                            {id === 'watches' && (watchStatsState.errored || 0) > 0 ? (
                                 <span className="rounded-full bg-red-500/30 px-1.5 py-0.5 text-[10px] font-bold text-red-200">
                                     {watchStatsState.errored}
+                                </span>
+                            ) : null}
+                            {id === 'logs' && failedHistoryCount > 0 ? (
+                                <span className="rounded-full bg-red-500/30 px-1.5 py-0.5 text-[10px] font-bold text-red-200">
+                                    {failedHistoryCount}
                                 </span>
                             ) : null}
                         </button>

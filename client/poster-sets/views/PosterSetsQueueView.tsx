@@ -379,13 +379,13 @@ export const PosterSetsQueueView: React.FC = () => {
                                 type="button"
                                 className={buttonClass}
                                 disabled={busy !== null}
-                                title="Remove completed/failed/cancelled rows from the queue list"
+                                title="Remove succeeded, failed, and cancelled rows from the queue list"
                                 onClick={async () => {
                                     setBusy('queue');
                                     try {
                                         await posterSetsApi.clearFinishedQueue();
                                         await loadQueue();
-                                        toast('Cleared completed queue items.');
+                                        toast('Cleared finished queue items.');
                                     } catch (error) {
                                         toast(error instanceof Error ? error.message : 'Failed to clear queue', 'error');
                                     } finally {
@@ -393,7 +393,7 @@ export const PosterSetsQueueView: React.FC = () => {
                                     }
                                 }}
                             >
-                                Clear completed
+                                Clear finished
                             </button>
                         </div>
                     </div>
@@ -521,6 +521,30 @@ export const PosterSetsQueueView: React.FC = () => {
                                                         }}
                                                     >
                                                         <RotateCcw className="h-4 w-4" /> Retry
+                                                    </button>
+                                                ) : null}
+                                                {(state === 'failed' || state === 'cancelled' || state === 'succeeded') ? (
+                                                    <button
+                                                        type="button"
+                                                        className={buttonClass}
+                                                        disabled={busy !== null}
+                                                        title="Remove this row from the queue list"
+                                                        onClick={async (event) => {
+                                                            event.stopPropagation();
+                                                            setBusy('queue');
+                                                            try {
+                                                                await posterSetsApi.dismissQueueJob(job.id);
+                                                                await loadQueue();
+                                                                if (selectedQueueJob?.id === job.id) setSelectedQueueJob(null);
+                                                                toast('Removed from queue.');
+                                                            } catch (error) {
+                                                                toast(error instanceof Error ? error.message : 'Dismiss failed', 'error');
+                                                            } finally {
+                                                                setBusy(null);
+                                                            }
+                                                        }}
+                                                    >
+                                                        <X className="h-4 w-4" /> Dismiss
                                                     </button>
                                                 ) : null}
                                                 {state === 'failed' && (job.input?.url || meta?.url) ? (

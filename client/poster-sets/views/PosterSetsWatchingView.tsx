@@ -30,6 +30,7 @@ import { ModalPortal } from '../../shared/ModalPortal';
 import { normalizeUpgraderGridSize } from '../../shared/portalLayout';
 import { posterSetsApi } from '../api';
 import { MEDIUX_FILTER_OPTIONS, type PosterSetsWatch } from '../types';
+import { isPosterSetsUpstreamOutage } from '../upstreamErrors';
 import { PosterSetsSetupChecklist } from '../PosterSetsSetupChecklist';
 import { PosterSetsLibraryBrowse } from '../PosterSetsLibraryBrowse';
 import { PosterSetsCreatorsPanel } from '../PosterSetsCreatorsPanel';
@@ -371,7 +372,51 @@ export const PosterSetsWatchingView: React.FC = () => {
             }
         } catch (error) {
             await loadWatches();
-            toast(error instanceof Error ? error.message : 'Check failed', 'error');
+            const message = error instanceof Error ? error.message : 'Check failed';
+            toast(message, isPosterSetsUpstreamOutage(message) ? undefined : 'error');
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    const dismissWatchError = async (watch: PosterSetsWatch) => {
+        setBusy('watches');
+        try {
+            const response = await posterSetsApi.patchWatch(watch.id, { lastError: null });
+            await loadWatches();
+            setWatchSheet((current) => (
+                current && current.watch.id === watch.id
+                    ? { ...current, watch: { ...current.watch, lastError: null, ...(response.watch || {}) } }
+                    : current
+            ));
+        } catch (error) {
+            toast(error instanceof Error ? error.message : 'Failed to dismiss error', 'error');
+        } finally {
+            setBusy(null);
+        }
+    };
+
+    const dismissAllWatchErrors = async () => {
+        const errored = Number(watchStatsState.errored || 0);
+        if (!errored) return;
+        const confirmed = await askConfirm(
+            `Dismiss ${errored} watch error${errored === 1 ? '' : 's'}? Pins stay — only the failed-check banners are cleared.`,
+            { confirmLabel: 'Dismiss errors' },
+        );
+        if (!confirmed) return;
+        setBusy('watches');
+        try {
+            const response = await posterSetsApi.clearWatchErrors();
+            setWatches(response.watches || []);
+            setWatchStatsState(response.stats || {});
+            setWatchSheet((current) => (
+                current ? { ...current, watch: { ...current.watch, lastError: null } } : current
+            ));
+            toast(response.cleared
+                ? `Dismissed ${response.cleared} error${response.cleared === 1 ? '' : 's'}.`
+                : 'No watch errors to dismiss.');
+        } catch (error) {
+            toast(error instanceof Error ? error.message : 'Failed to dismiss errors', 'error');
         } finally {
             setBusy(null);
         }
@@ -544,9 +589,19 @@ export const PosterSetsWatchingView: React.FC = () => {
 
                                 <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 custom-scrollbar sm:px-5">
                                     {sheetWatch?.lastError ? (
-                                        <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs leading-relaxed text-red-200">
-                                            {sheetWatch.lastError}
-                                        </p>
+                                        <div className="space-y-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2">
+                                            <p className="text-xs leading-relaxed text-red-200">
+                                                {sheetWatch.lastError}
+                                            </p>
+                                            <button
+                                                type="button"
+                                                className={`${buttonClass} !justify-start min-h-9 text-xs`}
+                                                disabled={busy !== null}
+                                                onClick={() => void dismissWatchError(sheetWatch)}
+                                            >
+                                                <X className="h-3.5 w-3.5" /> Dismiss error
+                                            </button>
+                                        </div>
                                     ) : null}
 
                                     {sheetProvider === 'posterdb' ? (
@@ -678,6 +733,17 @@ export const PosterSetsWatchingView: React.FC = () => {
                             >
                                 <RefreshCw className="h-4 w-4" /> Refresh
                             </button>
+                            {(watchStatsState.errored || 0) > 0 ? (
+                                <button
+                                    type="button"
+                                    className={buttonClass}
+                                    disabled={busy !== null}
+                                    title="Clear failed-check banners without removing pins"
+                                    onClick={() => void dismissAllWatchErrors()}
+                                >
+                                    <X className="h-4 w-4" /> Dismiss errors
+                                </button>
+                            ) : null}
                             <button
                                 type="button"
                                 className={primaryButtonClass}
@@ -699,14 +765,18 @@ export const PosterSetsWatchingView: React.FC = () => {
                                         const checked = result.checked || 0;
                                         const queued = result.queued || 0;
                                         const assets = result.assetsQueued || 0;
-                                        const errors = Array.isArray(result.errors) ? result.errors.length : 0;
+                                        const errorItems = Array.isArray(result.errors) ? result.errors : [];
+                                        const errors = errorItems.length;
+                                        const allOutages = errors > 0 && errorItems.every((item) => isPosterSetsUpstreamOutage(item.error));
                                         toast(
                                             queued
                                                 ? `Checked ${checked}; queued ${queued} watch(es) / ${assets} asset(s). See Logs → Audit.`
                                                 : errors
-                                                    ? `Checked ${checked}; ${errors} error(s). See Logs → Audit.`
+                                                    ? allOutages
+                                                        ? `Checked ${checked}; MediUX/ThePosterDB was unreachable (${errors}). Retry later, or dismiss the banners on these cards.`
+                                                        : `Checked ${checked}; ${errors} error(s). See Logs → Audit.`
                                                     : `Checked ${checked}; nothing to apply. See Logs → Audit for the run.`,
-                                            errors && !queued ? 'error' : undefined,
+                                            errors && !queued && !allOutages ? 'error' : undefined,
                                         );
                                     } catch (error) {
                                         const message = error instanceof Error ? error.message : 'Watcher run failed';
@@ -1055,9 +1125,22 @@ export const PosterSetsWatchingView: React.FC = () => {
                                                                 </>
                                                             )}
                                                             {watch.lastError ? (
-                                                                <p className="line-clamp-2 break-words text-[10px] leading-snug text-red-300 [overflow-wrap:anywhere]" title={watch.lastError}>
-                                                                    {watch.lastError}
-                                                                </p>
+                                                                <div className="space-y-1">
+                                                                    <p className="line-clamp-3 break-words text-[10px] leading-snug text-red-300 [overflow-wrap:anywhere]" title={watch.lastError}>
+                                                                        {watch.lastError}
+                                                                    </p>
+                                                                    <button
+                                                                        type="button"
+                                                                        className="text-[10px] font-semibold text-red-200/80 underline-offset-2 hover:text-red-100 hover:underline"
+                                                                        disabled={busy !== null}
+                                                                        onClick={(event) => {
+                                                                            event.stopPropagation();
+                                                                            void dismissWatchError(watch);
+                                                                        }}
+                                                                    >
+                                                                        Dismiss
+                                                                    </button>
+                                                                </div>
                                                             ) : null}
                                                             <div className="grid grid-cols-2 gap-1.5">
                                                                 <button

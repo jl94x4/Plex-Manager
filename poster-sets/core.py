@@ -1345,6 +1345,50 @@ def test_posterdb_login(config: dict | None = None, *, force_fresh: bool = False
     }
 
 
+_CLOUDFLARE_ORIGIN_HINTS = {
+    520: "origin returned an unknown error",
+    521: "the origin web server is down",
+    522: "connection to origin timed out",
+    523: "origin is unreachable",
+    524: "origin timed out",
+    525: "SSL handshake with origin failed",
+    526: "origin SSL certificate is invalid",
+    527: "Railgun error",
+    530: "origin DNS failed or origin is unreachable",
+}
+
+
+def _page_host_label(url: str) -> str:
+    hay = str(url or "").lower()
+    if "mediux.pro" in hay:
+        return "MediUX"
+    if "theposterdb.com" in hay:
+        return "ThePosterDB"
+    return "The poster site"
+
+
+def _page_retrieve_error(
+    url: str,
+    *,
+    status_code: int | None = None,
+    cause: str | None = None,
+) -> str:
+    host = _page_host_label(url)
+    code = int(status_code) if status_code is not None else None
+    if code in _CLOUDFLARE_ORIGIN_HINTS:
+        hint = _CLOUDFLARE_ORIGIN_HINTS[code]
+        return (
+            f"{host} is temporarily unreachable (Cloudflare {code}: {hint}). "
+            f"This is {host}'s site, not the portal. Try again in a few minutes. "
+            f"Status code: {code}"
+        )
+    if code is not None:
+        return f"Failed to retrieve the page from {host}. Status code: {code}"
+    if cause:
+        return f"Failed to retrieve the page from {host}: {cause}"
+    return f"Failed to retrieve the page from {host}."
+
+
 def cook_soup(
     url: str,
     *,
@@ -1392,7 +1436,7 @@ def cook_soup(
                     cool = 1.25 * (attempt + 1)
                 time.sleep(cool)
                 continue
-            raise RuntimeError(f"Failed to retrieve the page. Status code: {response.status_code}")
+            raise RuntimeError(_page_retrieve_error(url, status_code=response.status_code))
         except (requests.Timeout, requests.ConnectionError) as exc:
             last_error = exc
             if attempt + 1 < attempts:
@@ -1400,8 +1444,8 @@ def cook_soup(
                 continue
             break
     if last_error:
-        raise RuntimeError(f"Failed to retrieve the page: {last_error}") from last_error
-    raise RuntimeError("Failed to retrieve the page.")
+        raise RuntimeError(_page_retrieve_error(url, cause=str(last_error))) from last_error
+    raise RuntimeError(_page_retrieve_error(url))
 
 
 _POSTERDB_RESOLVE_CACHE: dict[str, tuple[float, Optional[dict]]] = {}

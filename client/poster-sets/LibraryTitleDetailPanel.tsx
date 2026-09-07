@@ -16,6 +16,7 @@ import { askConfirm } from '../shared/confirm';
 import { ModalPortal } from '../shared/ModalPortal';
 import { SettingsToggleRow } from '../shared/ui';
 import { posterSetsApi } from './api';
+import { isPosterSetsUpstreamOutage } from './upstreamErrors';
 import { pickAutoMatchedTitle, rankSearchTitlesForLibraryItem, catalogTitleMatchesLibraryItem } from './autoMatchTitle';
 import { fetchPosterSetsForTitle } from './fetchPosterSetsForTitle';
 import { collapseNearDuplicateSets, excludeBlockedCreators, prioritizeSetsByFollowedCreators } from './prioritizeCreatorSets';
@@ -356,8 +357,7 @@ export function LibraryTitleDetailPanel({
                     || msg.includes('ThePosterDB returned no sets')
                     || msg.includes('ThePosterDB search timed out')
                     || msg.includes('MediUX search timed out')
-                    || msg.includes('Status code: 530')
-                    || msg.includes('Status code: 52')
+                    || isPosterSetsUpstreamOutage(msg)
                 ) {
                     toast(msg);
                 } else {
@@ -455,7 +455,8 @@ export function LibraryTitleDetailPanel({
             if (response?.partialErrors?.length) {
                 const msg = response.partialErrors[0];
                 const soft = msg.includes('ThePosterDB returned no sets')
-                    || msg.includes('ThePosterDB search timed out');
+                    || msg.includes('ThePosterDB search timed out')
+                    || isPosterSetsUpstreamOutage(msg);
                 toast(msg, soft ? undefined : 'error');
             }
         } catch (error) {

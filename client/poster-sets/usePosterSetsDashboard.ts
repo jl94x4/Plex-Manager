@@ -25,6 +25,7 @@ import {
     type UpgraderGridSize,
 } from '../shared/portalLayout';
 import { posterSetsApi } from './api';
+import { isPosterSetsUpstreamOutage } from './upstreamErrors';
 import {
     DEFAULT_POSTER_SETS_CONFIG,
     mediuxFiltersFromAssets,
@@ -1752,7 +1753,8 @@ export function usePosterSetsDashboardState() {
                     toast(`Found ${setCount} set${setCount === 1 ? '' : 's'} from ${finalEvent?.title || q}${dupeNote}.`);
                 }
                 if (finalEvent?.partialErrors?.length) {
-                    toast(finalEvent.partialErrors[0], 'error');
+                    const msg = finalEvent.partialErrors[0];
+                    toast(msg, isPosterSetsUpstreamOutage(msg) ? undefined : 'error');
                 }
                 return;
             }
@@ -1780,7 +1782,8 @@ export function usePosterSetsDashboardState() {
                 toast(`Found ${setCount} set${setCount === 1 ? '' : 's'}${dupeNote}. Choose one to preview.`);
             }
             if (response.partialErrors?.length) {
-                toast(response.partialErrors[0], 'error');
+                const msg = response.partialErrors[0];
+                toast(msg, isPosterSetsUpstreamOutage(msg) ? undefined : 'error');
             }
         } catch (error) {
             if (error instanceof DOMException && error.name === 'AbortError') return;
@@ -1900,6 +1903,7 @@ export function usePosterSetsDashboardState() {
                     msg.includes('taking longer')
                     || msg.includes('timed out')
                     || msg.includes('still searching')
+                    || isPosterSetsUpstreamOutage(msg)
                 ) {
                     toast(msg);
                 } else {
@@ -1993,7 +1997,8 @@ export function usePosterSetsDashboardState() {
                 toast(`Found ${setCount} set${setCount === 1 ? '' : 's'}${dupeNote}. Choose one to preview.`);
             }
             if (response?.partialErrors?.length) {
-                toast(response.partialErrors[0], 'error');
+                const msg = response.partialErrors[0];
+                toast(msg, isPosterSetsUpstreamOutage(msg) ? undefined : 'error');
             }
         } catch (error) {
             toast(error instanceof Error ? error.message : 'Search failed', 'error');

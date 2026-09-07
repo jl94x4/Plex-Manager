@@ -287,6 +287,12 @@ export const posterSetsApi = {
         ok: boolean;
         job: PosterSetsJob;
     }>,
+    dismissQueueJob: (id: string) => apiFetch(`${ROOT}/queue/dismiss/${encodeURIComponent(id)}`, json({})) as Promise<{
+        ok: boolean;
+        job: PosterSetsJob;
+        stats: PosterSetsQueueStats;
+        jobs: PosterSetsJob[];
+    }>,
     clearFinishedQueue: () => apiFetch(`${ROOT}/queue/clear-finished`, json({})) as Promise<{
         ok: boolean;
         stats: PosterSetsQueueStats;
@@ -327,6 +333,7 @@ export const posterSetsApi = {
         user?: string;
         thumbUrl?: string;
         setKind?: string | null;
+        lastError?: null;
     }) => apiFetch(`${ROOT}/watches/${encodeURIComponent(id)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
@@ -380,6 +387,12 @@ export const posterSetsApi = {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
     }) as Promise<{ ok: boolean; watch: PosterSetsWatch }>,
+    clearWatchErrors: () => apiFetch(`${ROOT}/watches/clear-errors`, json({})) as Promise<{
+        ok: boolean;
+        cleared: number;
+        watches: PosterSetsWatch[];
+        stats?: PosterSetsWatchStats;
+    }>,
     tpdbCacheStatus: () => apiFetch(`${ROOT}/tpdb-cache`) as Promise<{
         ok: boolean;
         cacheEnabled?: boolean;
@@ -552,6 +565,16 @@ export const posterSetsApi = {
     audit: (limit = 100) => apiFetch(`${ROOT}/audit?limit=${encodeURIComponent(String(limit))}`) as Promise<{
         ok?: boolean;
         entries: PosterSetsAuditEntry[];
+    }>,
+    clearFailedAudit: () => apiFetch(`${ROOT}/audit/clear-failed`, json({})) as Promise<{
+        ok: boolean;
+        removed: number;
+        entries: PosterSetsAuditEntry[];
+    }>,
+    clearFailedJobs: () => apiFetch(`${ROOT}/jobs/clear-failed`, json({})) as Promise<{
+        ok: boolean;
+        removed: number;
+        jobs: PosterSetsJob[];
     }>,
     libraryRecent: (limit = 120, options?: { refresh?: boolean }) => apiFetch(
         `/api/media-server/library/recent?limit=${encodeURIComponent(String(limit))}${options?.refresh ? '&refresh=1' : ''}`,

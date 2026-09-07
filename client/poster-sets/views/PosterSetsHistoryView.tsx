@@ -324,6 +324,10 @@ export const PosterSetsHistoryView: React.FC = () => {
 
     if (tab !== 'history') return null;
     const watcherBusy = Boolean(watcherPass?.busy || watcherPass?.running);
+    const failedHistoryCount = historyJobs.filter((job) => ['failed', 'error'].includes(String(job.state || '').toLowerCase())).length;
+    const failedAuditCount = auditEntries.filter((entry) => (
+        Boolean(entry.error) || ['failed', 'error'].includes(String(entry.state || '').toLowerCase())
+    )).length;
     return (
 
 
@@ -360,6 +364,69 @@ export const PosterSetsHistoryView: React.FC = () => {
                                     {label}
                                 </button>
                             ))}
+                            {historyFilter === 'audit' ? (
+                                <button
+                                    type="button"
+                                    className={buttonClass}
+                                    disabled={busy !== null || failedAuditCount < 1}
+                                    title="Remove audit rows that recorded an error"
+                                    onClick={async () => {
+                                        if (failedAuditCount < 1) return;
+                                        const confirmed = await askConfirm(
+                                            `Remove ${failedAuditCount} failed audit ${failedAuditCount === 1 ? 'entry' : 'entries'}?`,
+                                            { confirmLabel: 'Clear errors', danger: true },
+                                        );
+                                        if (!confirmed) return;
+                                        setBusy('history');
+                                        try {
+                                            const response = await posterSetsApi.clearFailedAudit();
+                                            setAuditEntries(response.entries || []);
+                                            toast(response.removed
+                                                ? `Cleared ${response.removed} failed audit ${response.removed === 1 ? 'entry' : 'entries'}.`
+                                                : 'No failed audit entries.');
+                                        } catch (error) {
+                                            toast(error instanceof Error ? error.message : 'Failed to clear audit errors', 'error');
+                                        } finally {
+                                            setBusy(null);
+                                        }
+                                    }}
+                                >
+                                    <Trash2 className="h-4 w-4" /> Clear errors
+                                </button>
+                            ) : (
+                                <button
+                                    type="button"
+                                    className={buttonClass}
+                                    disabled={busy !== null || failedHistoryCount < 1}
+                                    title="Remove failed jobs from Logs and the queue list"
+                                    onClick={async () => {
+                                        if (failedHistoryCount < 1) return;
+                                        const confirmed = await askConfirm(
+                                            `Remove ${failedHistoryCount} failed ${failedHistoryCount === 1 ? 'job' : 'jobs'} from Logs and the queue?`,
+                                            { confirmLabel: 'Clear failed', danger: true },
+                                        );
+                                        if (!confirmed) return;
+                                        setBusy('history');
+                                        try {
+                                            const response = await posterSetsApi.clearFailedJobs();
+                                            setHistoryJobs(response.jobs || []);
+                                            if (selectedHistoryJob && ['failed', 'error'].includes(String(selectedHistoryJob.state || '').toLowerCase())) {
+                                                setSelectedHistoryJob(null);
+                                            }
+                                            await loadQueue();
+                                            toast(response.removed
+                                                ? `Cleared ${response.removed} failed ${response.removed === 1 ? 'job' : 'jobs'}.`
+                                                : 'No failed jobs.');
+                                        } catch (error) {
+                                            toast(error instanceof Error ? error.message : 'Failed to clear failed jobs', 'error');
+                                        } finally {
+                                            setBusy(null);
+                                        }
+                                    }}
+                                >
+                                    <Trash2 className="h-4 w-4" /> Clear failed
+                                </button>
+                            )}
                         </div>
                     </div>
         
