@@ -5080,7 +5080,7 @@ export const SettingsDashboard: React.FC = () => {
                                 <SettingsToggleRow
                                     title="Auto-start pinning service"
                                     hint={<SettingHint>
-                                        When ON, the ColleXions pinning loop starts automatically whenever the portal (and Collexions worker) starts — no need to click Start Service on the Dashboard. Requires Collexions enabled and Plex configured in Collexions. OFF by default.
+                                        When ON, pinning starts on every portal boot. A portal update also resumes a loop that was already running, instead of leaving it Stopped. Requires Collexions enabled and Plex configured. OFF by default.
                                     </SettingHint>}
                                     checked={collexionsAutostart}
                                     onChange={setCollexionsAutostart}

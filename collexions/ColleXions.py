@@ -1218,8 +1218,49 @@ def main():
 
 
 # --- Continuous Loop ---
-def run_continuously():
+_IN_PROGRESS_STATUS_RE = re.compile(r'^(?:\[dry-run\]\s*)?(running|processing|pinning)\b', re.I)
+
+
+def _seconds_until_scheduled_run(status_data):
+    try:
+        due = float(status_data.get('next_run_timestamp') or 0)
+    except (TypeError, ValueError):
+        return 0
+    if due <= 0:
+        return 0
+    remaining = due - datetime.now().timestamp()
+    return remaining if remaining > 1 else 0
+
+
+def _sleep_until_scheduled_run():
+    """After a portal restart, wait out the leftover interval instead of pinning immediately."""
+    prev = _load_status_file()
+    remaining = _seconds_until_scheduled_run(prev)
+    status_text = str(prev.get('status') or '')
+    if remaining <= 0 or _IN_PROGRESS_STATUS_RE.match(status_text):
+        return
+    due_ts = float(prev.get('next_run_timestamp') or 0)
+    mins = max(1, int(round(remaining / 60.0)))
+    logging.info(
+        "Resuming after restart — sleeping approximately %.0f seconds until the next scheduled pin.",
+        remaining,
+    )
+    update_status(f"Sleeping ({mins} min)", due_ts)
+    time.sleep(remaining)
+
+
+def run_continuously(wait_until_due=False):
     global _DRY_RUN_MODE_ACTIVE
+    if wait_until_due:
+        try:
+            _sleep_until_scheduled_run()
+        except KeyboardInterrupt:
+            logging.info(
+                f"Keyboard interrupt received before first cycle. Exiting Collexions script."
+                f"{' (DRY RUN was active)' if _DRY_RUN_MODE_ACTIVE else ''}"
+            )
+            update_status("Stopped (Interrupt)")
+            return
     while True:
         run_cycle_start_time = datetime.now()
         next_run_ts_planned_for_status = None
@@ -1290,6 +1331,11 @@ if __name__ == "__main__":
         action='store_true',
         help="Run the script in dry-run mode: no changes will be made."
     )
+    parser.add_argument(
+        '--wait-until-due',
+        action='store_true',
+        help="On start, sleep until status.json next_run_timestamp if it is still in the future."
+    )
     args = parser.parse_args()
 
     _DRY_RUN_MODE_ACTIVE = args.dry_run
@@ -1306,7 +1352,7 @@ if __name__ == "__main__":
         logging.info("Collexions script starting up in LIVE mode...")
 
     try:
-        run_continuously()
+        run_continuously(wait_until_due=args.wait_until_due)
     except SystemExit:
          logging.info(f"Exiting due to SystemExit during script execution.{' (DRY RUN was active)' if _DRY_RUN_MODE_ACTIVE else ''}")
     except KeyboardInterrupt:

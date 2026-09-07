@@ -3592,10 +3592,32 @@ def get_status():
     return jsonify(payload)
 
 
+def _last_run_pin_count(status_payload):
+    """Pins from the last completed cycle, not a live Plex census of leftover home pins."""
+    raw = status_payload.get('last_run_pinned') if isinstance(status_payload, dict) else None
+    try:
+        if raw is not None:
+            return max(0, int(raw))
+    except (TypeError, ValueError):
+        pass
+    libs = status_payload.get('libraries') if isinstance(status_payload, dict) else None
+    if not isinstance(libs, list) or not libs:
+        return None
+    total = 0
+    for lib in libs:
+        if not isinstance(lib, dict):
+            continue
+        try:
+            total += max(0, int(lib.get('pinned') or 0))
+        except (TypeError, ValueError):
+            continue
+    return total
+
+
 @app.route('/api/summary')
 @require_auth
 def get_summary():
-    """Compact status for the portal home widget (last/next run + labeled pin count)."""
+    """Compact status for the portal home widget (last/next run + last-cycle pin count)."""
     global SUMMARY_CACHE, GALLERY_CACHE
 
     now = time.time()
@@ -3619,39 +3641,40 @@ def get_summary():
             continue
     label = str(config.get('collexions_label') or 'Collexions').lower()
 
-    pinned_count = None
+    pinned_count = _last_run_pin_count(status_payload)
     labeled_count = 0
 
-    # Prefer a full gallery cache (pins already resolved)
-    cache_data = GALLERY_CACHE.get('data')
-    cache_ver = GALLERY_CACHE.get('version')
-    if isinstance(cache_data, list) and cache_ver == 4:
-        pinned_count = sum(1 for c in cache_data if c.get('is_pinned'))
-        labeled_count = sum(1 for c in cache_data if c.get('has_label'))
-    else:
-        plex = get_plex_instance()
-        if plex and lib_names:
-            pinned = 0
-            try:
-                for lib_name in lib_names:
-                    try:
-                        library = plex.library.section(lib_name)
-                        for coll in library.collections():
-                            has_label = any(
-                                getattr(l, 'tag', '').lower() == label
-                                for l in getattr(coll, 'labels', []) or []
-                            )
-                            if not has_label:
-                                continue
-                            labeled_count += 1
-                            if _collection_is_pinned(coll):
-                                pinned += 1
-                    except Exception as e:
-                        logging.warning(f"summary library '{lib_name}' failed: {e}")
-                pinned_count = pinned
-            except Exception as e:
-                logging.warning(f"summary pin count failed: {e}")
-                pinned_count = None
+    # Fallback only when the last cycle did not record pin stats: labeled + pinned.
+    if pinned_count is None:
+        cache_data = GALLERY_CACHE.get('data')
+        cache_ver = GALLERY_CACHE.get('version')
+        if isinstance(cache_data, list) and cache_ver == 4:
+            pinned_count = sum(1 for c in cache_data if c.get('has_label') and c.get('is_pinned'))
+            labeled_count = sum(1 for c in cache_data if c.get('has_label'))
+        else:
+            plex = get_plex_instance()
+            if plex and lib_names:
+                pinned = 0
+                try:
+                    for lib_name in lib_names:
+                        try:
+                            library = plex.library.section(lib_name)
+                            for coll in library.collections():
+                                has_label = any(
+                                    getattr(l, 'tag', '').lower() == label
+                                    for l in getattr(coll, 'labels', []) or []
+                                )
+                                if not has_label:
+                                    continue
+                                labeled_count += 1
+                                if _collection_is_pinned(coll):
+                                    pinned += 1
+                        except Exception as e:
+                            logging.warning(f"summary library '{lib_name}' failed: {e}")
+                    pinned_count = pinned
+                except Exception as e:
+                    logging.warning(f"summary pin count failed: {e}")
+                    pinned_count = None
 
     # Prefer slots from the last completed run when present; else config sum.
     status_slots = status_payload.get('pin_slots')
@@ -3962,7 +3985,7 @@ def history_endpoint():
             return jsonify({"events": [], "total_count": 0, "unique_count": 0, "error": str(e)})
     return jsonify({"events": [], "total_count": 0, "unique_count": 0})
 
-def start_background_process():
+def start_background_process(wait_until_due=False):
     """Helper to start the background process."""
     global process
     
@@ -3989,6 +4012,8 @@ def start_background_process():
                 cmd.append('--dry-run')
         except Exception:
             pass
+        if wait_until_due:
+            cmd.append('--wait-until-due')
 
         child_env = os.environ.copy()
         if _DATA_ROOT:
@@ -4025,7 +4050,7 @@ def maybe_autostart_background_process():
     if not config_ready_for_background_process():
         return
 
-    success, result = start_background_process()
+    success, result = start_background_process(wait_until_due=True)
     if success:
         logging.info(f"Background service autostarted with PID: {result}")
     else:

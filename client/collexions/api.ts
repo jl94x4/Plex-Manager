@@ -143,7 +143,7 @@ class CollexionsApiService {
         }
     }
 
-    /** Home widget: last/next run + labeled pin count (cached ~2m on worker). */
+    /** Home widget: last/next run + last-cycle pin count vs slots. */
     async getSummary(): Promise<{
         status: string;
         last_update: string;

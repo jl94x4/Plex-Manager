@@ -1501,6 +1501,7 @@ import {
     getCollexionsEmbeddedStatus,
     isCollexionsBundledAvailable,
     readCollexionsRunHints,
+    shouldStartCollexionsPinningLoop,
     setCollexionsUnexpectedExitHandler,
     syncCollexionsEmbeddedWorker,
     COLLEXIONS_LONG_PROXY_MS,
@@ -31790,49 +31791,57 @@ app.listen(PORT, BIND_HOST, async () => {
             }
             let autostartRun = !!withCollexions.collexionsAutostart;
             let collexionsIntervalMs = 180 * 60 * 1000;
-            if (autostartRun) {
-                try {
-                    const hints = await readCollexionsRunHints(CONFIG_DIR);
-                    collexionsIntervalMs = hints.intervalMs || collexionsIntervalMs;
-                    const stored = await getJob(JOB_IDS.collexionsPinning);
-                    const merged = mergeJobWithExternal(stored, hints);
-                    let decision = decideBootRun(merged, { intervalMs: collexionsIntervalMs });
-                    if (decision.action !== 'resume' && !hints.interrupted && hints.nextRunTs) {
-                        const dueMs = hints.nextRunTs * 1000;
-                        if (dueMs > Date.now()) {
-                            decision = {
-                                action: 'skip',
-                                delayMs: dueMs - Date.now(),
-                                reason: 'worker-next-run',
-                                nextRunAt: new Date(dueMs).toISOString(),
-                            };
-                        }
+            let markPinningJobStart = autostartRun;
+            try {
+                const hints = await readCollexionsRunHints(CONFIG_DIR);
+                collexionsIntervalMs = hints.intervalMs || collexionsIntervalMs;
+                autostartRun = shouldStartCollexionsPinningLoop({
+                    autostartEnabled: !!withCollexions.collexionsAutostart,
+                    status: hints.status,
+                    interrupted: hints.interrupted,
+                });
+                const stored = await getJob(JOB_IDS.collexionsPinning);
+                const merged = mergeJobWithExternal(stored, hints);
+                let decision = decideBootRun(merged, { intervalMs: collexionsIntervalMs });
+                if (decision.action !== 'resume' && !hints.interrupted && hints.nextRunTs) {
+                    const dueMs = hints.nextRunTs * 1000;
+                    if (dueMs > Date.now()) {
+                        decision = {
+                            action: 'skip',
+                            delayMs: dueMs - Date.now(),
+                            reason: 'worker-next-run',
+                            nextRunAt: new Date(dueMs).toISOString(),
+                        };
                     }
-                    autostartRun = decision.action !== 'skip';
-                    if (decision.action === 'skip') {
-                        log(`[collexions] boot: skipping pinning run, next in ${formatDelay(decision.delayMs)}`);
-                        if (merged.lastCompletedAt) {
-                            await updateJob(JOB_IDS.collexionsPinning, {
-                                status: 'completed',
-                                lastCompletedAt: merged.lastCompletedAt,
-                                lastStartedAt: merged.lastStartedAt,
-                                intervalMs: hints.intervalMs,
-                                checkpoint: null,
-                            }).catch(() => {});
-                        }
-                    } else if (decision.action === 'resume') {
-                        log('[collexions] boot: resuming interrupted pinning run');
-                    }
-                } catch (hintError) {
-                    log(`[collexions] boot schedule check failed: ${hintError.message}`);
                 }
+                // Never fold "not due yet" into autostart=false — that left pinning
+                // Stopped after every SMP/container update until someone clicked Start.
+                if (!autostartRun) {
+                    log('[collexions] boot: pinning loop stays stopped (not running before restart)');
+                } else if (decision.action === 'skip') {
+                    log(`[collexions] boot: restarting pinning loop, first cycle waits ${formatDelay(decision.delayMs)}`);
+                    if (merged.lastCompletedAt) {
+                        await updateJob(JOB_IDS.collexionsPinning, {
+                            status: 'completed',
+                            lastCompletedAt: merged.lastCompletedAt,
+                            lastStartedAt: merged.lastStartedAt,
+                            intervalMs: hints.intervalMs,
+                            checkpoint: null,
+                        }).catch(() => {});
+                    }
+                } else if (decision.action === 'resume') {
+                    log('[collexions] boot: resuming interrupted pinning run');
+                }
+                markPinningJobStart = autostartRun && decision.action !== 'skip';
+            } catch (hintError) {
+                log(`[collexions] boot schedule check failed: ${hintError.message}`);
             }
             await syncCollexionsEmbeddedWorker(withCollexions, {
                 configDir: CONFIG_DIR,
                 log,
                 autostartRun,
             });
-            if (autostartRun) {
+            if (markPinningJobStart) {
                 await markJobStart(JOB_IDS.collexionsPinning, { intervalMs: collexionsIntervalMs }).catch(() => {});
             }
         } catch (e) {
