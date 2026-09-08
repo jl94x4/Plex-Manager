@@ -11,7 +11,7 @@ import {
     TV_GENRES,
     buildGenreSliderImage,
 } from './discoverConstants';
-import { enrichDiscoveryItems, normalizeRawDiscoveryItem } from './discoverItemUtils';
+import { enrichDiscoveryItems, normalizeRawDiscoveryItem, dedupeDiscoverResults, getDiscoverItemKey } from './discoverItemUtils';
 import { portalRequestsToDiscoveryRowItems } from './myRequestUtils';
 import { filterHiddenAvailableItems, useDiscoveryPreferences } from './useDiscoveryPreferences';
 import { fetchDiscoverHomeRowResults } from './discoverFetchUtils';
@@ -29,7 +29,7 @@ import { discoveryTheme } from './discoveryThemeClasses';
 import { useLibraryQueueToggle } from './useLibraryQueueToggle';
 import { DiscoverGridSizeSelect } from './DiscoverGridSizeSelect';
 import { useDiscoverGridSize } from './useDiscoverGridSize';
-import { discoverRowCardWidthClass } from '../shared/portalLayout';
+import type { UpgraderGridSize } from '../shared/portalLayout';
 import { useDiscoverI18n } from './i18n';
 import {
     MusicChartItem,
@@ -88,7 +88,7 @@ const EmptyRail: React.FC<{
 const DiscoverHomeRow: React.FC<{
     title?: string;
     items: any[];
-    posterCardClass: string;
+    density: UpgraderGridSize;
     viewAllLabel: string;
     formatItem: (item: any) => any;
     onSelect: (item: any) => void;
@@ -106,7 +106,7 @@ const DiscoverHomeRow: React.FC<{
 }> = ({
     title = '',
     items,
-    posterCardClass,
+    density,
     viewAllLabel,
     formatItem,
     onSelect,
@@ -117,9 +117,11 @@ const DiscoverHomeRow: React.FC<{
     hideTitle = false,
     getQuickActions,
 }) => {
-    const visibleItems = (Array.isArray(items) ? items : [])
-        .map((rawItem) => formatItem(rawItem))
-        .filter((formatted) => formatted && !formatted.hidden);
+    const visibleItems = dedupeDiscoverResults(
+        (Array.isArray(items) ? items : [])
+            .map((rawItem) => formatItem(rawItem))
+            .filter((formatted) => formatted && !formatted.hidden),
+    );
 
     if (!visibleItems.length) {
         if (!empty) return null;
@@ -137,13 +139,14 @@ const DiscoverHomeRow: React.FC<{
             {!hideTitle && (
                 <DiscoverSectionHeader title={title} onViewAll={onViewAll} viewAllLabel={viewAllLabel} />
             )}
-            <Carousel>
+            <Carousel rail="poster" density={density}>
                 {visibleItems.map((formatted, idx) => {
                     if (!formatted) return null;
+                    const itemKey = getDiscoverItemKey(formatted) || `${title || 'row'}-${formatted.id || idx}`;
                     return (
                         <div
-                            key={`${title || 'row'}-${formatted.id || idx}`}
-                            className={`${posterCardClass} flex-shrink-0 relative group${animateEnter ? ' discover-poster-enter' : ''}`}
+                            key={itemKey}
+                            className={`relative group snap-start${animateEnter ? ' discover-poster-enter' : ''}`}
                             style={animateEnter ? { animationDelay: `${Math.min(idx, 12) * 30}ms` } : undefined}
                         >
                             <DiscoverPosterCard
@@ -170,7 +173,8 @@ const DiscoverGenreSliderRow: React.FC<{
     navigate: (path: string) => void;
     viewAllLabel: string;
     onViewAll?: () => void;
-}> = ({ title, apiGenres, fallbackGenres, basePath, navigate, viewAllLabel, onViewAll }) => {
+    density: UpgraderGridSize;
+}> = ({ title, apiGenres, fallbackGenres, basePath, navigate, viewAllLabel, onViewAll, density }) => {
     const items = (apiGenres?.length ?? 0)
         ? apiGenres
         : fallbackGenres.map((g) => ({
@@ -182,7 +186,7 @@ const DiscoverGenreSliderRow: React.FC<{
     return (
         <div className="flex flex-col gap-2 relative">
             <DiscoverSectionHeader title={title} onViewAll={onViewAll} viewAllLabel={viewAllLabel} />
-            <Carousel>
+            <Carousel rail="landscape" density={density}>
                 {items.map((g) => {
                     const fallback = fallbackGenres.find((fg) => fg.id === g.id);
                     return (
@@ -217,7 +221,6 @@ export const DiscoverHome: React.FC<{
     const { preferences, loaded } = useDiscoveryPreferences();
     const { showLibraryQueue, toggleLibraryQueue } = useLibraryQueueToggle();
     const [gridSize, setGridSize] = useDiscoverGridSize();
-    const posterCardClass = discoverRowCardWidthClass(gridSize);
     const [rows, setRows] = useState({
         recentlyAdded: [] as any[],
         recentRequests: [] as any[],
@@ -367,9 +370,9 @@ export const DiscoverHome: React.FC<{
 
             const extraRowOpts = {
                 needsBackfill: hideAvailable,
-                maxPages: hideAvailable ? 3 : 1,
-                maxItems: 24,
-                minItems: hideAvailable ? 12 : 20,
+                maxPages: hideAvailable ? 4 : 2,
+                maxItems: 36,
+                minItems: hideAvailable ? 16 : 24,
                 hideRequested: false,
                 trustAttachedAvailability: true,
                 pageConcurrency: 1,
@@ -525,7 +528,7 @@ export const DiscoverHome: React.FC<{
     }
 
     return (
-        <div className={`flex flex-col gap-6 w-full max-w-full overflow-hidden pb-8${enterAnim ? ' discover-content-enter' : ''}`}>
+        <div className={`discover-layout-container flex flex-col gap-6 w-full max-w-full min-w-0 pb-8${enterAnim ? ' discover-content-enter' : ''}`}>
             <section className={discoveryTheme.personalPanel}>
                 <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -555,7 +558,7 @@ export const DiscoverHome: React.FC<{
                         <DiscoverHomeRow
                             title={t('home.yourRequests')}
                             items={rows.recentRequests}
-                            posterCardClass={posterCardClass}
+                            density={gridSize}
                             viewAllLabel={t('common.viewAll')}
                             formatItem={formatItem}
                             onSelect={onSelect}
@@ -583,7 +586,7 @@ export const DiscoverHome: React.FC<{
                                 onRefresh={loadData}
                                 variant="row"
                                 providerLabel={providerLabel}
-                                rowCardClassName={posterCardClass}
+                                density={gridSize}
                             />
                         ) : preferences.showWatchlist !== false ? (
                             <div className="flex flex-col gap-2">
@@ -610,7 +613,7 @@ export const DiscoverHome: React.FC<{
                                     title: rows.becauseYouWatchedSeed.title || t('mediaType.tvShow'),
                                 })}
                                 items={rows.becauseYouWatched || []}
-                                posterCardClass={posterCardClass}
+                                density={gridSize}
                                 viewAllLabel={t('common.viewAll')}
                                 formatItem={formatItem}
                                 onSelect={onSelect}
@@ -645,7 +648,7 @@ export const DiscoverHome: React.FC<{
                     <DiscoverHomeRow
                         title={t('home.recentlyAdded')}
                         items={rows.recentlyAdded}
-                        posterCardClass={posterCardClass}
+                        density={gridSize}
                         viewAllLabel={t('common.viewAll')}
                         formatItem={formatItem}
                         onSelect={onSelect}
@@ -658,7 +661,7 @@ export const DiscoverHome: React.FC<{
                     <DiscoverHomeRow
                         title={t('home.trending')}
                         items={rows.trending}
-                        posterCardClass={posterCardClass}
+                        density={gridSize}
                         viewAllLabel={t('common.viewAll')}
                         formatItem={formatItem}
                         onSelect={onSelect}
@@ -670,7 +673,7 @@ export const DiscoverHome: React.FC<{
                 <DiscoverHomeRow
                     title={t('home.contentGapPicks')}
                     items={contentGapItems}
-                    posterCardClass={posterCardClass}
+                    density={gridSize}
                     viewAllLabel={t('common.viewAll')}
                     formatItem={formatItem}
                     onSelect={onSelect}
@@ -690,7 +693,7 @@ export const DiscoverHome: React.FC<{
                 <DiscoverHomeRow
                     title={t('home.popularMovies')}
                     items={rows.popularMovies}
-                    posterCardClass={posterCardClass}
+                    density={gridSize}
                     viewAllLabel={t('common.viewAll')}
                     formatItem={formatItem}
                     onSelect={onSelect}
@@ -706,11 +709,12 @@ export const DiscoverHome: React.FC<{
                     navigate={navigate}
                     viewAllLabel={t('common.viewAll')}
                     onViewAll={() => navigate(discoverRowPath('movie-genres'))}
+                    density={gridSize}
                 />
                 <DiscoverHomeRow
                     title={t('home.upcomingMovies')}
                     items={rows.upcomingMovies}
-                    posterCardClass={posterCardClass}
+                    density={gridSize}
                     viewAllLabel={t('common.viewAll')}
                     formatItem={formatItem}
                     onSelect={onSelect}
@@ -723,7 +727,7 @@ export const DiscoverHome: React.FC<{
                         key={rail.id}
                         title={t(rail.titleKey, rail.titleVars)}
                         items={extraRows[rail.id] || []}
-                        posterCardClass={posterCardClass}
+                        density={gridSize}
                         viewAllLabel={t('common.viewAll')}
                         formatItem={formatItem}
                         onSelect={onSelect}
@@ -739,7 +743,7 @@ export const DiscoverHome: React.FC<{
                         onViewAll={() => navigate(discoverRowPath('studios'))}
                         viewAllLabel={t('common.viewAll')}
                     />
-                    <Carousel>
+                    <Carousel rail="company" density={gridSize}>
                         {DISCOVER_STUDIOS.map((studio) => (
                             <CompanyCard
                                 key={studio.id}
@@ -754,7 +758,7 @@ export const DiscoverHome: React.FC<{
                 <DiscoverHomeRow
                     title={t('home.popularSeries')}
                     items={rows.popularSeries}
-                    posterCardClass={posterCardClass}
+                    density={gridSize}
                     viewAllLabel={t('common.viewAll')}
                     formatItem={formatItem}
                     onSelect={onSelect}
@@ -770,11 +774,12 @@ export const DiscoverHome: React.FC<{
                     navigate={navigate}
                     viewAllLabel={t('common.viewAll')}
                     onViewAll={() => navigate(discoverRowPath('series-genres'))}
+                    density={gridSize}
                 />
                 <DiscoverHomeRow
                     title={t('home.upcomingSeries')}
                     items={rows.upcomingSeries}
-                    posterCardClass={posterCardClass}
+                    density={gridSize}
                     viewAllLabel={t('common.viewAll')}
                     formatItem={formatItem}
                     onSelect={onSelect}
@@ -787,7 +792,7 @@ export const DiscoverHome: React.FC<{
                         key={rail.id}
                         title={t(rail.titleKey, rail.titleVars)}
                         items={extraRows[rail.id] || []}
-                        posterCardClass={posterCardClass}
+                        density={gridSize}
                         viewAllLabel={t('common.viewAll')}
                         formatItem={formatItem}
                         onSelect={onSelect}
@@ -803,7 +808,7 @@ export const DiscoverHome: React.FC<{
                         onViewAll={() => navigate(discoverRowPath('networks'))}
                         viewAllLabel={t('common.viewAll')}
                     />
-                    <Carousel>
+                    <Carousel rail="company" density={gridSize}>
                         {DISCOVER_NETWORKS.map((network) => (
                             <CompanyCard
                                 key={`${network.id}-${network.name}`}
@@ -844,6 +849,7 @@ export const DiscoverHome: React.FC<{
                             onPick={openMusicChartItem}
                             viewAllLabel={t('common.viewAll')}
                             onViewAll={() => navigate('/discovery/music')}
+                            density={gridSize}
                         />
                         <MusicGenreRail
                             title={t('music.genres')}
@@ -851,6 +857,7 @@ export const DiscoverHome: React.FC<{
                             navigate={navigate}
                             viewAllLabel={t('common.viewAll')}
                             onViewAll={() => navigate('/discovery/music')}
+                            density={gridSize}
                         />
                         <MusicChartRail
                             title={t('music.topAlbums')}
@@ -860,6 +867,7 @@ export const DiscoverHome: React.FC<{
                             onPick={openMusicChartItem}
                             viewAllLabel={t('common.viewAll')}
                             onViewAll={() => navigate('/discovery/music')}
+                            density={gridSize}
                         />
                         {musicRows.genreRows.slice(0, 4).map((row) => (
                             <MusicChartRail
@@ -871,6 +879,7 @@ export const DiscoverHome: React.FC<{
                                 onPick={openMusicChartItem}
                                 viewAllLabel={t('common.viewAll')}
                                 onViewAll={() => navigate(`/discovery/music?genre=${row.id}&genreName=${encodeURIComponent(row.name)}`)}
+                                density={gridSize}
                             />
                         ))}
                     </>

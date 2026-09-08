@@ -68,8 +68,8 @@ export const posterGridSkeletonCount = (rows = 2, containerWidth = estimatePorta
 );
 
 export const carouselRowSkeletonCount = (containerWidth = estimatePortalContentWidth()): number => {
-    const cardWidth = containerWidth >= 640 ? 160 : 140;
-    return Math.max(4, Math.ceil(containerWidth / (cardWidth + 16)));
+    const cardWidth = containerWidth >= 1280 ? 200 : containerWidth >= 640 ? 176 : 140;
+    return Math.max(5, Math.ceil(containerWidth / (cardWidth + 16)));
 };
 
 export const upgraderPosterGridStyle = (size: UpgraderGridSize): CSSProperties => size === 'list' ? {} : ({

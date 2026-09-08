@@ -11,6 +11,7 @@ import { resolveMediaAvailabilityState } from './discoverAvailability';
 import { resolvePortalAssetUrl } from '../shared/basePath';
 import { useDiscoverI18n } from './i18n';
 import { DiscoverSectionHeader } from './DiscoverSectionHeader';
+import type { UpgraderGridSize } from '../shared/portalLayout';
 
 type ArtistHit = {
     mbid: string;
@@ -143,7 +144,8 @@ export const MusicGenreRail: React.FC<{
     navigate: (path: string) => void;
     viewAllLabel?: string;
     onViewAll?: () => void;
-}> = ({ title, genres, activeGenreId = null, navigate, viewAllLabel, onViewAll }) => {
+    density?: UpgraderGridSize;
+}> = ({ title, genres, activeGenreId = null, navigate, viewAllLabel, onViewAll, density }) => {
     if (!genres.length) return null;
     return (
         <section className="flex flex-col gap-2">
@@ -152,13 +154,13 @@ export const MusicGenreRail: React.FC<{
                 onViewAll={onViewAll || (() => navigate('/discovery/music'))}
                 viewAllLabel={viewAllLabel}
             />
-            <Carousel>
+            <Carousel rail="landscape" density={density}>
                 {genres.map((g) => (
                     <button
                         key={g.id}
                         type="button"
                         onClick={() => navigate(`/discovery/music?genre=${g.id}&genreName=${encodeURIComponent(g.name)}`)}
-                        className={`relative shrink-0 w-[150px] h-[84px] rounded-xl overflow-hidden border transition-colors group ${
+                        className={`relative w-full aspect-[16/9] rounded-xl overflow-hidden border transition-colors group snap-start ${
                             activeGenreId === g.id ? 'border-plex' : 'border-border/60 hover:border-plex/40'
                         }`}
                     >
@@ -184,12 +186,13 @@ export const MusicChartRail: React.FC<{
     onPick: (item: MusicChartItem, key: string) => void;
     viewAllLabel?: string;
     onViewAll?: () => void;
-}> = ({ title, items, kind, resolvingKey, onPick, viewAllLabel, onViewAll }) => {
+    density?: UpgraderGridSize;
+}> = ({ title, items, kind, resolvingKey, onPick, viewAllLabel, onViewAll, density }) => {
     if (!items.length) return null;
     return (
         <section className="flex flex-col gap-2">
             <DiscoverSectionHeader title={title} onViewAll={onViewAll} viewAllLabel={viewAllLabel} />
-            <Carousel>
+            <Carousel rail="poster" density={density}>
                 {items.map((item, idx) => {
                     const key = `${kind}-${item.deezerId ?? idx}`;
                     const busy = resolvingKey === key;
@@ -199,7 +202,7 @@ export const MusicChartRail: React.FC<{
                             type="button"
                             onClick={() => onPick(item, key)}
                             disabled={busy}
-                            className="group text-left rounded-xl border border-border/60 bg-white/[0.02] overflow-hidden hover:border-plex/40 transition-colors relative shrink-0 w-[140px] sm:w-[160px] disabled:opacity-60"
+                            className="group text-left rounded-xl border border-border/60 bg-white/[0.02] overflow-hidden hover:border-plex/40 transition-colors relative w-full snap-start disabled:opacity-60"
                         >
                             <div className="aspect-square bg-white/5 relative">
                                 <ArtistArt src={item.posterUrl || item.posterPath} title={item.title} />
@@ -383,7 +386,7 @@ export const DiscoverMusic: React.FC<{
     const searching = query.trim().length >= 2;
 
     return (
-        <div className="flex flex-col gap-5 px-1 pb-8">
+        <div className="discover-layout-container flex flex-col gap-5 px-1 pb-8">
             <div className="px-2">
                 <p className={discoveryTheme.personalEyebrow}>{t('music.eyebrow')}</p>
                 <h2 className="text-lg sm:text-xl font-black text-text mt-1">{t('music.title')}</h2>

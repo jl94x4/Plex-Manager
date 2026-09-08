@@ -15,7 +15,7 @@ export const CompanyCard: React.FC<CompanyCardProps> = ({ name, logoPath, onClic
         <button
             type="button"
             onClick={onClick}
-            className="company-card group relative w-[170px] sm:w-[200px] h-[100px] sm:h-[112px] flex-shrink-0 snap-start rounded-xl border border-border bg-card/80 overflow-hidden transition-all duration-300 hover:scale-[1.03] hover:border-plex/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-plex"
+            className="company-card group relative w-[170px] sm:w-[200px] aspect-[17/10] flex-shrink-0 snap-start rounded-xl border border-border bg-card/80 overflow-hidden transition-all duration-300 hover:scale-[1.03] hover:border-plex/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-plex"
             aria-label={name}
         >
             <div className="absolute inset-0 bg-gradient-to-br from-white/[0.04] to-transparent pointer-events-none" />
@@ -57,7 +57,7 @@ export const GenreCard: React.FC<GenreCardProps> = ({ name, gradient, image, onC
         <button
             type="button"
             onClick={onClick}
-            className={`relative w-[180px] sm:w-[216px] h-[106px] sm:h-[120px] flex-shrink-0 snap-start rounded-xl overflow-hidden px-4 flex items-center justify-center cursor-pointer hover:scale-[1.03] transition-transform border border-border focus:outline-none focus-visible:ring-2 focus-visible:ring-plex ${
+            className={`relative w-[180px] sm:w-[216px] aspect-[16/9] flex-shrink-0 snap-start rounded-xl overflow-hidden px-4 flex items-center justify-center cursor-pointer hover:scale-[1.03] transition-transform border border-border focus:outline-none focus-visible:ring-2 focus-visible:ring-plex ${
                 showImage ? 'bg-card' : `bg-gradient-to-br ${gradient || 'from-card to-background'}`
             }`}
         >
