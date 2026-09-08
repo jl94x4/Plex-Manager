@@ -10362,44 +10362,44 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
                 {pollError && !error && <div className="toast error show">{pollError}</div>}
 
                 {isAdmin && !isJellyfinPortal && (
-                    <div className="mb-6 w-full min-w-0">
-                        <form onSubmit={handleSearchSubmit} className="flex min-w-0 gap-2">
+                    <div className="mb-6 w-full max-w-full min-w-0">
+                        <form onSubmit={handleSearchSubmit} className="flex w-full max-w-full min-w-0 gap-2">
                             <div className="relative min-w-0 flex-1">
                                 <input 
                                     type="text" 
                                     value={discoverSearchQuery}
                                     onChange={(e) => setDiscoverSearchQuery(e.target.value)}
                                     placeholder="Search library to check watch history..." 
-                                    className="w-full min-w-0 appearance-none bg-card border border-border rounded-xl px-4 py-3 text-[16px] leading-5 text-text focus:border-plex focus:ring-1 focus:ring-plex outline-none transition-all shadow-lg pr-12"
+                                    className="w-full min-w-0 appearance-none bg-card border border-border rounded-xl px-3 sm:px-4 py-3 text-[16px] leading-5 text-text focus:border-plex focus:ring-1 focus:ring-plex outline-none transition-all shadow-lg pr-10 sm:pr-12"
                                 />
                                 {discoverSearchQuery && (
                                     <button 
                                         type="button" 
                                         onClick={() => { setDiscoverSearchQuery(''); setDiscoverSearchResults(null); }}
-                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-text transition-colors p-1"
+                                        className="absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 text-muted hover:text-text transition-colors p-1"
                                     >
                                         <X size={20} />
                                     </button>
                                 )}
                             </div>
-                            <button type="submit" className="shrink-0 bg-plex hover:bg-orange-500 text-white px-4 sm:px-6 py-3 rounded-xl font-bold transition-colors disabled:opacity-50 shadow-lg" disabled={isDiscoverSearching || !discoverSearchQuery.trim()}>
+                            <button type="submit" className="shrink-0 bg-plex hover:bg-orange-500 text-white px-3 sm:px-6 py-3 rounded-xl font-bold transition-colors disabled:opacity-50 shadow-lg" disabled={isDiscoverSearching || !discoverSearchQuery.trim()}>
                                 {isDiscoverSearching ? 'Searching...' : 'Search'}
                             </button>
                         </form>
 
                         {searchActive && (
-                            <div className="mt-3 flex flex-col gap-3 sm:gap-4 rounded-xl border border-border bg-background p-3 sm:p-4">
+                            <div className="mt-3 flex w-full max-w-full min-w-0 flex-col gap-3 sm:gap-4">
                                 {isDiscoverSearching ? (
                                     <p className="text-muted text-sm text-center py-4">Searching...</p>
                                 ) : discoverSearchResults?.length === 0 ? (
                                     <p className="text-muted text-sm text-center py-4">No results found.</p>
                                 ) : (
                                     discoverSearchResults?.map((item: any) => (
-                                        <div key={item.ratingKey} className="bg-card border border-white/5 rounded-lg p-3 sm:p-4 flex flex-row items-start gap-3 sm:gap-4 min-w-0">
-                                            <div className="w-16 sm:w-20 h-24 sm:h-[7.5rem] shrink-0 bg-white/5 rounded overflow-hidden">
+                                        <div key={item.ratingKey} className="w-full max-w-full min-w-0 overflow-hidden bg-card border border-border rounded-xl p-3 sm:p-4 grid grid-cols-[4rem_minmax(0,1fr)] sm:grid-cols-[5rem_minmax(0,1fr)] gap-x-3 sm:gap-x-4 gap-y-3">
+                                            <div className="w-16 sm:w-20 h-24 sm:h-[7.5rem] sm:row-span-2 bg-white/5 rounded overflow-hidden">
                                                 <img src={portalUrl(`/api/plex/image?path=${encodeURIComponent(item.thumb)}&width=150&height=225`)} alt={item.title} className="w-full h-full object-cover" />
                                             </div>
-                                            <div className="flex-1 min-w-0">
+                                            <div className="min-w-0">
                                                 <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                                                     <div className="min-w-0">
                                                         <h3 className="font-bold text-base sm:text-lg text-text break-words [overflow-wrap:anywhere]">{item.title}</h3>
@@ -10410,17 +10410,18 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
                                                         View in Plex
                                                     </a>
                                                 </div>
-                                                
+                                            </div>
+                                            <div className="col-span-2 sm:col-span-1 min-w-0">
                                                 {item.history && item.history.length > 0 ? (
-                                                    <div className="mt-3 pt-3 border-t border-white/10">
+                                                    <div className="pt-3 border-t border-white/10 sm:pt-0 sm:border-t-0">
                                                         <div className="flex items-center gap-2 mb-3">
                                                             <Clock size={14} className="text-status-active shrink-0" />
                                                             <span className="text-xs font-bold uppercase tracking-widest text-status-active">Watch History <span className="bg-status-active/20 px-1.5 py-0.5 rounded-full text-[10px] ml-1">{item.history.length}</span></span>
                                                         </div>
                                                         <div className="bg-black/40 border border-white/5 rounded-xl overflow-hidden shadow-inner">
-                                                            <div className="max-h-48 overflow-y-auto custom-scrollbar">
+                                                            <div className="max-h-48 overflow-x-hidden overflow-y-auto custom-scrollbar">
                                                                 {item.history.map((h: any, i: number) => (
-                                                                    <div key={i} className="flex min-w-0 flex-col gap-2 text-xs p-3 hover:bg-white/5 transition-colors border-b border-white/5 last:border-0 sm:flex-row sm:items-center sm:gap-4">
+                                                                    <div key={i} className="flex min-w-0 flex-col gap-2 text-xs p-2.5 sm:p-3 hover:bg-white/5 transition-colors border-b border-white/5 last:border-0 sm:flex-row sm:items-center sm:gap-4">
                                                                         <button 
                                                                             type="button"
                                                                             onClick={() => {
@@ -10442,14 +10443,14 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
                                                                             )}
                                                                             <span className="font-bold text-text truncate text-sm group-hover:text-plex transition-colors">{h.user}</span>
                                                                         </button>
-                                                                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-muted sm:justify-end text-[11px] sm:text-xs">
-                                                                            <span className="flex items-center gap-1.5"><Calendar size={12} className="opacity-50 shrink-0"/> {formatPortalDateTimeCompact(h.date)}</span>
+                                                                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 text-muted sm:justify-end text-[11px] sm:text-xs">
+                                                                            <span className="inline-flex min-w-0 max-w-full items-center gap-1.5"><Calendar size={12} className="opacity-50 shrink-0"/> <span className="min-w-0 break-words">{formatPortalDateTimeCompact(h.date)}</span></span>
                                                                             <span className="opacity-30">|</span>
-                                                                            <span className="flex items-center gap-1.5"><Clock size={12} className="opacity-50 shrink-0"/> {Math.round(h.duration / 60)}m</span>
+                                                                            <span className="inline-flex items-center gap-1.5 shrink-0"><Clock size={12} className="opacity-50 shrink-0"/> {Math.round(h.duration / 60)}m</span>
                                                                             {h.player && (
                                                                                 <>
                                                                                     <span className="opacity-30">|</span>
-                                                                                    <span className="flex min-w-0 items-center gap-1.5"><Monitor size={12} className="opacity-50 shrink-0"/> <span className="truncate">{h.player}</span></span>
+                                                                                    <span className="inline-flex min-w-0 max-w-full items-center gap-1.5"><Monitor size={12} className="opacity-50 shrink-0"/> <span className="truncate">{h.player}</span></span>
                                                                                 </>
                                                                             )}
                                                                         </div>
@@ -10459,7 +10460,7 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
                                                         </div>
                                                     </div>
                                                 ) : (
-                                                    <div className="mt-3 flex items-center gap-2 text-muted bg-white/5 border border-white/10 rounded-lg p-3">
+                                                    <div className="flex items-center gap-2 text-muted bg-white/5 border border-white/10 rounded-lg p-3">
                                                         <Clock size={14} className="opacity-50 shrink-0" />
                                                         <span className="text-xs font-bold uppercase tracking-widest">No Watch History</span>
                                                     </div>
