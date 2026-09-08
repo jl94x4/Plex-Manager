@@ -10363,23 +10363,26 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
     const snapshotCollapsedHint = [snapshotStreamHint, showOpsSnapshot ? snapshotHealthHint : '']
         .filter(Boolean)
         .join(' · ');
+    const searchActive = Boolean(
+        discoverSearchQuery.trim() && (discoverSearchResults || isDiscoverSearching),
+    );
 
     return (
-        <div className="w-full flex flex-col min-h-screen">
-            <main className="discover-layout-container w-full pb-8 mt-4 md:mt-0">
+        <div className="w-full flex flex-col min-h-screen overflow-x-hidden">
+            <main className="discover-layout-container w-full min-w-0 overflow-x-hidden pb-8 mt-4 md:mt-0">
                 {error && <div className="toast error show">{error}</div>}
                 {pollError && !error && <div className="toast error show">{pollError}</div>}
 
                 {isAdmin && !isJellyfinPortal && (
-                    <div className="mb-6 w-full relative z-40" ref={searchDropdownRef}>
-                        <form onSubmit={handleSearchSubmit} className="flex gap-2">
-                            <div className="relative flex-1">
+                    <div className="mb-6 w-full min-w-0" ref={searchDropdownRef}>
+                        <form onSubmit={handleSearchSubmit} className="flex min-w-0 gap-2">
+                            <div className="relative min-w-0 flex-1">
                                 <input 
                                     type="text" 
                                     value={discoverSearchQuery}
                                     onChange={(e) => setDiscoverSearchQuery(e.target.value)}
                                     placeholder="Search library to check watch history..." 
-                                    className="w-full appearance-none bg-card border border-border rounded-xl px-4 py-3 text-[16px] leading-5 text-white focus:border-plex focus:ring-1 focus:ring-plex outline-none transition-all shadow-lg pr-12"
+                                    className="w-full min-w-0 appearance-none bg-card border border-border rounded-xl px-4 py-3 text-[16px] leading-5 text-white focus:border-plex focus:ring-1 focus:ring-plex outline-none transition-all shadow-lg pr-12"
                                 />
                                 {discoverSearchQuery && (
                                     <button 
@@ -10391,30 +10394,30 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
                                     </button>
                                 )}
                             </div>
-                            <button type="submit" className="bg-plex hover:bg-orange-500 text-white px-6 py-3 rounded-xl font-bold transition-colors disabled:opacity-50 shadow-lg" disabled={isDiscoverSearching || !discoverSearchQuery.trim()}>
+                            <button type="submit" className="shrink-0 bg-plex hover:bg-orange-500 text-white px-4 sm:px-6 py-3 rounded-xl font-bold transition-colors disabled:opacity-50 shadow-lg" disabled={isDiscoverSearching || !discoverSearchQuery.trim()}>
                                 {isDiscoverSearching ? 'Searching...' : 'Search'}
                             </button>
                         </form>
 
-                        {(discoverSearchResults || isDiscoverSearching) && discoverSearchQuery.trim() && (
-                            <div className="absolute top-full left-0 right-0 mt-2 bg-card border border-border rounded-xl shadow-2xl flex flex-col gap-4 max-h-[500px] overflow-y-auto p-4 custom-scrollbar z-50">
+                        {searchActive && (
+                            <div className="mt-3 flex max-h-[min(70vh,40rem)] flex-col gap-4 overflow-x-hidden overflow-y-auto rounded-xl border border-border bg-background p-3 sm:p-4 custom-scrollbar">
                                 {isDiscoverSearching ? (
                                     <p className="text-muted text-sm text-center py-4">Searching...</p>
                                 ) : discoverSearchResults?.length === 0 ? (
                                     <p className="text-muted text-sm text-center py-4">No results found.</p>
                                 ) : (
                                     discoverSearchResults?.map((item: any) => (
-                                        <div key={item.ratingKey} className="bg-background border border-white/5 rounded-lg p-4 flex flex-col md:flex-row gap-4">
+                                        <div key={item.ratingKey} className="min-w-0 overflow-hidden bg-card border border-white/5 rounded-lg p-3 sm:p-4 flex flex-col sm:flex-row gap-3 sm:gap-4">
                                             <div className="w-16 h-24 flex-shrink-0 bg-white/5 rounded overflow-hidden">
                                                 <img src={portalUrl(`/api/plex/image?path=${encodeURIComponent(item.thumb)}&width=150&height=225`)} alt={item.title} className="w-full h-full object-cover" />
                                             </div>
-                                            <div className="flex-1 flex flex-col min-w-0">
-                                                <div className="flex justify-between items-start">
-                                                    <div>
-                                                        <h3 className="font-bold text-lg text-white truncate">{item.title}</h3>
-                                                        <p className="text-xs text-muted mb-2">{String(item.type).toUpperCase()} • {item.year}</p>
+                                            <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+                                                <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                                                    <div className="min-w-0">
+                                                        <h3 className="font-bold text-lg text-white break-words [overflow-wrap:anywhere]">{item.title}</h3>
+                                                        <p className="text-xs text-muted mb-0 sm:mb-2">{String(item.type).toUpperCase()} • {item.year}</p>
                                                     </div>
-                                                    <a href={item.plexUrl} target="_blank" rel="noreferrer" className="text-xs text-plex font-bold bg-plex/10 hover:bg-plex hover:text-white transition-colors border border-plex/20 rounded-md px-3 py-1.5 shrink-0 flex items-center gap-1.5 shadow-sm">
+                                                    <a href={item.plexUrl} target="_blank" rel="noreferrer" className="self-start text-xs text-plex font-bold bg-plex/10 hover:bg-plex hover:text-white transition-colors border border-plex/20 rounded-md px-3 py-1.5 shrink-0 inline-flex items-center gap-1.5 shadow-sm">
                                                         <Play size={12} />
                                                         View in Plex
                                                     </a>
@@ -10428,9 +10431,9 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
                                                                 <span className="text-xs font-bold uppercase tracking-widest text-status-active">Watch History <span className="bg-status-active/20 px-1.5 py-0.5 rounded-full text-[10px] ml-1">{item.history.length}</span></span>
                                                             </div>
                                                             <div className="bg-black/40 border border-white/5 rounded-xl overflow-hidden shadow-inner">
-                                                                <div className="max-h-48 overflow-y-auto custom-scrollbar">
+                                                                <div className="max-h-48 overflow-x-hidden overflow-y-auto custom-scrollbar">
                                                                     {item.history.map((h: any, i: number) => (
-                                                                        <div key={i} className="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 text-xs p-3 hover:bg-white/5 transition-colors border-b border-white/5 last:border-0">
+                                                                        <div key={i} className="flex min-w-0 flex-col gap-2 text-xs p-3 hover:bg-white/5 transition-colors border-b border-white/5 last:border-0 sm:flex-row sm:items-center sm:gap-4">
                                                                             <button 
                                                                                 type="button"
                                                                                 onClick={() => {
@@ -10438,7 +10441,7 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
                                                                                         onViewAnalytics(`#user=${encodeURIComponent(h.user)}`);
                                                                                     }
                                                                                 }}
-                                                                                className="flex items-center gap-3 md:w-1/3 min-w-[120px] text-left hover:opacity-80 transition-opacity focus:outline-none cursor-pointer group"
+                                                                                className="flex min-w-0 items-center gap-3 text-left hover:opacity-80 transition-opacity focus:outline-none cursor-pointer group sm:w-1/3"
                                                                                 title="View user analytics"
                                                                             >
                                                                                 {h.userThumb ? (
@@ -10452,14 +10455,14 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
                                                                                 )}
                                                                                 <span className="font-bold text-white truncate text-sm group-hover:text-plex transition-colors">{h.user}</span>
                                                                             </button>
-                                                                            <div className="flex-1 flex flex-wrap md:flex-nowrap items-center gap-3 text-muted md:justify-end text-[11px] md:text-xs">
-                                                                                <span className="flex items-center gap-1.5 shrink-0 md:min-w-[125px] md:justify-end"><Calendar size={12} className="opacity-50"/> {formatPortalDateTimeCompact(h.date)}</span>
+                                                                            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-muted sm:justify-end text-[11px] sm:text-xs">
+                                                                                <span className="flex items-center gap-1.5"><Calendar size={12} className="opacity-50 shrink-0"/> {formatPortalDateTimeCompact(h.date)}</span>
                                                                                 <span className="opacity-30">|</span>
-                                                                                <span className="flex items-center gap-1.5 shrink-0 min-w-[50px]"><Clock size={12} className="opacity-50"/> {Math.round(h.duration / 60)}m</span>
+                                                                                <span className="flex items-center gap-1.5"><Clock size={12} className="opacity-50 shrink-0"/> {Math.round(h.duration / 60)}m</span>
                                                                                 {h.player && (
                                                                                     <>
                                                                                         <span className="opacity-30">|</span>
-                                                                                        <span className="flex items-center gap-1.5 truncate md:w-[150px]"><Monitor size={12} className="opacity-50 shrink-0"/> <span className="truncate">{h.player}</span></span>
+                                                                                        <span className="flex min-w-0 items-center gap-1.5"><Monitor size={12} className="opacity-50 shrink-0"/> <span className="truncate">{h.player}</span></span>
                                                                                     </>
                                                                                 )}
                                                                             </div>
@@ -10484,6 +10487,8 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
                     </div>
                 )}
 
+                {!searchActive && (
+                <>
                 {(showStreamCards || showOpsSnapshot) && (
                     <section className="mb-8 w-full">
                         <div className="flex items-center justify-between gap-3 mb-3">
@@ -10816,6 +10821,8 @@ export const LibraryDashboard: React.FC<{ onBack: () => void, isAdmin?: boolean,
                         <TrendingDiscoverSection useScrollRevealAnimations={publicConfig?.useScrollRevealAnimations} title="📼 Blast from the Past" items={trendingStats.retroHits} limit={recentLimit} showQualityBadges={showQualityBadges} gridSize={gridSize} />
                         <TrendingDiscoverSection useScrollRevealAnimations={publicConfig?.useScrollRevealAnimations} title="💎 Cult Classics" items={trendingStats.cultClassics} limit={recentLimit} showQualityBadges={showQualityBadges} gridSize={gridSize} />
                     </div>
+                )}
+                </>
                 )}
             </main>
 
