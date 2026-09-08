@@ -1,28 +1,14 @@
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useDiscoverI18n } from './i18n';
-import { DEFAULT_UPGRADER_GRID_SIZE, type UpgraderGridSize } from '../shared/portalLayout';
-
-export type CarouselRail = 'poster' | 'landscape' | 'company';
 
 interface CarouselProps {
     children: React.ReactNode;
-    /** Fluid card widths that fill the row with a peek of the next item. */
-    rail?: CarouselRail;
-    density?: UpgraderGridSize;
 }
 
 const SCROLL_EDGE_PX = 8;
 
-const itemElements = (node: HTMLDivElement) => (
-    Array.from(node.children).filter((child) => !child.classList.contains('discover-rail-end-spacer')) as HTMLElement[]
-);
-
-export const Carousel: React.FC<CarouselProps> = ({
-    children,
-    rail,
-    density = DEFAULT_UPGRADER_GRID_SIZE,
-}) => {
+export const Carousel: React.FC<CarouselProps> = ({ children }) => {
     const { t } = useDiscoverI18n();
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const [atStart, setAtStart] = useState(true);
@@ -33,15 +19,7 @@ export const Carousel: React.FC<CarouselProps> = ({
         const node = scrollContainerRef.current;
         if (!node) return;
         const { scrollLeft, scrollWidth, clientWidth } = node;
-        const items = itemElements(node);
-        const first = items[0];
-        const itemWidth = first?.getBoundingClientRect().width || 0;
-        const styles = window.getComputedStyle(node);
-        const gap = Number.parseFloat(styles.columnGap || styles.gap || '16') || 16;
-        const contentWidth = itemWidth > 0
-            ? (items.length * itemWidth) + (Math.max(0, items.length - 1) * gap)
-            : scrollWidth;
-        const overflow = Math.max(scrollWidth, contentWidth) > clientWidth + SCROLL_EDGE_PX;
+        const overflow = scrollWidth > clientWidth + SCROLL_EDGE_PX;
         setCanScroll(overflow);
         if (!overflow) {
             setAtStart(true);
@@ -86,7 +64,7 @@ export const Carousel: React.FC<CarouselProps> = ({
         if (!node || !canScroll) return;
         const { clientWidth, scrollWidth } = node;
         const maxScroll = Math.max(0, scrollWidth - clientWidth);
-        const page = Math.max(clientWidth * 0.9, 160);
+        const page = Math.max(clientWidth - 100, 160);
 
         if (direction === 'right') {
             if (atEnd) {
@@ -103,13 +81,8 @@ export const Carousel: React.FC<CarouselProps> = ({
         node.scrollBy({ left: -page, behavior: 'smooth' });
     };
 
-    const railClass = rail
-        ? `discover-rail discover-rail--${rail} discover-rail--${density || DEFAULT_UPGRADER_GRID_SIZE}${atEnd || !canScroll ? ' is-at-end' : ''}`
-        : '';
-
     return (
         <div className="relative w-full min-w-0">
-            {/* Seerr-style: chevrons sit on the section title row, top-right — no side gradients */}
             <div className="absolute right-1 -top-9 z-10 flex items-center text-muted">
                 <button
                     type="button"
@@ -134,9 +107,7 @@ export const Carousel: React.FC<CarouselProps> = ({
             <div
                 ref={scrollContainerRef}
                 onScroll={handleScroll}
-                className={rail
-                    ? `overflow-x-auto snap-x snap-proximity scrollbar-hide py-2 px-2 w-full ${railClass}`.trim()
-                    : 'flex gap-4 overflow-x-auto snap-x snap-proximity scrollbar-hide py-2 px-2 w-full'}
+                className="flex gap-4 overflow-x-auto snap-x snap-proximity scrollbar-hide py-2 px-2 w-full"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
                 {children}

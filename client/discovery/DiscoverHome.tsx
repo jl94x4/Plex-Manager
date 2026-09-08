@@ -29,7 +29,7 @@ import { discoveryTheme } from './discoveryThemeClasses';
 import { useLibraryQueueToggle } from './useLibraryQueueToggle';
 import { DiscoverGridSizeSelect } from './DiscoverGridSizeSelect';
 import { useDiscoverGridSize } from './useDiscoverGridSize';
-import type { UpgraderGridSize } from '../shared/portalLayout';
+import { discoverRowCardWidthClass, type UpgraderGridSize } from '../shared/portalLayout';
 import { useDiscoverI18n } from './i18n';
 import {
     MusicChartItem,
@@ -139,14 +139,14 @@ const DiscoverHomeRow: React.FC<{
             {!hideTitle && (
                 <DiscoverSectionHeader title={title} onViewAll={onViewAll} viewAllLabel={viewAllLabel} />
             )}
-            <Carousel rail="poster" density={density}>
+            <Carousel>
                 {visibleItems.map((formatted, idx) => {
                     if (!formatted) return null;
                     const itemKey = getDiscoverItemKey(formatted) || `${title || 'row'}-${formatted.id || idx}`;
                     return (
                         <div
                             key={itemKey}
-                            className={`relative group snap-start${animateEnter ? ' discover-poster-enter' : ''}`}
+                            className={`${discoverRowCardWidthClass(density)} flex-shrink-0 relative group snap-start${animateEnter ? ' discover-poster-enter' : ''}`}
                             style={animateEnter ? { animationDelay: `${Math.min(idx, 12) * 30}ms` } : undefined}
                         >
                             <DiscoverPosterCard
@@ -174,7 +174,7 @@ const DiscoverGenreSliderRow: React.FC<{
     viewAllLabel: string;
     onViewAll?: () => void;
     density: UpgraderGridSize;
-}> = ({ title, apiGenres, fallbackGenres, basePath, navigate, viewAllLabel, onViewAll, density }) => {
+}> = ({ title, apiGenres, fallbackGenres, basePath, navigate, viewAllLabel, onViewAll }) => {
     const items = (apiGenres?.length ?? 0)
         ? apiGenres
         : fallbackGenres.map((g) => ({
@@ -186,7 +186,7 @@ const DiscoverGenreSliderRow: React.FC<{
     return (
         <div className="flex flex-col gap-2 relative">
             <DiscoverSectionHeader title={title} onViewAll={onViewAll} viewAllLabel={viewAllLabel} />
-            <Carousel rail="landscape" density={density}>
+            <Carousel>
                 {items.map((g) => {
                     const fallback = fallbackGenres.find((fg) => fg.id === g.id);
                     return (
@@ -743,7 +743,7 @@ export const DiscoverHome: React.FC<{
                         onViewAll={() => navigate(discoverRowPath('studios'))}
                         viewAllLabel={t('common.viewAll')}
                     />
-                    <Carousel rail="company" density={gridSize}>
+                    <Carousel>
                         {DISCOVER_STUDIOS.map((studio) => (
                             <CompanyCard
                                 key={studio.id}
@@ -808,7 +808,7 @@ export const DiscoverHome: React.FC<{
                         onViewAll={() => navigate(discoverRowPath('networks'))}
                         viewAllLabel={t('common.viewAll')}
                     />
-                    <Carousel rail="company" density={gridSize}>
+                    <Carousel>
                         {DISCOVER_NETWORKS.map((network) => (
                             <CompanyCard
                                 key={`${network.id}-${network.name}`}

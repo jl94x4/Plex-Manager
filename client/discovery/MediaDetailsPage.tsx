@@ -1138,11 +1138,11 @@ export const MediaDetailsPage: React.FC<{
                 {visibleRecommendations.length > 0 && (
                     <section className="border-t border-border pt-8 pb-4">
                         <SectionHeading>{t('media.recommendations')}</SectionHeading>
-                        <Carousel rail="poster">
+                        <Carousel>
                             {visibleRecommendations.map((item, idx) => {
                                 const formatted = formatItem(item);
                                 return (
-                                    <div key={`${formatted.id}-${idx}`} className="snap-start">
+                                    <div key={`${formatted.id}-${idx}`} className="w-[120px] sm:w-[140px] flex-shrink-0 snap-start">
                                         <DiscoverPosterCard
                                             item={formatted}
                                             overlay={formatted.overlay}

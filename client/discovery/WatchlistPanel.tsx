@@ -13,7 +13,7 @@ import {
 import { useDiscoveryMe } from './useDiscoveryMe';
 import { formatQuotaHint } from './requestSeasonUtils';
 import { translateDiscoverStatus, useDiscoverI18n } from './i18n';
-import type { UpgraderGridSize } from '../shared/portalLayout';
+import { DEFAULT_UPGRADER_GRID_SIZE, discoverRowCardWidthClass, type UpgraderGridSize } from '../shared/portalLayout';
 
 type Props = {
     items: any[];
@@ -121,7 +121,7 @@ export const WatchlistPanel: React.FC<Props> = ({
 
         const cardWidth = variant === 'page'
             ? 'w-full'
-            : `${rowCardClassName || ''} min-w-0 snap-start`;
+            : `${rowCardClassName || discoverRowCardWidthClass(density || DEFAULT_UPGRADER_GRID_SIZE)} flex-shrink-0 snap-start`;
         const footer = (
             <div className="flex flex-col gap-1.5 mt-1.5 px-0.5">
                 <div className={`text-xs font-medium line-clamp-2 leading-tight text-text ${variant === 'page' ? 'text-left' : 'text-center'}`}>
@@ -221,7 +221,7 @@ export const WatchlistPanel: React.FC<Props> = ({
             <div className={`flex flex-col gap-2 relative ${variant === 'page' ? 'pb-6' : ''}`}>
                 {header}
                 {variant === 'row' ? (
-                    <Carousel rail="poster" density={density}>{items.map(renderCard)}</Carousel>
+                    <Carousel>{items.map(renderCard)}</Carousel>
                 ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 px-2">
                         {items.map(renderCard)}
