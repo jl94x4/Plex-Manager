@@ -4449,7 +4449,7 @@ export const SettingsDashboard: React.FC = () => {
 
                                                 <div>
                                                     <SettingFieldLabel
-                                                        hint={<SettingHint>Controls the installed app icon, browser tab favicon, push notification badge, and newsletter header. Server logo uses your Plex/Jellyfin branding or uploaded custom logo.</SettingHint>}
+                                                        hint={<SettingHint>Controls the installed app icon, browser tab favicon, Android notification status-bar silhouette, and newsletter header. Server logo uses your Plex/Jellyfin branding or uploaded custom logo. Android can only show a monochrome outline of that logo in the status bar; the expanded notification still uses the full-color icon.</SettingHint>}
                                                     >
                                                         PWA Home Screen Icon
                                                     </SettingFieldLabel>

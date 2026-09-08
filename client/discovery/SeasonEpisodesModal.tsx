@@ -130,7 +130,7 @@ export const SeasonEpisodesModal: React.FC<Props> = ({
 
     return (
         <ModalPortal open={open}>
-            <div className="fixed inset-0 z-[300] flex items-center justify-center p-0 sm:p-6 md:p-12">
+            <div className="fixed inset-x-0 top-0 z-[340] flex min-h-0 items-stretch justify-center p-0 sm:items-center sm:p-6 md:p-12 bottom-[calc(4rem+env(safe-area-inset-bottom,0px))] sm:inset-0">
                 <button
                     type="button"
                     aria-label={t('episodes.closeAria')}
@@ -141,13 +141,13 @@ export const SeasonEpisodesModal: React.FC<Props> = ({
                     role="dialog"
                     aria-modal="true"
                     aria-labelledby="season-episodes-modal-title"
-                    className="relative w-full max-w-5xl h-full sm:h-[90vh] bg-card border-none sm:border border-border/80 shadow-2xl flex flex-col overflow-hidden rounded-none sm:rounded-2xl mx-auto"
+                    className="relative w-full max-w-5xl h-full min-h-0 sm:h-[90vh] bg-card border-none sm:border border-border/80 shadow-2xl flex flex-col overflow-hidden rounded-none sm:rounded-2xl mx-auto"
                 >
-                    <div className="px-4 sm:px-5 py-4 border-b border-border/60 space-y-4 shrink-0">
+                    <div className="px-4 sm:px-5 pt-[calc(0.75rem+env(safe-area-inset-top,0px))] pb-4 sm:pt-4 border-b border-border/60 space-y-4 shrink-0">
                         <button
                             type="button"
                             onClick={onClose}
-                            className="inline-flex items-center gap-1.5 px-2 py-1 -ml-2 rounded-lg hover:bg-white/10 text-muted hover:text-text text-sm font-bold transition-colors"
+                            className="inline-flex items-center gap-1.5 min-h-11 px-2 py-2 -ml-2 rounded-lg hover:bg-white/10 text-muted hover:text-text text-sm font-bold transition-colors"
                         >
                             <ChevronLeft className="w-4 h-4" />
                             {t('episodes.backToShow')}

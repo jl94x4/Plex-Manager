@@ -17,13 +17,14 @@ import net from 'net';
 import dns from 'dns/promises';
 import v8 from 'v8';
 import os from 'os';
-import { makeCircularPwaIconPng, makeMaskablePwaIconPng } from './lib/circular-icon.js';
+import { makeCircularPwaIconPng, makeMaskablePwaIconPng, makeNotificationBadgePng } from './lib/circular-icon.js';
 import {
     getPortalBrandingIconCacheKey,
     fetchPortalBrandingRasterBuffer,
     syncPortalPwaStaticIcons,
     fetchPortalEmailLogoBuffer,
     resolvePortalPushIconUrl,
+    resolvePortalPushBadgeUrl,
     resolvePortalPwaManifestIconHref,
     SERVER_PWA_ICON_BADGE_SCALE,
     SERVER_PWA_MASKABLE_BADGE_SCALE,
@@ -2289,6 +2290,11 @@ setInAppNotificationCreatedHook(async (item) => {
             profile,
             resolvePublicBaseUrlFromConfig(config) || config.publicDomain || '',
         );
+        const badgeUrl = resolvePortalPushBadgeUrl(
+            config,
+            profile,
+            resolvePublicBaseUrlFromConfig(config) || config.publicDomain || '',
+        );
         await sendWebPushToUser(item.userId, {
             title: item.title,
             body: item.body,
@@ -2296,6 +2302,7 @@ setInAppNotificationCreatedHook(async (item) => {
             type: item.type,
             tag: String(item.type || item.id || 'portal'),
             ...(iconUrl ? { icon: iconUrl } : {}),
+            ...(badgeUrl ? { badge: badgeUrl } : {}),
         }, { config, user, log });
     } catch (error) {
         log(`[WebPush] in-app fan-out failed: ${error?.message || error}`);
@@ -15677,6 +15684,43 @@ app.get('/api/public/pwa-icon', publicReadRateLimit, async (req, res) => {
     }
 });
 
+app.get('/api/public/pwa-badge', publicReadRateLimit, async (req, res) => {
+    const size = Number(req.query.size) >= 128 ? 128 : 96;
+    const sendBadge = async (buffer) => {
+        const png = makeNotificationBadgePng(buffer, size);
+        res.setHeader('Content-Type', 'image/png');
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        return res.send(png);
+    };
+    try {
+        const config = await loadFile(CONFIG_PATH, {});
+        const brandingDeps = getPortalBrandingDeps();
+        const profile = await getAdminProfile(config);
+        let buffer = await fetchPortalEmailLogoBuffer(config, profile, brandingDeps);
+        if (!buffer) {
+            buffer = await fetchPortalBrandingRasterBuffer(config, profile, brandingDeps, {
+                brandingDir: BRANDING_DIR,
+                timeoutMs: 8000,
+            });
+        }
+        if (!buffer) {
+            buffer = await fs.readFile(path.join(process.cwd(), 'static', 'logo.png')).catch(() => null);
+        }
+        if (!buffer || !detectRasterImageType(buffer)) {
+            return res.status(404).send('');
+        }
+        return sendBadge(buffer);
+    } catch (e) {
+        log(`PWA notification badge failed: ${e.message}`);
+        try {
+            const fallback = await fs.readFile(path.join(process.cwd(), 'static', 'logo.png'));
+            return sendBadge(fallback);
+        } catch {
+            return res.status(500).send('');
+        }
+    }
+});
+
 app.get('/api/public/branding-icon', publicReadRateLimit, async (req, res) => {
     try {
         const config = await loadFile(CONFIG_PATH, {});
@@ -20626,7 +20670,7 @@ if (BASE_PATH) {
 
 // Chromium Android uses this for WebAPK installability. Firefox deliberately does not
 // register it (a bad SW makes Firefox Install silently no-op).
-const serviceWorkerScript = `/* portal-sw v10 */
+const serviceWorkerScript = `/* portal-sw v11 */
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
@@ -20641,6 +20685,8 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', () => {});
 
 const PORTAL_START = ${JSON.stringify(BASE_PATH ? `${BASE_PATH}/` : '/portal')};
+const PWA_ICON_PATH = ${JSON.stringify(withBasePath('/api/public/pwa-icon?size=192'))};
+const PWA_BADGE_PATH = ${JSON.stringify(withBasePath('/api/public/pwa-badge?size=96'))};
 
 const toAbsoluteHref = (href) => {
   try {
@@ -20657,15 +20703,18 @@ self.addEventListener('push', (event) => {
   } catch (_) {}
   const href = toAbsoluteHref(data.href);
   let icon = '';
-  try { icon = new URL('static/pwa-icon-192.png', self.registration.scope).href; } catch (_) {}
+  let badge = '';
+  try { icon = new URL(PWA_ICON_PATH, self.registration.scope).href; } catch (_) {}
+  try { badge = new URL(PWA_BADGE_PATH, self.registration.scope).href; } catch (_) {}
   const iconUrl = typeof data.icon === 'string' && /^https?:\\/\\//i.test(data.icon) ? data.icon : '';
+  const badgeUrl = typeof data.badge === 'string' && /^https?:\\/\\//i.test(data.badge) ? data.badge : '';
   const image = typeof data.image === 'string' && /^https?:\\/\\//i.test(data.image) ? data.image : '';
   const options = {
     body: String(data.body || ''),
     tag: String(data.tag || 'portal'),
     data: { href },
     icon: iconUrl || image || icon || undefined,
-    badge: iconUrl || icon || undefined,
+    badge: badgeUrl || badge || undefined,
     image: image || undefined,
     renotify: true,
     vibrate: [120, 80, 120],
