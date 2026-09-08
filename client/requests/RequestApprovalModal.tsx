@@ -15,6 +15,7 @@ import type {
 import { useDiscoverI18n } from '../discovery/i18n';
 import { goToProfile, profileKeyForRequester } from '../profile/helpers';
 import { formatRootFolderLabel } from '../../lib/portal-request/rootFolderLabel.js';
+import { resolveAnimeAwareRootFolder } from '../../lib/portal-request/animeMedia.js';
 
 type Props = {
     requestId: number;
@@ -204,10 +205,12 @@ export const RequestApprovalModal: React.FC<Props> = ({
             setProfileId(defaultProfile ?? serviceOptions.profiles[0]?.id ?? null);
         }
         if (!rootFolder && serviceOptions.rootFolders.length) {
-            const defaultFolder = detail.isAnime && serviceOptions.server.activeAnimeDirectory
-                ? serviceOptions.server.activeAnimeDirectory
-                : serviceOptions.server.activeDirectory;
-            setRootFolder(defaultFolder || serviceOptions.rootFolders[0]?.path || '');
+            setRootFolder(resolveAnimeAwareRootFolder({
+                isAnime: !!detail.isAnime,
+                activeAnimeDirectory: serviceOptions.server.activeAnimeDirectory,
+                activeDirectory: serviceOptions.server.activeDirectory,
+                rootFolders: serviceOptions.rootFolders,
+            }));
         }
     }, [serviceOptions, detail, profileId, rootFolder]);
 

@@ -16,6 +16,7 @@ import { resolveTmdbImageUrl } from './tmdbImageUrl';
 import { translateDiscoverStatus, useDiscoverI18n } from './i18n';
 import { mediaStatusChipClass } from './DiscoverStatusOverlay';
 import { formatRootFolderLabel } from '../../lib/portal-request/rootFolderLabel.js';
+import { resolveAnimeAwareRootFolder } from '../../lib/portal-request/animeMedia.js';
 
 type Props = {
     open: boolean;
@@ -147,10 +148,12 @@ export const RequestModal: React.FC<Props> = ({
 
         let nextRootFolder = defaults?.rootFolder ? String(defaults.rootFolder) : '';
         if (!nextRootFolder) {
-            const activeFolder = isAnime && server.activeAnimeDirectory
-                ? server.activeAnimeDirectory
-                : (server.activeDirectory || '');
-            nextRootFolder = activeFolder || folders[0]?.path || '';
+            nextRootFolder = resolveAnimeAwareRootFolder({
+                isAnime,
+                activeAnimeDirectory: server.activeAnimeDirectory,
+                activeDirectory: server.activeDirectory,
+                rootFolders: folders,
+            });
         }
 
         const nextTags = Array.isArray(defaults?.tags)
@@ -665,6 +668,7 @@ export const RequestModal: React.FC<Props> = ({
         } else if (fallbackServer?.id != null) {
             body.serverId = fallbackServer.id;
         }
+        if (options.isAnime) body.isAnime = true;
         return body;
     };
 
