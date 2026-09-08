@@ -3733,6 +3733,29 @@ export const SettingsDashboard: React.FC = () => {
                                 )}
                             </div>
 
+                            <div id={getSettingsSectionElementId('request-form')} className="scroll-mt-24 space-y-3">
+                                <h4 className="text-sm font-bold text-text uppercase tracking-wider">Request form</h4>
+                                <p className="text-xs text-muted max-w-2xl">
+                                    These apply to Discover &amp; Request in SMP for both Portal and Seerr engines.
+                                    Turn them off to skip destination, quality profile, root folder/library, and tags on every confirmation.
+                                </p>
+                                <SettingsToggleRow
+                                    title="Allow advanced request options"
+                                    description="When off, members only submit Request Movie/Show (plus seasons or HD/4K if needed). Destination server, quality profile, root folder/library, and tags stay hidden; Seerr/*arr defaults are used."
+                                    checked={portalAllowAdvancedRequests}
+                                    onChange={setPortalAllowAdvancedRequests}
+                                    border={false}
+                                />
+                                <SettingsToggleRow
+                                    title="Allow request tags"
+                                    description="When off, the tags field is hidden on the member request form. *arr still uses its default tags. Requires advanced request options."
+                                    checked={portalAllowRequestTags}
+                                    onChange={setPortalAllowRequestTags}
+                                    disabled={!portalAllowAdvancedRequests}
+                                    border={false}
+                                />
+                            </div>
+
                             {requestEngine === 'portal' && (
                             <div className="space-y-8">
                                     <div id={getSettingsSectionElementId('metadata-providers')} className="scroll-mt-24 space-y-4">
@@ -3814,20 +3837,6 @@ export const SettingsDashboard: React.FC = () => {
                                         <SettingsToggleRow title="Request series" checked={portalAllowRequestTv} onChange={setPortalAllowRequestTv} border={false} />
                                         <SettingsToggleRow title="Request 4K movies" checked={portalAllowRequest4kMovies} onChange={setPortalAllowRequest4kMovies} border={false} />
                                         <SettingsToggleRow title="Request 4K series" checked={portalAllowRequest4kTv} onChange={setPortalAllowRequest4kTv} border={false} />
-                                        <SettingsToggleRow
-                                            title="Allow advanced request options"
-                                            description="When off, members only submit Request Movie/Show (plus seasons or HD/4K if needed). Destination server, quality profile, root folder, and tags stay hidden and *arr defaults are used."
-                                            checked={portalAllowAdvancedRequests}
-                                            onChange={setPortalAllowAdvancedRequests}
-                                            border={false}
-                                        />
-                                        <SettingsToggleRow
-                                            title="Allow request tags"
-                                            description="When off, the tags field is hidden on the member request form. *arr still uses its default tags."
-                                            checked={portalAllowRequestTags}
-                                            onChange={setPortalAllowRequestTags}
-                                            border={false}
-                                        />
                                         <SettingsToggleRow title="Show recently added on Discover home" checked={portalShowRecentlyAdded} onChange={setPortalShowRecentlyAdded} border={false} />
                                         <SettingsToggleRow title="Show Plex watchlist on Discover home" checked={portalShowWatchlist} onChange={setPortalShowWatchlist} border={false} />
                                         <SettingsToggleRow title="Show Now Playing strip on Home & Discover heroes" checked={discoverNowPlayingEnabled} onChange={setDiscoverNowPlayingEnabled} border={false} />
@@ -3904,8 +3913,8 @@ export const SettingsDashboard: React.FC = () => {
                                 <div className="rounded-xl border border-border bg-card/60 p-4 space-y-3">
                                     <h4 className="font-bold text-text">Seerr / Overseerr rules</h4>
                                     <p className="text-sm text-muted">
-                                        Quotas, permissions, auto-approve, override rules, and watchlist sync are managed in your request app.
-                                        The portal reads those rules and hides request / 4K / issue actions when users are not allowed.
+                                        Quotas, auto-approve, override rules, and watchlist sync are managed in your request app.
+                                        The Request form toggles above still control whether SMP shows destination, quality profile, library/root folder, and tags.
                                     </p>
                                     <div className="flex flex-wrap gap-2">
                                         <a
