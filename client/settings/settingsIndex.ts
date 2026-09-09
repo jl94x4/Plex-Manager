@@ -33,7 +33,7 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
 
     { id: 'layout', tabId: 'layout', label: 'Layout', group: 'Portal', keywords: ['layout', 'navigation', 'menu', 'order', 'sidebar', 'home', 'dashboard', 'widgets', 'sections', 'reorder', 'hide', 'downloads', 'members'] },
     { id: 'applets', tabId: 'applets', label: 'Applets', group: 'Portal', keywords: ['applets', 'launcher', 'custom', 'external', 'tabs', 'links', 'iframe', 'embed', 'services', 'navigation', 'sidebar'] },
-    { id: 'layout/navigation', tabId: 'layout', sectionId: 'navigation', label: 'Navigation', labelKey: 'settings.navigation.sections.navigation', group: 'Portal', keywords: ['menu', 'order', 'sidebar', 'nav', 'downloads', 'members'] },
+    { id: 'layout/navigation', tabId: 'layout', sectionId: 'navigation', label: 'Navigation', labelKey: 'settings.navigation.sections.navigation', group: 'Portal', keywords: ['menu', 'order', 'sidebar', 'nav', 'downloads', 'members', 'icon', 'logo', 'customize'] },
     { id: 'layout/home-modules', tabId: 'layout', sectionId: 'home-modules', label: 'Home Custom Modules', labelKey: 'settings.navigation.sections.homeModules', group: 'Portal', keywords: ['dashboard', 'home', 'modules', 'html', 'iframe', 'custom', 'widget'] },
     { id: 'layout/home-layout', tabId: 'layout', sectionId: 'home-layout', label: 'Home Layout', labelKey: 'settings.navigation.sections.homeLayout', group: 'Portal', keywords: ['dashboard', 'widgets', 'sections', 'home', 'layout', 'reorder', 'hide'] },
     { id: 'achievements', tabId: 'achievements', label: 'Achievements', group: 'Portal', keywords: ['xp', 'badges', 'leaderboard', 'gamification', 'achievements', 'level'] },

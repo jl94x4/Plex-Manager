@@ -12460,8 +12460,17 @@ export const Navigation: React.FC<NavigationProps> = ({ currentRoute, onNavigate
                 };
             }
         }
+        const navItemIcons = sessionInfo?.navItemIcons && typeof sessionInfo.navItemIcons === 'object'
+            ? sessionInfo.navItemIcons
+            : {};
+        for (const [key, item] of Object.entries(config)) {
+            const override = navItemIcons[key];
+            if (!override || typeof override !== 'object') continue;
+            if (override.icon) item.icon = resolveCustomNavIcon(override.icon);
+            if (override.logoUrl) item.logoUrl = override.logoUrl;
+        }
         return config;
-    }, [customNavTabs, onLogout, t]);
+    }, [customNavTabs, onLogout, t, sessionInfo?.navItemIcons]);
     const normalizedNavOrder = useMemo(() => {
         const order = isAdmin
             ? ensureCompleteNavOrder(navOrder)

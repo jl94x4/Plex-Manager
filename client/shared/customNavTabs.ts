@@ -1,16 +1,22 @@
 import {
     Activity,
     AppWindow,
+    ArrowUpCircle,
+    BarChart3,
     Bookmark,
     BookOpen,
     Box,
+    Calendar,
     Camera,
     Cast,
+    ClipboardList,
     Cloud,
     Cpu,
     Database,
     Download,
+    DownloadCloud,
     ExternalLink,
+    FileText,
     Film,
     Gamepad2,
     Globe,
@@ -18,17 +24,28 @@ import {
     Headphones,
     Heart,
     Home,
+    Image,
+    Info,
     Layers,
     LayoutDashboard,
+    LifeBuoy,
     Link,
+    LogOut,
     MessageSquare,
     Monitor,
     Music,
+    Radar,
     Radio,
     Server,
+    Settings,
     Shield,
+    SlidersHorizontal,
+    Sparkles,
     Star,
+    Trophy,
     Tv,
+    User,
+    Users,
     Zap,
     type LucideIcon,
 } from 'lucide-react';
@@ -44,6 +61,9 @@ export const CUSTOM_NAV_ICON_OPTIONS = [
     'BookOpen', 'Database', 'Cloud', 'Home', 'Link', 'Box', 'Cpu', 'HardDrive', 'Radio',
     'Cast', 'Headphones', 'Camera', 'Shield', 'Zap', 'Star', 'Heart', 'Bookmark',
     'LayoutDashboard', 'AppWindow', 'Layers', 'Activity', 'Download', 'MessageSquare',
+    'Users', 'User', 'BarChart3', 'Trophy', 'LifeBuoy', 'DownloadCloud', 'Calendar',
+    'ArrowUpCircle', 'Radar', 'ClipboardList', 'Sparkles', 'Info', 'SlidersHorizontal',
+    'Settings', 'LogOut', 'FileText', 'Image',
 ] as const;
 
 export type CustomNavIconName = typeof CUSTOM_NAV_ICON_OPTIONS[number];
@@ -80,6 +100,23 @@ const CUSTOM_NAV_ICON_MAP: Record<CustomNavIconName, LucideIcon> = {
     Activity,
     Download,
     MessageSquare,
+    Users,
+    User,
+    BarChart3,
+    Trophy,
+    LifeBuoy,
+    DownloadCloud,
+    Calendar,
+    ArrowUpCircle,
+    Radar,
+    ClipboardList,
+    Sparkles,
+    Info,
+    SlidersHorizontal,
+    Settings,
+    LogOut,
+    FileText,
+    Image,
 };
 
 export const customNavTabKey = (id: string) => `${CUSTOM_NAV_KEY_PREFIX}${String(id || '').trim()}`;
@@ -98,8 +135,9 @@ export const buildCustomNavTabMap = (tabs: CustomNavTab[] = []) => (
 );
 
 export const resolveCustomNavIcon = (iconName?: string | null): LucideIcon => {
-    const key = String(iconName || '').trim() as CustomNavIconName;
-    return CUSTOM_NAV_ICON_MAP[key] || Globe;
+    const key = String(iconName || '').trim();
+    if (key === 'ImageIcon') return Image;
+    return CUSTOM_NAV_ICON_MAP[key as CustomNavIconName] || Globe;
 };
 
 export const getCustomNavTabLabel = (key: string, tabs: CustomNavTab[] = []) => {

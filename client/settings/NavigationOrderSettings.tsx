@@ -9,11 +9,13 @@ import {
     normalizeNavHiddenKeys,
 } from '../shared/nav';
 import { getCustomNavTabLabel } from '../shared/customNavTabs';
+import { isNativeNavIconKey, upsertNavItemIcon, type NavItemIconsMap } from '../shared/navItemIcons';
 import type { CustomNavDisplay, CustomNavTab } from '../shared/types';
 import { useDiscoverI18n } from '../discovery/i18n';
 import { SettingsToggleRow } from '../shared/ui';
 import { SettingHint } from './SettingHint';
 import { BetaBadge } from '../shared/BetaBadge';
+import { NavItemIconPanel, NavItemIconTrigger } from './NavItemIconEditor';
 
 type NavFeatureStatus = {
     upgrader?: boolean;
@@ -44,6 +46,8 @@ type Props = {
     featureStatus?: NavFeatureStatus;
     customNavTabs?: CustomNavTab[];
     customNavDisplay?: CustomNavDisplay;
+    navItemIcons?: NavItemIconsMap;
+    onNavItemIconsChange?: (next: NavItemIconsMap) => void;
 };
 
 const FEATURE_OFF_SECTIONS: Record<string, string> = {
@@ -109,6 +113,9 @@ type ColumnProps = {
     downloadsMembersNote?: string | null;
     translate: (key: string, vars?: Record<string, unknown>) => string;
     labelForKey: (key: string, options?: { adminSuffix?: boolean; downloadsMembersVisible?: boolean }) => string;
+    navItemIcons?: NavItemIconsMap;
+    onNavItemIconsChange?: (next: NavItemIconsMap) => void;
+    allowIconEdit?: boolean;
 };
 
 const NavOrderColumn: React.FC<ColumnProps> = ({
@@ -128,7 +135,11 @@ const NavOrderColumn: React.FC<ColumnProps> = ({
     downloadsMembersNote,
     translate,
     labelForKey,
+    navItemIcons = {},
+    onNavItemIconsChange,
+    allowIconEdit = false,
 }) => {
+    const [iconEditorKey, setIconEditorKey] = useState<string | null>(null);
     const [dragIndex, setDragIndex] = useState<number | null>(null);
     const [dropIndex, setDropIndex] = useState<number | null>(null);
     const [dragPoint, setDragPoint] = useState<{ x: number; y: number } | null>(null);
@@ -297,13 +308,14 @@ const NavOrderColumn: React.FC<ColumnProps> = ({
                             <div
                                 ref={(node) => { itemRefs.current[index] = node; }}
                                 data-nav-order-index={index}
-                                className={`relative flex items-center gap-2 rounded-xl border bg-background/30 px-3 py-3 transition-[transform,box-shadow,opacity,border-color,background-color] duration-150 sm:gap-3
+                                className={`relative flex flex-col gap-3 rounded-xl border bg-background/30 px-3 py-3 transition-[transform,box-shadow,opacity,border-color,background-color] duration-150
                                     ${isDragging ? 'scale-[0.985] border-plex/50 bg-plex/5 opacity-40 shadow-inner' : 'border-border/40'}
                                     ${isDropTarget ? 'border-plex bg-plex/10 ring-2 ring-plex/35' : ''}
                                     ${inMoreMenu && !isDropTarget ? 'border-dashed border-border/50 bg-white/[0.02]' : ''}
                                     ${isHidden && !isDropTarget ? 'border-dashed border-border/50 opacity-55' : ''}
                                     ${!isMobileNavKey(key) ? 'opacity-70' : ''}`}
                             >
+                                <div className="flex items-center gap-2 sm:gap-3">
                                 {insertBefore && (
                                     <div className="pointer-events-none absolute -top-1.5 left-3 right-3 h-1 rounded-full bg-plex shadow-[0_0_12px_rgba(229,160,13,0.55)]" />
                                 )}
@@ -323,6 +335,18 @@ const NavOrderColumn: React.FC<ColumnProps> = ({
                                 >
                                     <GripVertical className="h-5 w-5" aria-hidden />
                                 </button>
+
+                                {isNativeNavIconKey(key) ? (
+                                    <NavItemIconTrigger
+                                        navKey={key}
+                                        mark={navItemIcons[key]}
+                                        expanded={iconEditorKey === key}
+                                        editable={allowIconEdit}
+                                        label={labelForKey(key)}
+                                        translate={translate}
+                                        onToggle={() => setIconEditorKey((current) => (current === key ? null : key))}
+                                    />
+                                ) : null}
 
                                 <div className="min-w-0 flex-1">
                                     <div className="flex flex-wrap items-center gap-1.5 font-medium text-text">
@@ -402,6 +426,20 @@ const NavOrderColumn: React.FC<ColumnProps> = ({
                                         <ChevronDown className="h-4 w-4" />
                                     </button>
                                 </div>
+                                </div>
+                                {allowIconEdit && iconEditorKey === key && isNativeNavIconKey(key) && onNavItemIconsChange ? (
+                                    <NavItemIconPanel
+                                        navKey={key}
+                                        mark={navItemIcons[key]}
+                                        translate={translate}
+                                        onChange={(patch) => onNavItemIconsChange(upsertNavItemIcon(navItemIcons, key, patch))}
+                                        onReset={() => {
+                                            const next = { ...navItemIcons };
+                                            delete next[key];
+                                            onNavItemIconsChange(next);
+                                        }}
+                                    />
+                                ) : null}
                             </div>
                         </React.Fragment>
                     );
@@ -453,6 +491,8 @@ export const NavigationOrderSettings: React.FC<Props> = ({
     featureStatus,
     customNavTabs = [],
     customNavDisplay = 'links',
+    navItemIcons = {},
+    onNavItemIconsChange,
 }) => {
     const { t } = useDiscoverI18n();
     const normalizeAdminHidden = useCallback(
@@ -486,8 +526,11 @@ export const NavigationOrderSettings: React.FC<Props> = ({
             {t('settings.navigation.order.description')}{' '}
             {t('settings.navigation.order.mobileSlots', { count: MOBILE_NAV_PRIMARY_SLOTS })}
         </p>
-        <p className="mb-4 max-w-3xl text-xs text-muted">
+        <p className="mb-2 max-w-3xl text-xs text-muted">
             {t('settings.navigation.order.audienceHint')}
+        </p>
+        <p className="mb-4 max-w-3xl text-xs text-muted">
+            {t('settings.navigation.order.iconHint')}
         </p>
         {customNavDisplay === 'applets' ? (
             <p className="mb-4 max-w-3xl text-xs text-muted">
@@ -531,6 +574,9 @@ export const NavigationOrderSettings: React.FC<Props> = ({
                 featureStatus={featureStatus}
                 translate={t}
                 labelForKey={labelForKey}
+                navItemIcons={navItemIcons}
+                onNavItemIconsChange={onNavItemIconsChange}
+                allowIconEdit
             />
             <NavOrderColumn
                 title={t('settings.navigation.order.members')}
@@ -552,6 +598,7 @@ export const NavigationOrderSettings: React.FC<Props> = ({
                 }
                 translate={t}
                 labelForKey={labelForKey}
+                navItemIcons={navItemIcons}
             />
         </div>
     </div>

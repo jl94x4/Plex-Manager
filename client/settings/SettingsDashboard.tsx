@@ -43,6 +43,7 @@ import { StickySaveBar } from '../shared/StickySaveBar';
 import { Loader, ToastContainer, pushToast, type ToastMessage } from '../shared/toast';
 import { SettingHint, SettingFieldLabel } from './SettingHint';
 import type { User, AuditEntry, DeletedUser, PlexServer, ArrInstance, DownloadClientConfig, CustomNavTab, HomeCustomModule } from '../shared/types';
+import type { NavItemIconsMap } from '../shared/navItemIcons';
 import { formatDateTime, formatEventName, hexToRgb, accentHoverRgb, getDaysUntilExpiry, addMonths, addYears, formatDate, formatPortalDateTime } from '../shared/format';
 
 import { StreamKillRulesPanel } from './StreamKillRulesPanel';
@@ -871,6 +872,7 @@ export const SettingsDashboard: React.FC = () => {
     const [memberNavOrder, setMemberNavOrder] = useState<string[]>(() => deriveMemberNavOrderFromAdmin([...DEFAULT_NAV_ORDER]));
     const [memberNavHiddenKeys, setMemberNavHiddenKeys] = useState<string[]>([]);
     const [customNavTabs, setCustomNavTabs] = useState<CustomNavTab[]>([]);
+    const [navItemIcons, setNavItemIcons] = useState<NavItemIconsMap>({});
     const [customNavDisplay, setCustomNavDisplay] = useState<'links' | 'applets'>('links');
     const [arrOpenInPortalEmbed, setArrOpenInPortalEmbed] = useState(false);
     const [homeCustomModules, setHomeCustomModules] = useState<HomeCustomModule[]>([]);
@@ -1626,6 +1628,7 @@ export const SettingsDashboard: React.FC = () => {
             setMemberNavOrder(resolveMemberNavOrder(initialSettings.memberNavOrder, initialSettings.navOrder, initialSettings.customNavTabs));
             setMemberNavHiddenKeys(normalizeMemberNavHiddenKeys(initialSettings.memberNavHiddenKeys, initialSettings.customNavTabs));
             if (Array.isArray(initialSettings.customNavTabs)) setCustomNavTabs(initialSettings.customNavTabs);
+            setNavItemIcons(initialSettings.navItemIcons && typeof initialSettings.navItemIcons === 'object' ? initialSettings.navItemIcons : {});
             setCustomNavDisplay(initialSettings.customNavDisplay === 'applets' ? 'applets' : 'links');
             setArrOpenInPortalEmbed(!!initialSettings.arrOpenInPortalEmbed);
             if (Array.isArray(initialSettings.homeCustomModules)) setHomeCustomModules(initialSettings.homeCustomModules);
@@ -2321,6 +2324,7 @@ export const SettingsDashboard: React.FC = () => {
             memberNavOrder: ensureCompleteMemberNavOrder(memberNavOrder, customNavTabs),
             memberNavHiddenKeys: normalizeMemberNavHiddenKeys(memberNavHiddenKeys, customNavTabs),
             customNavTabs,
+            navItemIcons,
             customNavDisplay,
             arrOpenInPortalEmbed,
             homeCustomModules,
@@ -4215,6 +4219,8 @@ export const SettingsDashboard: React.FC = () => {
                                     onDownloadsVisibleToMembersChange={setDownloadsVisibleToMembers}
                                     customNavTabs={customNavTabs}
                                     customNavDisplay={customNavDisplay}
+                                    navItemIcons={navItemIcons}
+                                    onNavItemIconsChange={setNavItemIcons}
                                     featureStatus={{
                                         upgrader: upgraderEnabled,
                                         collexions: collexionsEnabled,

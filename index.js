@@ -96,6 +96,7 @@ import {
     sanitizeCustomNavTabsForSession,
     customTabLogoPublicPath,
 } from './lib/custom-nav-tabs.js';
+import { sanitizeNavItemIcons, navItemIconLogoId } from './lib/nav-item-icons.js';
 import { readCustomTabLogo, writeCustomTabLogo } from './lib/custom-tab-logos.js';
 import {
     normalizeDashboardSectionIds,
@@ -5541,6 +5542,7 @@ app.get('/api/users/me', requireAuth, async (req, res) => {
             ? config.memberNavHiddenKeys.filter((key) => typeof key === 'string' && key && key !== 'home' && key !== 'logout')
             : [],
         customNavTabs: accessExpired ? [] : sanitizeCustomNavTabsForSession(config.customNavTabs),
+        navItemIcons: sanitizeNavItemIcons(config.navItemIcons),
         customNavDisplay: normalizeCustomNavDisplay(config.customNavDisplay),
         arrOpenInPortalEmbed: !!config.arrOpenInPortalEmbed,
         homeCustomModules: accessExpired ? [] : sanitizeHomeCustomModulesForSession(config.homeCustomModules, isAdmin),
@@ -5948,6 +5950,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 memberNavOrder: Array.isArray(config.memberNavOrder) ? config.memberNavOrder : [],
                 memberNavHiddenKeys: Array.isArray(config.memberNavHiddenKeys) ? config.memberNavHiddenKeys : [],
                 customNavTabs: sanitizeCustomNavTabsForSession(config.customNavTabs),
+                navItemIcons: sanitizeNavItemIcons(config.navItemIcons),
                 customNavDisplay: normalizeCustomNavDisplay(config.customNavDisplay),
                 arrOpenInPortalEmbed: !!config.arrOpenInPortalEmbed,
                 homeCustomModules: sanitizeHomeCustomModulesForSession(config.homeCustomModules, true),
@@ -6160,6 +6163,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 navHiddenKeys: [],
                 memberNavOrder: ['home', 'discover', 'request', 'analytics', 'downloads', 'mediastack', 'status', 'about', 'logout'],
                 memberNavHiddenKeys: [],
+                navItemIcons: {},
                 downloadsVisibleToMembers: true,
                 defaultLibraryIds: null,
                 use24HourClock: false,
@@ -6288,7 +6292,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         autoApproveMovies4k, autoApproveTv4k, portalAutoRequestMovies, portalAutoRequestTv,
         seriesMetadataProvider, animeMetadataProvider, tvdbApiKey,
         inactiveCleanupEnabled, inactiveCleanupDays,
-        primaryColor, customLogoUrl, customLoginLogoUrl, loginLogoCircleFrame, customFaviconUrl, customBadgeUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, expiredPortalTitle, expiredPortalMessage, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, customNavTabs, customNavDisplay, arrOpenInPortalEmbed, homeCustomModules, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
+        primaryColor, customLogoUrl, customLoginLogoUrl, loginLogoCircleFrame, customFaviconUrl, customBadgeUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, expiredPortalTitle, expiredPortalMessage, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, customNavTabs, navItemIcons, customNavDisplay, arrOpenInPortalEmbed, homeCustomModules, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
         autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, spotifyToPlexEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, supportTicketsEnabled, chatEnabled, chatMentionNotifyInApp, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, scannerNotifyDeleted, scannerNotifyUpgrade, scannerNotifyImport, scannerNotifyGrab, scannerNotifyUpdate, scannerNotifyInteraction, notificationTemplates, emailTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, spotifyToPlexInternalUrl, spotifyToPlexClientId, spotifyToPlexClientSecret, spotifyToPlexEncryptionKey, spotifyToPlexHomeWidgetEnabled, spotifyToPlexScheduleMode, spotifyToPlexScheduledSyncEnabled, spotifyToPlexScheduledSyncIntervalHours, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
@@ -6710,6 +6714,9 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         expiredPortalMessage: String(expiredPortalMessage ?? existingConfig.expiredPortalMessage ?? '').trim(),
         hideStreamUsers: hideStreamUsers === true ? 'anonymous' : (hideStreamUsers === false ? 'false' : (hideStreamUsers || 'false')),
         customNavTabs: normalizedCustomNavTabs,
+        navItemIcons: navItemIcons !== undefined
+            ? sanitizeNavItemIcons(navItemIcons)
+            : sanitizeNavItemIcons(existingConfig.navItemIcons),
         customNavDisplay: normalizeCustomNavDisplay(
             customNavDisplay != null ? customNavDisplay : existingConfig.customNavDisplay,
         ),
@@ -7488,6 +7495,28 @@ app.post('/api/config/custom-tab-logo/:tabId', requireAdmin, express.raw({ type:
         log(`Failed to upload custom tab logo: ${error.message}`);
         const status = /invalid/i.test(error.message) ? 400 : 500;
         res.status(status).json({ error: error.message || 'Failed to upload logo.' });
+    }
+});
+
+app.post('/api/config/nav-item-icon/:key', requireAdmin, express.raw({ type: ['image/*', 'application/octet-stream'], limit: '2mb' }), async (req, res) => {
+    try {
+        const logoId = navItemIconLogoId(req.params.key);
+        if (!logoId) {
+            return res.status(400).json({ error: 'Invalid navigation item.' });
+        }
+        const buf = req.body;
+        if (!Buffer.isBuffer(buf) || buf.length < 4) {
+            return res.status(400).json({ error: 'Invalid image file.' });
+        }
+        await writeCustomTabLogo(BRANDING_DIR, logoId, buf);
+        res.json({
+            message: 'Navigation icon uploaded successfully.',
+            logoUrl: customTabLogoPublicPath(logoId),
+        });
+    } catch (error) {
+        log(`Failed to upload navigation icon: ${error.message}`);
+        const status = /invalid/i.test(error.message) ? 400 : 500;
+        res.status(status).json({ error: error.message || 'Failed to upload icon.' });
     }
 });
 

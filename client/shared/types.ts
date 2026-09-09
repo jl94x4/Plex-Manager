@@ -185,6 +185,8 @@ export interface AppSettings {
     memberNavOrder?: string[];
     /** Members / non-admin hidden nav keys. */
     memberNavHiddenKeys?: string[];
+    /** Optional Lucide / image overrides for native sidebar items. */
+    navItemIcons?: Record<string, { icon?: string; logoUrl?: string }>;
     /** Admin-defined external service tabs shown in the sidebar. */
     customNavTabs?: CustomNavTab[];
     /** Desktop launcher vs individual custom-tab links. */

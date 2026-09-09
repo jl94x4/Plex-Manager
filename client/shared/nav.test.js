@@ -49,3 +49,24 @@ test('normalizeNavHiddenKeys keeps custom applet keys when tabs are supplied', a
         JSON.stringify(['custom:member-ok', 'about']),
     );
 });
+
+test('filterNavOrder hides Cleaner unless experimental is on', async () => {
+    const { filterNavOrder, DEFAULT_NAV_ORDER } = await loadNav();
+    const off = filterNavOrder([...DEFAULT_NAV_ORDER], {
+        isAdmin: true,
+        features: { maintenance: false },
+    });
+    assert.equal(off.includes('maintenance'), false);
+
+    const on = filterNavOrder([...DEFAULT_NAV_ORDER], {
+        isAdmin: true,
+        features: { maintenance: true },
+    });
+    assert.equal(on.includes('maintenance'), true);
+
+    const members = filterNavOrder([...DEFAULT_NAV_ORDER], {
+        isAdmin: false,
+        features: { maintenance: true },
+    });
+    assert.equal(members.includes('maintenance'), false);
+});

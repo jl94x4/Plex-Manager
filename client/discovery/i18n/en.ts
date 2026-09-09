@@ -1960,6 +1960,12 @@ export const en = {
                 moveDown: 'Move {label} down',
                 adminOnlyLabel: '{label} (Admin Only)',
                 featureOff: 'Feature off — enable under Settings → {section}',
+                iconHint: 'Click an icon in the Admins list to customize it the same way as Applets (Lucide icon, image URL, upload, or preset). The same mark is used for members.',
+                customizeIcon: 'Customize icon for {label}',
+                customizeIconHint: 'Customize this sidebar icon',
+                iconMembersHint: 'Sidebar icons are customized in the Admins list',
+                resetIcon: 'Reset to default',
+                iconEditorHint: 'Optional image URL, upload, or a bundled preset. The Lucide icon is the fallback when no image is set. Save settings to apply.',
             },
             customTabs: {
                 title: 'Applets',
