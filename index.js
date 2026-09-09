@@ -20686,7 +20686,7 @@ self.addEventListener('fetch', () => {});
 
 const PORTAL_START = ${JSON.stringify(BASE_PATH ? `${BASE_PATH}/` : '/portal')};
 const PWA_ICON_PATH = ${JSON.stringify(withBasePath('/api/public/pwa-icon?size=192'))};
-const PWA_BADGE_PATH = ${JSON.stringify(withBasePath('/api/public/pwa-badge?size=96&m=inv'))};
+const PWA_BADGE_PATH = ${JSON.stringify(withBasePath('/api/public/pwa-badge?size=96&m=sz3'))};
 
 const toAbsoluteHref = (href) => {
   try {
