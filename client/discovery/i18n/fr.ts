@@ -1439,6 +1439,7 @@ export const fr: DeepPartial<EnCatalog> = {
                 broadcast: 'E-mail d’annonce',
                 invites: 'Invitations',
                 cleanup: 'Nettoyage',
+                cleaner: 'Nettoyeur de bibliothèque',
                 streamRules: 'Règles de flux',
                 tasks: 'Tâches en arrière-plan',
                 upgrader: 'Mise à niveau de la bibliothèque',

@@ -1907,6 +1907,7 @@ export const en = {
                 broadcast: 'Email Templates',
                 invites: 'Invites',
                 cleanup: 'Cleanup',
+                cleaner: 'Library Cleaner',
                 streamRules: 'Stream Rules',
                 tasks: 'Background Tasks',
                 upgrader: 'Library Upgrader',

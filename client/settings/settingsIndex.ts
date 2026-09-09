@@ -1,5 +1,5 @@
 export const SETTINGS_TABS = [
-    'plex', 'notifications', 'newsletter', 'cleanup', 'mediastack', 'request', 'branding', 'layout', 'applets',
+    'plex', 'notifications', 'newsletter', 'cleanup', 'cleaner', 'mediastack', 'request', 'branding', 'layout', 'applets',
     'achievements', 'analytics', 'status', 'invites', 'tasks', 'upgrader', 'collexions', 'spotify-sync', 'media-automation', 'poster-sets', 'overlays', 'editions', 'system', 'contact', 'broadcast', 'stream-rules', 'logs',
 ] as const;
 
@@ -95,6 +95,7 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
     { id: 'invites/links', tabId: 'invites', sectionId: 'invite-links', label: 'Automated Invite Links', labelKey: 'settings.invites.inviteLinksTitle', group: 'Comms', keywords: ['invite link', 'generate', 'email invite'] },
 
     { id: 'cleanup', tabId: 'cleanup', label: 'Cleanup', group: 'Automation', keywords: ['inactive', 'revoke', 'expiry', 'cleanup', 'preview', 'last watched'] },
+    { id: 'cleaner', tabId: 'cleaner', label: 'Library Cleaner', labelKey: 'settings.navigation.tabs.cleaner', group: 'Automation', keywords: ['cleaner', 'maintenance', 'maintainerr', 'maintainer', 'library', 'unwatched', 'experimental', 'sonarr', 'radarr'] },
     { id: 'stream-rules', tabId: 'stream-rules', label: 'Stream Rules', group: 'Automation', keywords: ['kill', 'transcode', 'rule', 'stream'] },
     { id: 'tasks', tabId: 'tasks', label: 'Background Tasks', group: 'Automation', keywords: ['jobs', 'scheduler', 'run now', 'tasks'] },
     { id: 'upgrader', tabId: 'upgrader', label: 'Library Upgrader', group: 'Automation', keywords: ['upgrader', 'hevc', 'h264', 'codec', 'upgrade', 'sonarr', 'radarr'] },
@@ -108,7 +109,6 @@ export const SETTINGS_INDEX: SettingsIndexEntry[] = [
     { id: 'system', tabId: 'system', label: 'System', group: 'Automation', keywords: ['system', 'diagnostics', 'backup'] },
     { id: 'system/support-tickets', tabId: 'system', sectionId: 'support-tickets', label: 'Support tickets', labelKey: 'settings.search.entries.supportTickets', group: 'Automation', keywords: ['support', 'tickets', 'inbox', 'messaging', 'help', 'contact admin'] },
     { id: 'system/health', tabId: 'system', sectionId: 'health', label: 'Health Dashboard', labelKey: 'settings.search.entries.healthDashboard', group: 'Automation', keywords: ['health', 'score', 'alerts', 'integrations'] },
-    { id: 'system/maintenance', tabId: 'system', sectionId: 'maintenance', label: 'Library Cleaner (Maintainerr)', labelKey: 'settings.search.entries.cleanerExperimentalMode', group: 'Automation', keywords: ['cleaner', 'maintenance', 'maintainerr', 'maintainer', 'library', 'unwatched', 'experimental'] },
     { id: 'system/backup', tabId: 'system', sectionId: 'backup', label: 'Backup & Restore', labelKey: 'settings.search.entries.backupRestore', group: 'Automation', keywords: ['backup', 'restore', 'export', 'import'] },
     { id: 'system/memory', tabId: 'system', sectionId: 'memory', label: 'Memory', labelKey: 'settings.search.entries.memory', group: 'Automation', keywords: ['memory', 'ram', 'rss', 'heap', 'cache', 'leak', 'docker'] },
     { id: 'system/diagnostics', tabId: 'system', sectionId: 'diagnostics', label: 'Diagnostics', labelKey: 'settings.search.entries.diagnostics', group: 'Automation', keywords: ['diagnostics', 'version', 'node', 'debug'] },
@@ -144,6 +144,7 @@ export const parseSettingsHash = (hash: string): { tabId: SettingsTabId | null; 
     const raw = hash.replace(/^#/, '').trim();
     if (!raw) return { tabId: null, sectionId: null };
     if (raw === 'system/upgrader') return { tabId: 'upgrader', sectionId: null };
+    if (raw === 'system/maintenance') return { tabId: 'cleaner', sectionId: null };
 
     // Legacy tab hashes → merged Layout / Notifications sections.
     const legacyTabRedirects: Record<string, { tabId: SettingsTabId; sectionId: string | null }> = {
@@ -210,6 +211,7 @@ export const recordRecentSetting = (entryId: string) => {
 const SETTINGS_ENTRY_ALIASES: Record<string, string> = {
     'layout/applets': 'applets',
     'layout/custom-nav-tabs': 'applets',
+    'system/maintenance': 'cleaner',
 };
 
 export const resolveSettingsEntry = (entryId: string): SettingsIndexEntry | undefined => {

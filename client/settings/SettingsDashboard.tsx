@@ -255,6 +255,7 @@ const SETTINGS_TAB_ICONS: Record<string, React.ComponentType<{ className?: strin
     notifications: Bell,
     newsletter: Newspaper,
     cleanup: Trash2,
+    cleaner: Shield,
     mediastack: Layers,
     request: BookOpen,
     branding: Palette,
@@ -354,6 +355,7 @@ const SETTINGS_TAB_TRANSLATION_KEYS: Record<string, string> = {
     broadcast: 'settings.navigation.tabs.broadcast',
     invites: 'settings.navigation.tabs.invites',
     cleanup: 'settings.navigation.tabs.cleanup',
+    cleaner: 'settings.navigation.tabs.cleaner',
     'stream-rules': 'settings.navigation.tabs.streamRules',
     tasks: 'settings.navigation.tabs.tasks',
     upgrader: 'settings.navigation.tabs.upgrader',
@@ -535,6 +537,12 @@ export const SettingsDashboard: React.FC = () => {
     }, [libraries]);
     const mediaServerLabel = mediaServerType === 'emby' ? 'Emby' : mediaServerType === 'jellyfin' ? 'Jellyfin' : 'Plex';
     const [activeTab, setActiveTab] = useState<SettingsTabId>(() => {
+        try {
+            const url = new URL(window.location.href);
+            if (url.searchParams.get('focus') === 'maintenance-toggle') return 'cleaner';
+        } catch {
+            /* ignore invalid URL */
+        }
         const { tabId } = parseSettingsHash(window.location.hash);
         return tabId || 'branding';
     });
@@ -600,18 +608,16 @@ export const SettingsDashboard: React.FC = () => {
     }, [activeTab, scrollToSection]);
 
     useEffect(() => {
-        if (activeTab !== 'system') return;
         const url = new URL(window.location.href);
         if (url.searchParams.get('focus') !== 'maintenance-toggle') return;
+        setActiveTab('cleaner');
         setHighlightMaintenanceToggle(true);
-        setActiveSectionId('maintenance');
-        setScrollToSection('maintenance');
         const timer = window.setTimeout(() => setHighlightMaintenanceToggle(false), 4200);
         url.searchParams.delete('focus');
-        const nextUrl = `${url.pathname}${url.search}${url.hash || ''}`;
-        window.history.replaceState({}, '', nextUrl);
+        url.hash = 'cleaner';
+        window.history.replaceState({}, '', `${url.pathname}${url.search}${url.hash}`);
         return () => window.clearTimeout(timer);
-    }, [activeTab]);
+    }, []);
 
     // SMTP States
     const [smtpHost, setSmtpHost] = useState('');
@@ -3290,6 +3296,30 @@ export const SettingsDashboard: React.FC = () => {
                             <CleanupInactivePreview days={inactiveCleanupDays} addToast={addToast} />
                         </div>
                     )}
+                    {activeTab === 'cleaner' && (
+                        <div className="mb-8 animate-fade-in">
+                            <h3 className="text-xl font-bold text-plex mb-4 border-b border-border pb-2">{t('settings.navigation.tabs.cleaner')}</h3>
+                            <section
+                                id={getSettingsSectionElementId('maintenance')}
+                                className={`space-y-3 mb-8 transition-all duration-300 scroll-mt-24 ${highlightMaintenanceToggle ? 'ring-2 ring-plex/50 rounded-lg p-3 -m-3' : ''}`}
+                            >
+                                <p className="text-sm text-muted mb-4">
+                                    Maintainerr-style library rules for unwatched titles (Sonarr &amp; Radarr). This is not Settings → Cleanup, which only revokes inactive users.
+                                </p>
+                                <SettingsToggleRow
+                                    title="Enable Library Cleaner"
+                                    description="Shows Cleaner in the main sidebar. OFF by default."
+                                    checked={maintenanceExperimentalEnabled}
+                                    onChange={setMaintenanceExperimentalEnabled}
+                                    border={false}
+                                />
+                                <p className={`text-xs mt-2 font-semibold ${maintenanceExperimentalEnabled ? 'text-green-300' : 'text-yellow-300'}`}>
+                                    Current status: {maintenanceExperimentalEnabled ? 'ON' : 'OFF'}
+                                </p>
+                                <p className="text-[11px] text-muted mt-1">After changing this toggle, click the main Save Settings button. Then open Cleaner from the main nav.</p>
+                            </section>
+                        </div>
+                    )}
                     {activeTab === 'mediastack' && (
                         <div className="mb-8 animate-fade-in">
                             <div id={getSettingsSectionElementId('arr')} className="scroll-mt-24">
@@ -5625,20 +5655,6 @@ export const SettingsDashboard: React.FC = () => {
                                         </ul>
                                     )}
                                 </div>
-                            </section>
-                            <section id={getSettingsSectionElementId('maintenance')} className={`space-y-3 mb-8 transition-all duration-300 scroll-mt-24 ${highlightMaintenanceToggle ? 'ring-2 ring-plex/50 rounded-lg p-3 -m-3' : ''}`}>
-                                <h4 className="font-bold text-text">Library Cleaner (Maintainerr-style)</h4>
-                                <SettingsToggleRow
-                                    title="Enable Library Cleaner"
-                                    description="Shows Cleaner in the main sidebar for unwatched / library cleanup rules (Sonarr & Radarr). This is not Settings → Cleanup (user inactivity). OFF by default."
-                                    checked={maintenanceExperimentalEnabled}
-                                    onChange={setMaintenanceExperimentalEnabled}
-                                    border={false}
-                                />
-                                <p className={`text-xs mt-2 font-semibold ${maintenanceExperimentalEnabled ? 'text-green-300' : 'text-yellow-300'}`}>
-                                    Current status: {maintenanceExperimentalEnabled ? 'ON' : 'OFF'}
-                                </p>
-                                <p className="text-[11px] text-muted mt-1">After changing this toggle, click the main Save Settings button. Then open Cleaner from the main nav, not from Settings → Cleanup.</p>
                             </section>
                             <section id={getSettingsSectionElementId('backup')} className="space-y-4 mb-8 scroll-mt-24">
                                 <h4 className="font-bold text-text">Backup & Restore</h4>

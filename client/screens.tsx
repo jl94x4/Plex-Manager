@@ -11299,7 +11299,7 @@ export const MaintenanceDashboard: React.FC = () => {
                                 <p className="text-xs text-muted">{t('maintenance.page.disabledHint')}</p>
                                 <button
                                     type="button"
-                                    onClick={() => { window.location.href = portalUrl('/settings?focus=maintenance-toggle#system'); }}
+                                    onClick={() => { window.location.href = portalUrl('/settings#cleaner'); }}
                                     className="mt-3 px-3 py-1.5 bg-plex text-background rounded-md text-xs font-semibold hover:bg-plex-hover transition-colors"
                                 >
                                     {t('notifications.openSettings')}
