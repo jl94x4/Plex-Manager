@@ -249,7 +249,8 @@ export const isExpiredPortalAllowedRoute = (route: string) => (
     EXPIRED_PORTAL_ALLOWED_ROUTES.has(String(route || ''))
 );
 
-/** Normalize a saved hidden-keys list; strips always-visible keys. */
+/** Normalize a saved hidden-keys list; strips always-visible keys.
+ *  Pass `customTabs` or `custom:` applet keys are dropped (hide in Layout would no-op). */
 export const normalizeNavHiddenKeys = (keys?: string[] | null, customTabs?: Array<{ id: string; enabled?: boolean }>): string[] => {
     if (!Array.isArray(keys)) return [];
     const enabledCustom = new Set(

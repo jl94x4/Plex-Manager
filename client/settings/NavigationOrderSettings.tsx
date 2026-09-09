@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { ChevronDown, ChevronUp, Eye, EyeOff, GripVertical, MoreHorizontal, Shield, Users } from 'lucide-react';
 import {
     ALWAYS_VISIBLE_MEMBER_NAV_KEYS,
@@ -455,6 +455,14 @@ export const NavigationOrderSettings: React.FC<Props> = ({
     customNavDisplay = 'links',
 }) => {
     const { t } = useDiscoverI18n();
+    const normalizeAdminHidden = useCallback(
+        (keys: string[]) => normalizeNavHiddenKeys(keys, customNavTabs),
+        [customNavTabs],
+    );
+    const normalizeMemberHidden = useCallback(
+        (keys: string[]) => normalizeMemberNavHiddenKeys(keys, customNavTabs),
+        [customNavTabs],
+    );
     const labelForKey = (key: string, options?: { adminSuffix?: boolean; downloadsMembersVisible?: boolean }) => {
         if (key.startsWith('custom:')) {
             const label = getCustomNavTabLabel(key, customNavTabs);
@@ -517,7 +525,7 @@ export const NavigationOrderSettings: React.FC<Props> = ({
                 navHiddenKeys={navHiddenKeys}
                 onHiddenKeysChange={onHiddenKeysChange}
                 alwaysVisibleKeys={ALWAYS_VISIBLE_NAV_KEYS}
-                normalizeHidden={normalizeNavHiddenKeys}
+                normalizeHidden={normalizeAdminHidden}
                 downloadsVisibleToMembers={downloadsVisibleToMembers}
                 showAdminSuffix
                 featureStatus={featureStatus}
@@ -534,7 +542,7 @@ export const NavigationOrderSettings: React.FC<Props> = ({
                 navHiddenKeys={memberNavHiddenKeys}
                 onHiddenKeysChange={onMemberNavHiddenKeysChange}
                 alwaysVisibleKeys={ALWAYS_VISIBLE_MEMBER_NAV_KEYS}
-                normalizeHidden={normalizeMemberNavHiddenKeys}
+                normalizeHidden={normalizeMemberHidden}
                 downloadsVisibleToMembers={downloadsVisibleToMembers}
                 showAdminSuffix={false}
                 downloadsMembersNote={
