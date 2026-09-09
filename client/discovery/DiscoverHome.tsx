@@ -14,7 +14,11 @@ import {
 import { enrichDiscoveryItems, normalizeRawDiscoveryItem, dedupeDiscoverResults, getDiscoverItemKey } from './discoverItemUtils';
 import { portalRequestsToDiscoveryRowItems } from './myRequestUtils';
 import { filterHiddenAvailableItems, useDiscoveryPreferences } from './useDiscoveryPreferences';
-import { fetchDiscoverHomeRowResults } from './discoverFetchUtils';
+import {
+    fetchDiscoverHomeRowResults,
+    HOME_RAIL_HIDE_AVAILABLE_MAX_PAGES,
+    HOME_RAIL_HIDE_AVAILABLE_MIN_ITEMS,
+} from './discoverFetchUtils';
 import { enrichDiscoverBrowseRows, enrichDiscoverItemsWithAvailability } from './discoverAvailabilityEnrich';
 import { WatchlistPanel } from './WatchlistPanel';
 import { DiscoverSectionHeader } from './DiscoverSectionHeader';
@@ -287,14 +291,25 @@ export const DiscoverHome: React.FC<{
             // Seerr-style: one endpoint per rail; advance same URL pages only (no multi-source storm).
             const rowOpts = {
                 needsBackfill: hideAvailable,
-                maxPages: hideAvailable ? 4 : 2,
+                maxPages: hideAvailable ? 8 : 2,
                 maxItems: 30,
-                minItems: hideAvailable ? 20 : 30,
+                minItems: hideAvailable ? HOME_RAIL_HIDE_AVAILABLE_MIN_ITEMS : 30,
                 hideRequested: false,
                 trustAttachedAvailability: true,
                 pageConcurrency: 1,
                 requirePoster: true,
                 signal: paintAbort.signal,
+            };
+            const refillRowOpts = {
+                needsBackfill: true,
+                maxPages: HOME_RAIL_HIDE_AVAILABLE_MAX_PAGES,
+                maxItems: 30,
+                minItems: HOME_RAIL_HIDE_AVAILABLE_MIN_ITEMS,
+                hideRequested: false,
+                trustAttachedAvailability: true,
+                pageConcurrency: 1,
+                requirePoster: true,
+                enrich: enrichDiscoverBrowseRows,
             };
             const trendingUrl = (page: number) => `/api/discovery/proxy/discover/trending?page=${page}`;
             const moviesUrl = (page: number) => `/api/discovery/proxy/discover/movies?sortBy=popularity.desc&page=${page}`;
@@ -355,14 +370,44 @@ export const DiscoverHome: React.FC<{
                         enrichDiscoverBrowseRows(upcomingSeries),
                     ]);
                     if (gen !== loadGenRef.current) return;
-                    setRows((prev) => ({
-                        ...prev,
+                    const nextPrimary = {
                         trending: filterHiddenAvailableItems(trending, hideAvailable),
                         popularMovies: filterHiddenAvailableItems(popularMovies, hideAvailable),
                         upcomingMovies: filterHiddenAvailableItems(upcomingMovies, hideAvailable),
                         popularSeries: filterHiddenAvailableItems(popularSeries, hideAvailable),
                         upcomingSeries: filterHiddenAvailableItems(upcomingSeries, hideAvailable),
-                    }));
+                    };
+                    setRows((prev) => ({ ...prev, ...nextPrimary }));
+
+                    if (hideAvailable) {
+                        const refillIfShort = (buildUrl: (page: number) => string, items: any[]) => (
+                            items.length >= HOME_RAIL_HIDE_AVAILABLE_MIN_ITEMS
+                                ? Promise.resolve(items)
+                                : fetchDiscoverHomeRowResults(buildUrl, true, refillRowOpts).catch(() => items)
+                        );
+                        const [
+                            trendingFilled,
+                            popularMoviesFilled,
+                            upcomingMoviesFilled,
+                            popularSeriesFilled,
+                            upcomingSeriesFilled,
+                        ] = await Promise.all([
+                            refillIfShort(trendingUrl, nextPrimary.trending),
+                            refillIfShort(moviesUrl, nextPrimary.popularMovies),
+                            refillIfShort(upcomingMoviesUrl, nextPrimary.upcomingMovies),
+                            refillIfShort(seriesUrl, nextPrimary.popularSeries),
+                            refillIfShort(upcomingSeriesUrl, nextPrimary.upcomingSeries),
+                        ]);
+                        if (gen !== loadGenRef.current) return;
+                        setRows((prev) => ({
+                            ...prev,
+                            trending: trendingFilled,
+                            popularMovies: popularMoviesFilled,
+                            upcomingMovies: upcomingMoviesFilled,
+                            popularSeries: popularSeriesFilled,
+                            upcomingSeries: upcomingSeriesFilled,
+                        }));
+                    }
                 } catch {
                     // Best-effort — disk cache badges still render when present.
                 }
@@ -370,13 +415,14 @@ export const DiscoverHome: React.FC<{
 
             const extraRowOpts = {
                 needsBackfill: hideAvailable,
-                maxPages: hideAvailable ? 4 : 2,
+                maxPages: hideAvailable ? HOME_RAIL_HIDE_AVAILABLE_MAX_PAGES : 3,
                 maxItems: 36,
-                minItems: hideAvailable ? 16 : 24,
+                minItems: hideAvailable ? HOME_RAIL_HIDE_AVAILABLE_MIN_ITEMS : 24,
                 hideRequested: false,
                 trustAttachedAvailability: true,
                 pageConcurrency: 1,
                 requirePoster: true,
+                enrich: hideAvailable ? enrichDiscoverBrowseRows : undefined,
             };
             void (async () => {
                 const extraRails = [...EXTRA_MOVIE_RAILS, ...EXTRA_SERIES_RAILS];
@@ -385,16 +431,27 @@ export const DiscoverHome: React.FC<{
                     if (gen !== loadGenRef.current) return;
                     const batch = extraRails.slice(i, i + batchSize);
                     const fetched = await Promise.all(batch.map((rail) => (
-                        fetchDiscoverHomeRowResults(rail.buildUrl, hideAvailable, extraRowOpts).catch(() => [])
+                        fetchDiscoverHomeRowResults(rail.buildUrl, hideAvailable, {
+                            ...extraRowOpts,
+                            onPartial: (items) => {
+                                if (gen !== loadGenRef.current) return;
+                                setExtraRows((prev) => ({
+                                    ...prev,
+                                    [rail.id]: filterHiddenAvailableItems(items, hideAvailable),
+                                }));
+                            },
+                        }).catch(() => null)
                     )));
                     if (gen !== loadGenRef.current) return;
                     setExtraRows((prev) => {
                         const next = { ...prev };
                         batch.forEach((rail, idx) => {
+                            if (!fetched[idx]) return;
                             next[rail.id] = filterHiddenAvailableItems(fetched[idx], hideAvailable);
                         });
                         return next;
                     });
+                    if (hideAvailable) continue;
                     if (gen !== loadGenRef.current) return;
                     const enriched = await Promise.all(
                         batch.map((rail, idx) => enrichDiscoverBrowseRows(fetched[idx] || [])),

@@ -4,12 +4,9 @@ import { mergeDiscoverResults } from './discoverItemUtils';
 import { filterDiscoverBrowseItems } from './discoverAvailability';
 import { enrichDiscoverBrowseRows } from './discoverAvailabilityEnrich';
 import { DISCOVER_LOAD_MORE_TARGET } from './discoverPaginationUtils';
+import type { DiscoverPagePayload } from './discoverFetchUtils';
 
-export type DiscoverPagePayload = {
-    results: any[];
-    totalPages: number;
-    lastFetchedPage?: number;
-};
+export type { DiscoverPagePayload };
 
 type BrowseFilterOptions = {
     hideAvailable?: boolean;

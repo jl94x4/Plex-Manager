@@ -12,7 +12,11 @@ import {
 import { DiscoverGridSizeSelect } from './DiscoverGridSizeSelect';
 import { DiscoverInfiniteScrollFooter } from './DiscoverInfiniteScrollFooter';
 import { DiscoverPosterGrid } from './DiscoverPosterGrid';
-import { fetchDiscoverHomeRowResults, fetchDiscoverPageWithAdvance } from './discoverFetchUtils';
+import {
+    fetchDiscoverHomeRowResults,
+    fetchDiscoverPageWithAdvance,
+    HOME_RAIL_HIDE_AVAILABLE_MAX_PAGES,
+} from './discoverFetchUtils';
 import { rankContentGapItems, SEE_ALL_POSTER_RAILS } from './discoverHomeRails';
 import { discoverSkeletonCountForGrid } from './discoverPaginationUtils';
 import { normalizeRawDiscoveryItem } from './discoverItemUtils';
@@ -293,7 +297,7 @@ const DiscoverStaticRailPage: React.FC<{
 
                 const rowOpts = {
                     needsBackfill: hideAvailable,
-                    maxPages: hideAvailable ? 4 : 3,
+                    maxPages: hideAvailable ? HOME_RAIL_HIDE_AVAILABLE_MAX_PAGES : 3,
                     maxItems: 60,
                     minItems: hideAvailable ? 20 : 40,
                     hideRequested: false,
