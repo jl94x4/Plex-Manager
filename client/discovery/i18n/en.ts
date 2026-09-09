@@ -1966,6 +1966,8 @@ export const en = {
                 iconMembersHint: 'Sidebar icons are customized in the Admins list',
                 resetIcon: 'Reset to default',
                 iconEditorHint: 'Optional image URL, upload, or a bundled preset. The Lucide icon is the fallback when no image is set. Save settings to apply.',
+                appletIcon: 'Applet icon for {label}',
+                appletIconHint: 'This applet icon is set in Settings → Applets',
             },
             customTabs: {
                 title: 'Applets',

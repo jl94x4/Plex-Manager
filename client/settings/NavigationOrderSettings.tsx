@@ -8,14 +8,14 @@ import {
     normalizeMemberNavHiddenKeys,
     normalizeNavHiddenKeys,
 } from '../shared/nav';
-import { getCustomNavTabLabel } from '../shared/customNavTabs';
+import { customNavTabKey, getCustomNavTabLabel } from '../shared/customNavTabs';
 import { isNativeNavIconKey, upsertNavItemIcon, type NavItemIconsMap } from '../shared/navItemIcons';
 import type { CustomNavDisplay, CustomNavTab } from '../shared/types';
 import { useDiscoverI18n } from '../discovery/i18n';
 import { SettingsToggleRow } from '../shared/ui';
 import { SettingHint } from './SettingHint';
 import { BetaBadge } from '../shared/BetaBadge';
-import { NavItemIconPanel, NavItemIconTrigger } from './NavItemIconEditor';
+import { AppletNavIconPreview, NavItemIconPanel, NavItemIconTrigger } from './NavItemIconEditor';
 
 type NavFeatureStatus = {
     upgrader?: boolean;
@@ -116,6 +116,7 @@ type ColumnProps = {
     navItemIcons?: NavItemIconsMap;
     onNavItemIconsChange?: (next: NavItemIconsMap) => void;
     allowIconEdit?: boolean;
+    customNavTabs?: CustomNavTab[];
 };
 
 const NavOrderColumn: React.FC<ColumnProps> = ({
@@ -138,6 +139,7 @@ const NavOrderColumn: React.FC<ColumnProps> = ({
     navItemIcons = {},
     onNavItemIconsChange,
     allowIconEdit = false,
+    customNavTabs = [],
 }) => {
     const [iconEditorKey, setIconEditorKey] = useState<string | null>(null);
     const [dragIndex, setDragIndex] = useState<number | null>(null);
@@ -148,6 +150,10 @@ const NavOrderColumn: React.FC<ColumnProps> = ({
     const itemRefs = useRef<Array<HTMLDivElement | null>>([]);
 
     const hiddenSet = useMemo(() => new Set(normalizeHidden(navHiddenKeys)), [navHiddenKeys, normalizeHidden]);
+    const customTabByKey = useMemo(
+        () => new Map((customNavTabs || []).map((tab) => [customNavTabKey(tab.id), tab])),
+        [customNavTabs],
+    );
     const mobileKeys = useMemo(() => navOrder.filter(isMobileNavKey), [navOrder]);
     const moreStartsAtMobileIndex = mobileKeys.length > MOBILE_NAV_PRIMARY_SLOTS
         ? MOBILE_NAV_PRIMARY_SLOTS
@@ -291,6 +297,7 @@ const NavOrderColumn: React.FC<ColumnProps> = ({
                     const isDropTarget = dropIndex === index && dragIndex !== null && dragIndex !== index;
                     const insertBefore = isDropTarget && dragIndex !== null && dropIndex < dragIndex;
                     const insertAfter = isDropTarget && dragIndex !== null && dropIndex > dragIndex;
+                    const customTab = customTabByKey.get(key);
 
                     return (
                         <React.Fragment key={key}>
@@ -345,6 +352,12 @@ const NavOrderColumn: React.FC<ColumnProps> = ({
                                         label={labelForKey(key)}
                                         translate={translate}
                                         onToggle={() => setIconEditorKey((current) => (current === key ? null : key))}
+                                    />
+                                ) : customTab ? (
+                                    <AppletNavIconPreview
+                                        tab={customTab}
+                                        label={labelForKey(key)}
+                                        translate={translate}
                                     />
                                 ) : null}
 
@@ -577,6 +590,7 @@ export const NavigationOrderSettings: React.FC<Props> = ({
                 navItemIcons={navItemIcons}
                 onNavItemIconsChange={onNavItemIconsChange}
                 allowIconEdit
+                customNavTabs={customNavTabs}
             />
             <NavOrderColumn
                 title={t('settings.navigation.order.members')}
@@ -599,6 +613,7 @@ export const NavigationOrderSettings: React.FC<Props> = ({
                 translate={t}
                 labelForKey={labelForKey}
                 navItemIcons={navItemIcons}
+                customNavTabs={customNavTabs}
             />
         </div>
     </div>

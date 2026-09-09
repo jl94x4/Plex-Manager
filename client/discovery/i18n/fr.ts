@@ -1490,6 +1490,8 @@ export const fr: DeepPartial<EnCatalog> = {
                 iconMembersHint: 'Les icônes de navigation se personnalisent dans la liste Admins',
                 resetIcon: 'Réinitialiser',
                 iconEditorHint: 'URL d’image facultative, import ou préréglage intégré. L’icône Lucide est utilisée s’il n’y a pas d’image. Enregistrez les paramètres pour appliquer.',
+                appletIcon: 'Icône d’applet pour {label}',
+                appletIconHint: 'Cette icône d’applet se configure dans Paramètres → Applets',
             },
         },
     },

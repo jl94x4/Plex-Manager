@@ -7,7 +7,8 @@ import {
     navItemIconLogoPublicPath,
     resolveNavItemLucideIcon,
 } from '../shared/navItemIcons';
-import { CUSTOM_NAV_ICON_OPTIONS } from '../shared/customNavTabs';
+import { CUSTOM_NAV_ICON_OPTIONS, resolveCustomNavIcon } from '../shared/customNavTabs';
+import type { CustomNavTab } from '../shared/types';
 import {
     APPLET_PRESET_LOGOS,
     appletPresetLogoPath,
@@ -67,6 +68,35 @@ export const NavItemIconTrigger: React.FC<TriggerProps> = ({
                 <Icon className="h-4 w-4" />
             )}
         </button>
+    );
+};
+
+export const AppletNavIconPreview: React.FC<{
+    tab: CustomNavTab;
+    label: string;
+    translate: (key: string, vars?: Record<string, unknown>) => string;
+}> = ({ tab, label, translate }) => {
+    const [logoFailed, setLogoFailed] = useState(false);
+    const Icon = resolveCustomNavIcon(tab.icon);
+    const logoSrc = tab.logoUrl && !logoFailed ? resolvePortalAssetUrl(tab.logoUrl) : '';
+
+    return (
+        <span
+            className="inline-flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border/40 bg-white/[0.03] p-1 text-muted"
+            title={translate('settings.navigation.order.appletIconHint')}
+            aria-label={translate('settings.navigation.order.appletIcon', { label })}
+        >
+            {logoSrc ? (
+                <img
+                    src={logoSrc}
+                    alt=""
+                    className="h-full w-full object-contain"
+                    onError={() => setLogoFailed(true)}
+                />
+            ) : (
+                <Icon className="h-4 w-4" />
+            )}
+        </span>
     );
 };
 
