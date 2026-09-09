@@ -833,6 +833,7 @@ export const SettingsDashboard: React.FC = () => {
     const [customLoginLogoUrl, setCustomLoginLogoUrl] = useState('');
     const [loginLogoCircleFrame, setLoginLogoCircleFrame] = useState(true);
     const [customFaviconUrl, setCustomFaviconUrl] = useState('');
+    const [customBadgeUrl, setCustomBadgeUrl] = useState('');
     const [backgroundImageUrl, setBackgroundImageUrl] = useState('');
     const [useScrollRevealAnimations, setUseScrollRevealAnimations] = useState(false);
     const [useCinematicLoading, setUseCinematicLoading] = useState(false);
@@ -871,6 +872,7 @@ export const SettingsDashboard: React.FC = () => {
     const [logoFile, setLogoFile] = useState<File | null>(null);
     const [loginLogoFile, setLoginLogoFile] = useState<File | null>(null);
     const [faviconFile, setFaviconFile] = useState<File | null>(null);
+    const [badgeFile, setBadgeFile] = useState<File | null>(null);
     const [backgroundFile, setBackgroundFile] = useState<File | null>(null);
     const [logoPreviewUrl, setLogoPreviewUrl] = useState('');
     const [loginLogoPreviewUrl, setLoginLogoPreviewUrl] = useState('');
@@ -953,6 +955,10 @@ export const SettingsDashboard: React.FC = () => {
         setFaviconFile(file);
         if (!file) return;
         setCustomFaviconUrl(getUploadedBrandingImagePath(file, 'favicon'));
+    }, []);
+
+    const handleBadgeFileChange = useCallback((file: File | null) => {
+        setBadgeFile(file);
     }, []);
 
     const handleBackgroundFileChange = useCallback((file: File | null) => {
@@ -1593,6 +1599,7 @@ export const SettingsDashboard: React.FC = () => {
             setCustomLoginLogoUrl(initialSettings.customLoginLogoUrl || '');
             setLoginLogoCircleFrame(initialSettings.loginLogoCircleFrame !== false);
             setCustomFaviconUrl(initialSettings.customFaviconUrl || '');
+            setCustomBadgeUrl(initialSettings.customBadgeUrl || '');
             setSidebarIdentityPosition(initialSettings.sidebarIdentityPosition === 'top' ? 'top' : 'bottom');
             setPwaIconSource(initialSettings.pwaIconSource === 'application' ? 'application' : 'server');
             setBackgroundImageUrl(initialSettings.mediaServerType === 'emby' && isJellyfinBrandingAsset(initialSettings.backgroundImageUrl) ? '' : (initialSettings.backgroundImageUrl || ''));
@@ -2066,6 +2073,7 @@ export const SettingsDashboard: React.FC = () => {
         let savedCustomLogoUrl = logoFile ? getUploadedBrandingImagePath(logoFile, 'logo') : customLogoUrl;
         let savedCustomLoginLogoUrl = loginLogoFile ? getUploadedBrandingImagePath(loginLogoFile, 'login') : customLoginLogoUrl;
         let savedCustomFaviconUrl = faviconFile ? getUploadedBrandingImagePath(faviconFile, 'favicon') : customFaviconUrl;
+        let savedCustomBadgeUrl = customBadgeUrl;
         let savedBackgroundImageUrl = backgroundImageUrl;
         if (mediaServerType === 'emby') {
             if (isJellyfinBrandingAsset(savedCustomLogoUrl)) savedCustomLogoUrl = '';
@@ -2145,6 +2153,31 @@ export const SettingsDashboard: React.FC = () => {
                 setFaviconFile(null);
             } catch (e) {
                 addToast(e instanceof Error ? e.message : 'Failed to upload favicon', 'error');
+                return;
+            }
+        }
+
+        if (badgeFile) {
+            try {
+                const uploadResponse = await fetch(portalUrl('/api/config/notification-badge'), {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'Content-Type': badgeFile.type || (badgeFile.name.toLowerCase().endsWith('.png') ? 'image/png' : (badgeFile.name.toLowerCase().endsWith('.webp') ? 'image/webp' : 'image/jpeg')),
+                        [PORTAL_CSRF_HEADER]: PORTAL_CSRF_VALUE,
+                    },
+                    body: badgeFile,
+                });
+                if (!uploadResponse.ok) {
+                    const errorData = await uploadResponse.json().catch(() => ({ error: 'Failed to upload notification badge' }));
+                    throw new Error(errorData.error || 'Failed to upload notification badge');
+                }
+                const uploadResult = await uploadResponse.json().catch(() => ({}));
+                savedCustomBadgeUrl = uploadResult.badgeUrl || savedCustomBadgeUrl;
+                setCustomBadgeUrl(savedCustomBadgeUrl);
+                setBadgeFile(null);
+            } catch (e) {
+                addToast(e instanceof Error ? e.message : 'Failed to upload notification badge', 'error');
                 return;
             }
         }
@@ -2260,6 +2293,7 @@ export const SettingsDashboard: React.FC = () => {
             customLoginLogoUrl: savedCustomLoginLogoUrl,
             loginLogoCircleFrame,
             customFaviconUrl: savedCustomFaviconUrl,
+            customBadgeUrl: savedCustomBadgeUrl,
             brandingTheme,
             sidebarIdentityPosition,
             pwaIconSource,
@@ -4445,6 +4479,52 @@ export const SettingsDashboard: React.FC = () => {
                                                         />
                                                     </div>
                                                     {faviconFile && <p className="text-xs text-muted mt-2">{faviconFile.name}</p>}
+                                                </div>
+
+                                                <div>
+                                                    <SettingFieldLabel hint={<SettingHint>Android renders push-notification status-bar icons as a monochrome silhouette (an alpha mask) — full colour is not possible for any app. Upload a simple white-on-transparent PNG (a bold monogram or mark works best) for a pixel-perfect badge. Leave empty to auto-generate the silhouette from your logo. The expanded notification always keeps the full-colour icon.</SettingHint>}>
+                                                        Android Notification Badge
+                                                    </SettingFieldLabel>
+                                                    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_14rem] gap-3 mt-1">
+                                                        <div className="flex items-center gap-3 p-3 rounded-lg border border-border bg-background">
+                                                            {customBadgeUrl && !badgeFile ? (
+                                                                <>
+                                                                    <span className="inline-flex items-center justify-center w-10 h-10 rounded-lg bg-slate-800 shrink-0">
+                                                                        <img
+                                                                            src={portalUrl(`/api/public/pwa-badge?size=96&u=${encodeURIComponent(customBadgeUrl)}`)}
+                                                                            alt="Status bar badge preview"
+                                                                            className="w-6 h-6"
+                                                                        />
+                                                                    </span>
+                                                                    <span className="text-sm text-muted flex-1">Custom badge uploaded</span>
+                                                                    <button
+                                                                        type="button"
+                                                                        className="text-xs font-bold text-red-400 hover:text-red-300 transition-colors"
+                                                                        onClick={() => {
+                                                                            setCustomBadgeUrl('');
+                                                                            setBadgeFile(null);
+                                                                        }}
+                                                                    >
+                                                                        Remove
+                                                                    </button>
+                                                                </>
+                                                            ) : (
+                                                                <span className="text-sm text-muted">
+                                                                    {badgeFile ? 'Uploads when you save settings' : 'Auto-generated from your logo'}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <input
+                                                            type="file"
+                                                            accept="image/png,image/jpeg,image/webp"
+                                                            className="w-full p-2 rounded-lg border border-border bg-background text-muted text-sm outline-none focus:border-plex transition-all file:mr-3 file:py-2 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-bold file:bg-white/10 file:text-text hover:file:bg-white/20 file:cursor-pointer cursor-pointer"
+                                                            onChange={e => {
+                                                                const file = e.target.files?.[0] || null;
+                                                                handleBadgeFileChange(file);
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    {badgeFile && <p className="text-xs text-muted mt-2">{badgeFile.name}</p>}
                                                 </div>
 
                                                 <div>

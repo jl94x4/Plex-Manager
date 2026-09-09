@@ -17,7 +17,7 @@ import net from 'net';
 import dns from 'dns/promises';
 import v8 from 'v8';
 import os from 'os';
-import { makeCircularPwaIconPng, makeMaskablePwaIconPng, makeNotificationBadgePng } from './lib/circular-icon.js';
+import { makeCircularPwaIconPng, makeMaskablePwaIconPng, makeNotificationBadgePng, makeNotificationBadgeMaskPng } from './lib/circular-icon.js';
 import {
     getPortalBrandingIconCacheKey,
     fetchPortalBrandingRasterBuffer,
@@ -5925,6 +5925,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 customLoginLogoUrl: String(config.customLoginLogoUrl || '').trim(),
                 loginLogoCircleFrame: config.loginLogoCircleFrame !== false,
                 customFaviconUrl: String(config.customFaviconUrl || '').trim(),
+                customBadgeUrl: String(config.customBadgeUrl || '').trim(),
                 brandingTheme: config.brandingTheme || 'plex',
                 sidebarIdentityPosition: ['top', 'bottom'].includes(String(config.sidebarIdentityPosition || '').toLowerCase()) ? String(config.sidebarIdentityPosition).toLowerCase() : 'bottom',
                 pwaIconSource: normalizePwaIconSource(config.pwaIconSource),
@@ -6139,6 +6140,7 @@ app.get('/api/config', requireAdmin, async (req, res) => {
                 customLoginLogoUrl: '',
                 loginLogoCircleFrame: true,
                 customFaviconUrl: '',
+                customBadgeUrl: '',
                 brandingTheme: 'plex',
                 sidebarIdentityPosition: 'bottom',
                 pwaIconSource: 'server',
@@ -6286,7 +6288,7 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         autoApproveMovies4k, autoApproveTv4k, portalAutoRequestMovies, portalAutoRequestTv,
         seriesMetadataProvider, animeMetadataProvider, tvdbApiKey,
         inactiveCleanupEnabled, inactiveCleanupDays,
-        primaryColor, customLogoUrl, customLoginLogoUrl, loginLogoCircleFrame, customFaviconUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, expiredPortalTitle, expiredPortalMessage, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, customNavTabs, customNavDisplay, arrOpenInPortalEmbed, homeCustomModules, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
+        primaryColor, customLogoUrl, customLoginLogoUrl, loginLogoCircleFrame, customFaviconUrl, customBadgeUrl, brandingTheme, sidebarIdentityPosition, pwaIconSource, backgroundImageUrl, useScrollRevealAnimations, useCinematicLoading, useBrandedSkeleton, useTrendingSlideshow, trendingSlideshowInterval, tmdbApiKey, referralEnabled, referralTrialDays, referralRewardDays, announcement, expiredPortalTitle, expiredPortalMessage, navOrder, navHiddenKeys, memberNavOrder, memberNavHiddenKeys, customNavTabs, customNavDisplay, arrOpenInPortalEmbed, homeCustomModules, hideStreamUsers, defaultLibraryIds, use24HourClock, allowTemporaryAccess, showPosterQualityBadges, showDashboardWatchingBadge, dashboardWatchingBadgePollSeconds,
         showPublicStatusMonitor, showPublicLibraryStats,
         autoBackupEnabled, autoBackupIntervalDays, autoBackupRetentionCount, maintenanceExperimentalEnabled, upgraderEnabled, collexionsEnabled, spotifyToPlexEnabled, scannerEnabled, scannerHomeWidgetEnabled, scannerWebhooksVisible, scannerManualPathVisible, scanner, mediaAutomationEnabled, mediaAutomationHomeWidgetEnabled, mediaAutomation, posterSetsEnabled, overlaysEnabled, editionsEnabled, achievementsEnabled, supportTicketsEnabled, chatEnabled, chatMentionNotifyInApp, achievementsLeaderboardEnabled, achievementsHomeWidgetEnabled, achievementsShowOnProfile, achievementsXpWeights, achievementsDisabledBadgeIds, achievementsMinPercentComplete, achievementsSeasons, requestAvailableNotifyEnabled, requestAvailableNotifyEmail, requestAvailableNotifyInApp, requestAvailableNotifyWebPush, requestAvailableNotifyDiscord, requestAvailableDiscordWebhookUrl, requestNotReleasedNotifyEnabled, requestNotReleasedNotifyEmail, requestNotReleasedNotifyInApp, requestNotReleasedNotifyWebPush, notifyReleaseDatePreference, scannerNotifyDeleted, scannerNotifyUpgrade, scannerNotifyImport, scannerNotifyGrab, scannerNotifyUpdate, scannerNotifyInteraction, notificationTemplates, emailTemplates, ntfyEnabled, ntfyServerUrl, ntfyTopic, ntfyToken, ntfyPriority, ntfyEvents, webhookEnabled, webhookUrl, webhookHeadersJson, webhookEvents, webPushEnabled, watchHistorySource, collexionsAutostart, collexionsInternalUrl, collexionsServiceKey, spotifyToPlexInternalUrl, spotifyToPlexClientId, spotifyToPlexClientSecret, spotifyToPlexEncryptionKey, spotifyToPlexHomeWidgetEnabled, spotifyToPlexScheduleMode, spotifyToPlexScheduledSyncEnabled, spotifyToPlexScheduledSyncIntervalHours, upgraderDefaultPreset, upgraderMinSizeGB, upgraderAutomationEnabled, upgraderProfileMap, upgraderMaxActionsPerHour, upgraderDefaultSort, upgraderDrawerPosition, dashboardLayout,
         showUsernamesInAnalytics, useTrendingSlideshowOnLogin, downloadsVisibleToMembers
@@ -6687,6 +6689,9 @@ app.post('/api/config', setupRateLimit, async (req, res) => {
         customFaviconUrl: customFaviconUrl !== undefined
             ? String(customFaviconUrl || '').trim()
             : String(existingConfig.customFaviconUrl || '').trim(),
+        customBadgeUrl: customBadgeUrl !== undefined
+            ? String(customBadgeUrl || '').trim()
+            : String(existingConfig.customBadgeUrl || '').trim(),
         brandingTheme: ['dynamic', 'plex', 'slate', 'nordic', 'jellyfin', 'emby', 'emerald', 'midnight', 'crimson', 'amethyst', 'sunset', 'ocean', 'rose', 'royal', 'graphite', 'cyberlime', 'aurora'].includes(String(brandingTheme || '').toLowerCase()) ? String(brandingTheme).toLowerCase() : (existingConfig.brandingTheme || 'plex'),
         sidebarIdentityPosition: ['top', 'bottom'].includes(String(sidebarIdentityPosition || '').toLowerCase()) ? String(sidebarIdentityPosition).toLowerCase() : (existingConfig.sidebarIdentityPosition || 'bottom'),
         pwaIconSource: normalizePwaIconSource(pwaIconSource, normalizePwaIconSource(existingConfig.pwaIconSource)),
@@ -7432,6 +7437,27 @@ app.post('/api/config/login-logo', requireLogoUploadAccess, express.raw({ type: 
 
 app.post('/api/config/background', requireLogoUploadAccess, express.raw({ type: ['image/*', 'application/octet-stream'], limit: '10mb' }), async (req, res) => {
     await saveUploadedBrandingImage(req, res, 'background', 'backgroundImageUrl');
+});
+
+app.post('/api/config/notification-badge', requireAdmin, express.raw({ type: ['image/*', 'application/octet-stream'], limit: '2mb' }), async (req, res) => {
+    try {
+        const buf = req.body;
+        if (!Buffer.isBuffer(buf) || buf.length < 4) {
+            return res.status(400).json({ error: 'Invalid image file.' });
+        }
+        // Validate the upload converts to a usable mask before persisting it.
+        makeNotificationBadgeMaskPng(buf, 96);
+        const saved = await writeBrandingAsset(BRANDING_DIR, 'badge', buf);
+        res.json({
+            message: 'Notification badge uploaded successfully.',
+            // Timestamped so push badge URLs (keyed off this string) refetch on re-upload.
+            badgeUrl: `${saved.publicPath}?v=${Date.now()}`,
+        });
+    } catch (e) {
+        log(`Failed to upload notification badge: ${e.message}`);
+        const status = /invalid image|unsupported image/i.test(e.message) ? 400 : 500;
+        res.status(status).json({ error: e.message || 'Failed to upload notification badge.' });
+    }
 });
 
 app.get('/api/branding/custom-tab/:tabId', requireAuth, async (req, res) => {
@@ -15694,6 +15720,21 @@ app.get('/api/public/pwa-badge', publicReadRateLimit, async (req, res) => {
     };
     try {
         const config = await loadFile(CONFIG_PATH, {});
+        // Admin-uploaded monochrome badge takes priority — it is used verbatim
+        // as the alpha mask instead of auto-extracting a mark from the logo.
+        const customBadgeUrl = String(config.customBadgeUrl || '').trim();
+        if (customBadgeUrl) {
+            const uploaded = await readBrandingAssetByPublicPath(
+                stripBasePathFromUrl(customBadgeUrl),
+                BRANDING_DIR,
+            );
+            if (uploaded) {
+                const png = makeNotificationBadgeMaskPng(uploaded, size);
+                res.setHeader('Content-Type', 'image/png');
+                res.setHeader('Cache-Control', 'public, max-age=3600');
+                return res.send(png);
+            }
+        }
         const brandingDeps = getPortalBrandingDeps();
         const profile = await getAdminProfile(config);
         let buffer = await fetchPortalEmailLogoBuffer(config, profile, brandingDeps);

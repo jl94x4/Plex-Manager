@@ -174,6 +174,8 @@ export interface AppSettings {
     jellyglanceApiKey?: string;
     primaryColor?: string;
     customFaviconUrl?: string;
+    /** Uploaded monochrome Android status-bar badge (`/static/badge.*?v=ts`); empty = auto-generate from logo. */
+    customBadgeUrl?: string;
     sidebarIdentityPosition?: 'top' | 'bottom';
     backgroundImageUrl?: string;
     navOrder?: string[];
