@@ -18,6 +18,7 @@ type Props = {
     openIssueCount?: number;
     /** When true, skip page shell/hero (used as a Discover tab). */
     embedded?: boolean;
+    navigate?: (path: string) => void;
 };
 
 const readReviewIdFromUrl = (): number | null => {
@@ -27,7 +28,7 @@ const readReviewIdFromUrl = (): number | null => {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 };
 
-export const RequestQueueDashboard: React.FC<Props> = ({ onCountsChange, openIssueCount = 0, embedded = false }) => {
+export const RequestQueueDashboard: React.FC<Props> = ({ onCountsChange, openIssueCount = 0, embedded = false, navigate }) => {
     const { t } = useDiscoverI18n();
     const [tab, setTab] = useState<QueueTab>('requests');
     const [reviewRequestId, setReviewRequestId] = useState<number | null>(() => readReviewIdFromUrl());
@@ -91,6 +92,7 @@ export const RequestQueueDashboard: React.FC<Props> = ({ onCountsChange, openIss
                     onCountsChange={onCountsChange}
                     embedded
                     initialReviewId={reviewRequestId}
+                    navigate={navigate}
                 />
             ) : tab === 'issues' ? (
                 <IssuesAdminPanel onCountsChange={onCountsChange} />

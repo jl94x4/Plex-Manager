@@ -801,6 +801,7 @@ const DiscoveryDashboardInner: React.FC<{
                                 embedded
                                 onCountsChange={onQueueCountsChange}
                                 openIssueCount={openIssueCount}
+                                navigate={navigate}
                             />
                         )}
                     </div>

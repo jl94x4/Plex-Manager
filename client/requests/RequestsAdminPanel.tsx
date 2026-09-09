@@ -8,7 +8,9 @@ import { RequestApprovalModal } from './RequestApprovalModal';
 import { RequestCardActions, RequestCardShell, requestCardActionBtnClass } from './RequestCardShell';
 import { RequestMetaChips } from './RequestMetaChips';
 import { OpenInArrButton } from '../shared/OpenInArrButton';
+import { portalUrl } from '../shared/basePath';
 import { dashboardPanelClass } from '../shared/dashboard/DashboardChrome';
+import { stashDiscoverDetailSeed } from '../discovery/discoverNavigationUtils';
 import {
     type AdminRequestFilter,
     buildRequesterOptions,
@@ -19,7 +21,7 @@ import {
 } from './requestFilterUtils';
 import type { PortalRequestItem, PortalRequestUser } from './types';
 import { useDiscoverI18n } from '../discovery/i18n';
-import { goToProfile, profileKeyForRequester } from '../profile/helpers';
+import { goToProfile, profileKeyForRequester, requestDiscoveryPath } from '../profile/helpers';
 
 export type { PortalRequestItem } from './types';
 
@@ -27,6 +29,7 @@ type Props = {
     onCountsChange?: () => void;
     embedded?: boolean;
     initialReviewId?: number | null;
+    navigate?: (path: string) => void;
 };
 
 const formatRelativeTime = (value: string | null | undefined, t: ReturnType<typeof useDiscoverI18n>['t']) => {
@@ -57,7 +60,7 @@ const RequestTypeBadge: React.FC<{ type: string; is4k: boolean; t: ReturnType<ty
     </span>
 );
 
-export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded = false, initialReviewId = null }) => {
+export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded = false, initialReviewId = null, navigate }) => {
     const { t } = useDiscoverI18n();
     const [toasts, setToasts] = useState<ToastMessage[]>([]);
     const [filter, setFilter] = useState<AdminRequestFilter>('pending');
@@ -340,6 +343,30 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
 
     const seerrLink = requests[0]?.seerrUrl || null;
     const showPendingActions = filter === 'pending';
+    const showArrLink = filter !== 'pending' && filter !== 'declined';
+
+    const openRequestOnDiscover = useCallback((item: PortalRequestItem) => {
+        const path = requestDiscoveryPath(item);
+        if (!path) return;
+        if (item.type !== 'music' && item.tmdbId) {
+            stashDiscoverDetailSeed({
+                type: item.type,
+                mediaType: item.type,
+                id: item.tmdbId,
+                tmdbId: item.tmdbId,
+                title: item.title,
+                overview: item.overview,
+                posterPath: item.posterPath,
+            });
+        }
+        if (navigate) {
+            navigate(path);
+            return;
+        }
+        window.history.pushState({}, '', portalUrl(path));
+        window.dispatchEvent(new Event('popstate'));
+        window.dispatchEvent(new Event('portal-discovery-navigate'));
+    }, [navigate]);
 
     return (
         <div className={`w-full max-w-[100%] ${embedded ? '' : 'animate-fade-in'}`}>
@@ -530,6 +557,10 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                         const busy = actionId === item.id;
                         const TypeIcon = item.type === 'tv' ? Tv : item.type === 'music' ? Music : Film;
                         const isSelected = selectedIds.has(item.id);
+                        const discoveryPath = requestDiscoveryPath(item);
+                        const openDiscover = discoveryPath
+                            ? () => openRequestOnDiscover(item)
+                            : undefined;
                         return (
                             <RequestCardShell
                                 key={item.id}
@@ -549,7 +580,22 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                             />
                                         </label>
                                     )}
-                                    <div className="w-[9rem] h-[13.5rem] self-start rounded-lg overflow-hidden bg-card border border-border/50 shrink-0">
+                                    <div
+                                        className={`flex items-start gap-4 min-w-0 flex-1 ${openDiscover ? 'cursor-pointer group' : ''}`}
+                                        role={openDiscover ? 'link' : undefined}
+                                        tabIndex={openDiscover ? 0 : undefined}
+                                        aria-label={openDiscover ? item.title : undefined}
+                                        onClick={openDiscover}
+                                        onKeyDown={openDiscover ? (event) => {
+                                            if (event.key === 'Enter' || event.key === ' ') {
+                                                event.preventDefault();
+                                                openDiscover();
+                                            }
+                                        } : undefined}
+                                    >
+                                    <div className={`w-[9rem] h-[13.5rem] self-start rounded-lg overflow-hidden bg-card border shrink-0 ${
+                                        openDiscover ? 'border-border/50 group-hover:border-plex/40 transition-colors' : 'border-border/50'
+                                    }`}>
                                         {item.posterUrl ? (
                                             <img
                                                 src={item.posterUrl}
@@ -565,7 +611,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                     </div>
                                     <div className="min-w-0 flex-1">
                                         <div className="flex flex-wrap items-center gap-2 mb-1">
-                                            <h3 className="font-bold text-text truncate">
+                                            <h3 className={`font-bold text-text truncate ${openDiscover ? 'group-hover:text-plex transition-colors' : ''}`}>
                                                 {item.title}
                                                 {item.year ? <span className="text-muted font-medium"> ({item.year})</span> : null}
                                             </h3>
@@ -576,7 +622,10 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                             <button
                                                 type="button"
                                                 className="text-text font-medium hover:text-plex hover:underline"
-                                                onClick={() => goToProfile(undefined, profileKeyForRequester(item.requestedBy))}
+                                                onClick={(event) => {
+                                                    event.stopPropagation();
+                                                    goToProfile(undefined, profileKeyForRequester(item.requestedBy));
+                                                }}
                                             >
                                                 {item.requestedBy.displayName}
                                             </button>
@@ -612,6 +661,7 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                         {item.overview && (
                                             <p className="text-xs text-muted line-clamp-2">{item.overview}</p>
                                         )}
+                                    </div>
                                     </div>
                                 </div>
 
@@ -673,16 +723,18 @@ export const RequestsAdminPanel: React.FC<Props> = ({ onCountsChange, embedded =
                                             {t('requestsAdmin.actions.edit')}
                                         </button>
                                     )}
-                                    <OpenInArrButton
-                                        mediaType={item.type}
-                                        tmdbId={item.tmdbId}
-                                        mbid={item.mbid}
-                                        title={item.title}
-                                        year={item.year}
-                                        is4k={!!item.is4k}
-                                        className={`${requestCardActionBtnClass} border border-sky-500/40 bg-background/80 text-sky-200 hover:bg-sky-500/15`}
-                                        onError={(message) => addToast(message, 'error')}
-                                    />
+                                    {showArrLink && (
+                                        <OpenInArrButton
+                                            mediaType={item.type}
+                                            tmdbId={item.tmdbId}
+                                            mbid={item.mbid}
+                                            title={item.title}
+                                            year={item.year}
+                                            is4k={!!item.is4k}
+                                            className={`${requestCardActionBtnClass} border border-sky-500/40 bg-background/80 text-sky-200 hover:bg-sky-500/15`}
+                                            onError={(message) => addToast(message, 'error')}
+                                        />
+                                    )}
                                     <button
                                         type="button"
                                         disabled={busy}
