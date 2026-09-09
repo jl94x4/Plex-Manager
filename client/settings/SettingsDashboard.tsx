@@ -5627,10 +5627,10 @@ export const SettingsDashboard: React.FC = () => {
                                 </div>
                             </section>
                             <section id={getSettingsSectionElementId('maintenance')} className={`space-y-3 mb-8 transition-all duration-300 scroll-mt-24 ${highlightMaintenanceToggle ? 'ring-2 ring-plex/50 rounded-lg p-3 -m-3' : ''}`}>
-                                <h4 className="font-bold text-text">Cleaner Experimental Mode</h4>
+                                <h4 className="font-bold text-text">Library Cleaner (Maintainerr-style)</h4>
                                 <SettingsToggleRow
-                                    title="Enable Cleaner Module"
-                                    description="Single global toggle for the main Cleaner navigation section. OFF by default."
+                                    title="Enable Library Cleaner"
+                                    description="Shows Cleaner in the main sidebar for unwatched / library cleanup rules (Sonarr & Radarr). This is not Settings → Cleanup (user inactivity). OFF by default."
                                     checked={maintenanceExperimentalEnabled}
                                     onChange={setMaintenanceExperimentalEnabled}
                                     border={false}
@@ -5638,7 +5638,7 @@ export const SettingsDashboard: React.FC = () => {
                                 <p className={`text-xs mt-2 font-semibold ${maintenanceExperimentalEnabled ? 'text-green-300' : 'text-yellow-300'}`}>
                                     Current status: {maintenanceExperimentalEnabled ? 'ON' : 'OFF'}
                                 </p>
-                                <p className="text-[11px] text-muted mt-1">After changing this toggle, click the main Save Settings button.</p>
+                                <p className="text-[11px] text-muted mt-1">After changing this toggle, click the main Save Settings button. Then open Cleaner from the main nav, not from Settings → Cleanup.</p>
                             </section>
                             <section id={getSettingsSectionElementId('backup')} className="space-y-4 mb-8 scroll-mt-24">
                                 <h4 className="font-bold text-text">Backup & Restore</h4>

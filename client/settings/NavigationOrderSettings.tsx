@@ -57,7 +57,7 @@ const FEATURE_OFF_SECTIONS: Record<string, string> = {
     achievements: 'settings.navigation.tabs.achievements',
     support: 'settings.navigation.tabs.system',
     chat: 'settings.navigation.tabs.system',
-    maintenance: 'settings.navigation.tabs.cleanup',
+    maintenance: 'settings.navigation.tabs.system',
 };
 
 const NAV_ITEM_TRANSLATION_KEYS: Record<string, string> = {
